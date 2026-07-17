@@ -1,3 +1,7 @@
 spring:
   application:
     name: backend
+  # Hibernate just validate
+  jpa:
+    hibernate:
+      ddl-auto: validate
