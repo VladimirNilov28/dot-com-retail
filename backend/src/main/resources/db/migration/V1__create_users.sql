@@ -11,12 +11,13 @@ CREATE TABLE users (
     email varchar(255) UNIQUE NOT NULL,
     password_hash varchar(255) NOT NULL,
     date_of_birth date NOT NULL,
-    created_at timestamptz NOT NULL DEFAULT NOW()
+    created_at timestamptz NOT NULL DEFAULT NOW(),
+    updated_at timestamptz NOT NULL DEFAULT NOW(),
 );
 
 CREATE TABLE user_address (
     id bigserial NOT NULL PRIMARY KEY,
-    user_id bigint NOT NULL UNIQUE,
+    user_id bigint NOT NULL,
     first_name varchar(50),
     last_name varchar(50),
     city varchar(100),
@@ -28,10 +29,9 @@ CREATE TABLE user_address (
     CONSTRAINT fk_user_address_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 );
 
-CREATE TABLE user_payment (
-    id bigserial NOT NULL PRIMARY KEY,
-    user_id bigint NOT NULL,
-    -- TODO Finish payment table with other fields (Note: mb it is good idea to move payment to different domain like V*_create_payments_tabels.sql)
-    CONSTRAINT fk_user_payment_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-);
+CREATE TABLE user_payments ();
 
+CREATE TRIGGER trg_users_updated_at
+    BEFORE UPDATE ON users
+    FOR EACH ROW
+    EXECUTE FUNCTION set_updated_at();
