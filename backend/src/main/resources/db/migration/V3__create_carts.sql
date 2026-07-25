@@ -1,5 +1,5 @@
 CREATE TABLE carts (
-    id bigserial NOT NULL PRIMARY KEY,
+    id bigserial PRIMARY KEY,
     user_id bigint NOT NULL UNIQUE,
     created_at timestamptz NOT NULL DEFAULT NOW(),
     updated_at timestamptz NOT NULL DEFAULT NOW(),
@@ -7,7 +7,7 @@ CREATE TABLE carts (
 );
 
 CREATE TABLE cart_items (
-    id bigserial NOT NULL PRIMARY KEY,
+    id bigserial PRIMARY KEY,
     cart_id bigint NOT NULL,
     product_variant_id bigint NOT NULL,
     quantity integer NOT NULL CHECK (quantity > 0),
