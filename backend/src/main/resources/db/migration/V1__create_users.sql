@@ -26,6 +26,7 @@ CREATE TABLE user_address (
     address_line1 varchar(255),
     address_line2 varchar(255),
     mobile varchar(20),
+    created_at timestamptz NOT NULL DEFAULT NOW(),
     updated_at timestamptz NOT NULL DEFAULT NOW(),
     CONSTRAINT fk_user_address_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 );
@@ -36,6 +37,7 @@ CREATE TABLE user_payment_methods (
     provider varchar(255),
     -- TODO extend payment types
     type varchar(255),
+    created_at timestamptz NOT NULL DEFAULT NOW(),
     updated_at timestamptz NOT NULL DEFAULT NOW(),
     CONSTRAINT fk_user_payment_methods_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 );
@@ -43,14 +45,15 @@ CREATE TABLE user_payment_methods (
 CREATE TRIGGER trg_users_updated_at
     BEFORE UPDATE ON users
     FOR EACH ROW
-    EXECUTE FUNCTION set_updated_at();
+    EXECUTE FUNCTION set_updated_at ();
 
 CREATE TRIGGER trg_user_address_updated_at
     BEFORE UPDATE ON user_address
     FOR EACH ROW
-    EXECUTE FUNCTION set_updated_at();
+    EXECUTE FUNCTION set_updated_at ();
 
 CREATE TRIGGER trg_user_payments_updated_at
     BEFORE UPDATE ON user_payment_methods
     FOR EACH ROW
-    EXECUTE FUNCTION set_updated_at();
+    EXECUTE FUNCTION set_updated_at ();
+

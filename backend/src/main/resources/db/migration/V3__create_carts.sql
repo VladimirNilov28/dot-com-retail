@@ -1,6 +1,6 @@
 CREATE TABLE carts (
     id bigserial PRIMARY KEY,
-    user_id bigint NOT NULL UNIQUE,
+    user_id bigint NOT NULL,
     created_at timestamptz NOT NULL DEFAULT NOW(),
     updated_at timestamptz NOT NULL DEFAULT NOW(),
     CONSTRAINT fk_cart_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
@@ -19,5 +19,5 @@ CREATE TABLE cart_items (
 CREATE TRIGGER trg_carts_updated_at
     BEFORE UPDATE ON carts
     FOR EACH ROW
-    EXECUTE FUNCTION set_updated_at();
+    EXECUTE FUNCTION set_updated_at ();
 

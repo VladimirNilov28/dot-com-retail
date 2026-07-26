@@ -20,12 +20,12 @@
  *
  * - Java 21
  * - Spring Boot 4.0.7
- * - Spring WebFlux
+ * - Spring Web (MVC)
  * - GraphQL with Netflix DGS
  * - PostgreSQL
- * - R2DBC
+ * - Spring Data JPA / Hibernate
  * - Flyway
- * - Apache Kafka
+ * - Apache Kafka (spring-kafka)
  *
  *
  * ## Development Approach
@@ -55,14 +55,18 @@
  * Runtime database access:
  *
  * ```
- * Spring WebFlux
+ * Spring Web (MVC)
  *       |
  *       v
- *     R2DBC
+ *  Spring Data JPA
  *       |
  *       v
  *  PostgreSQL
  * ```
+ *
+ * Flyway owns the schema (source of truth); JPA/Hibernate is
+ * configured with ddl-auto=validate and never generates or
+ * alters schema.
  *
  * Database migrations:
  *
@@ -79,7 +83,8 @@
  *
  * ## Messaging Architecture
  *
- * Kafka is used for asynchronous communication.
+ * Kafka is used for asynchronous communication via plain
+ * spring-kafka listeners (@KafkaListener) — no reactive stack.
  *
  * Example:
  *
@@ -249,7 +254,7 @@ dependencies {
     )
 
     implementation(
-        "org.springframework.boot:spring-boot-starter-webflux"
+        "org.springframework.boot:spring-boot-starter-web"
     )
 
     implementation(
@@ -276,32 +281,25 @@ dependencies {
     // Database
     // ---------------------
 
-    // Reactive database access
+    // JPA / Hibernate (schema owned by Flyway, ddl-auto=validate)
     implementation(
-        "org.springframework.boot:spring-boot-starter-data-r2dbc"
+        "org.springframework.boot:spring-boot-starter-data-jpa"
     )
 
 
-    // Required for Flyway migrations
-    implementation(
-        "org.springframework.boot:spring-boot-starter-jdbc"
-    )
 
     runtimeOnly(
         "org.postgresql:postgresql"
     )
 
 
-    runtimeOnly(
-        "org.postgresql:r2dbc-postgresql"
-    )
-
-
     // Database migrations
-    implementation(
-        "org.flywaydb:flyway-core"
-    )
+    implementation("org.springframework.boot:spring-boot-starter-flyway")
 
+//    implementation(
+//        "org.flywaydb:flyway-core"
+//    )
+//
 
     implementation(
         "org.flywaydb:flyway-database-postgresql"
@@ -323,6 +321,7 @@ dependencies {
     // Messaging
     // ---------------------
 
+    // Plain blocking Kafka listeners (@KafkaListener) — no reactor-kafka
     implementation(
         "org.springframework.boot:spring-boot-starter-kafka"
     )
@@ -334,7 +333,7 @@ dependencies {
     // ---------------------
 
     implementation(
-        "org.springdoc:springdoc-openapi-starter-webflux-ui:3.0.2"
+        "org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.2"
     )
 
 
@@ -395,12 +394,6 @@ dependencies {
     )
 
 
-    // Reactor Mono / Flux testing
-    testImplementation(
-        "io.projectreactor:reactor-test"
-    )
-
-
     // Spring Security testing
     testImplementation(
         "org.springframework.security:spring-security-test"
@@ -441,11 +434,6 @@ dependencies {
 
     testImplementation(
         "org.testcontainers:testcontainers-kafka"
-    )
-
-
-    testImplementation(
-        "org.testcontainers:testcontainers-r2dbc"
     )
 
 
