@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ee.bytecore.backend.config.PostgresTestConfiguration;
 import javax.sql.DataSource;
-
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -25,10 +24,13 @@ public class FlywayMigrationTest {
   void migrationApplyCleanlyAndCoreTablesExist() {
     JdbcTemplate jdbc = new JdbcTemplate(dataSource);
 
-    Integer userTableCount = jdbc.queryForObject("""
+    Integer userTableCount =
+        jdbc.queryForObject(
+            """
         SELECT COUNT(*) FROM information_schema.tables
         WHERE table_name = 'users'
-        """, Integer.class);
+        """,
+            Integer.class);
 
     assertThat(userTableCount).isEqualTo(1);
   }
@@ -37,11 +39,14 @@ public class FlywayMigrationTest {
   void userRoleColumnHasExpectedEnumValues() {
     JdbcTemplate jdbc = new JdbcTemplate(dataSource);
 
-    Integer enumValeCount = jdbc.queryForObject("""
+    Integer enumValeCount =
+        jdbc.queryForObject(
+            """
         SELECT COUNT(*) FROM pg_enum e
         JOIN pg_type t ON e.enumtypid = t.oid
         WHERE t.typname = 'user_role'
-        """, Integer.class);
+        """,
+            Integer.class);
 
     assertThat(enumValeCount).isEqualTo(3);
   }

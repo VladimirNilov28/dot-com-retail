@@ -158,6 +158,9 @@
 
 
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
+import org.gradle.kotlin.dsl.KotlinClosure2
+import org.gradle.api.tasks.testing.TestDescriptor
+import org.gradle.api.tasks.testing.TestResult
 
 // =====================================================
 // Plugins
@@ -482,31 +485,53 @@ dependencyManagement {
 // Tests Configuration
 // =====================================================
 
+tasks.named<Test>("test") {
+    useJUnitPlatform()
+}
+
+// This section causes useful test output to go to the terminal.
 tasks.test {
 
-    useJUnitPlatform()
+    // Full output flag: ./gradlew test -Pfull
+    val fullOutput = project.hasProperty("full")
 
+    // Colors on by default. Disable with -Pnocolor or NO_COLOR env var.
+    val useColor = !project.hasProperty("nocolor") && System.getenv("NO_COLOR") == null
+    val reset = if (useColor) "\u001B[0m" else ""
+    val green = if (useColor) "\u001B[32m" else ""
+    val red = if (useColor) "\u001B[31m" else ""
+    val bold = if (useColor) "\u001B[1m" else ""
 
     testLogging {
+        events("passed", "skipped", "failed") // , "standardOut", "standardError"
 
-        events(
-            "passed",
-            "failed",
-            "skipped"
-        )
+        showExceptions = true
+        exceptionFormat = if (fullOutput) TestExceptionFormat.FULL else TestExceptionFormat.SHORT
+        showCauses = true
+        showStackTraces = fullOutput
 
-
-        exceptionFormat =
-            TestExceptionFormat.FULL
-
-
-        showStandardStreams = true
+        // Application logs (Tomcat, Hikari, JPA, etc.) only in full mode: ./gradlew test -Pfull
+        showStandardStreams = fullOutput
     }
 
+    // Print a short summary at the end + a link to the full HTML report
+    afterSuite(KotlinClosure2<TestDescriptor, TestResult, Unit>({ descriptor, result ->
+        if (descriptor.parent == null) {
+            val htmlReport = layout.buildDirectory
+                .file("reports/tests/test/index.html")
+                .get()
+                .asFile
 
-    finalizedBy(
-        tasks.jacocoTestReport
-    )
+            val summaryColor = if (result.failedTestCount > 0) red else green
+
+            println()
+            println("${bold}${summaryColor}Summary: ${result.resultType}, total: ${result.testCount}, " +
+                    "failed: ${result.failedTestCount}, skipped: ${result.skippedTestCount}${reset}")
+            println("Full report: file://${htmlReport}")
+        }
+    }))
+
+    finalizedBy(tasks.jacocoTestReport)
 }
 
 

@@ -8,3 +8,13 @@ spring:
     url: "jdbc:postgresql://localhost:5432/postgres"
     username: postgres
     password: postgres
+  docker:
+    compose:
+      file: ../infrastructure/docker/compose.yml
+
+logging:
+  level:
+    com.zaxxer.hikari: WARN
+    org.hibernate: WARN
+    org.springframework.orm.jpa: WARN
+    org.springframework.boot.autoconfigure.orm.jpa: WARN
