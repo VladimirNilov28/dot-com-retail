@@ -14,8 +14,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.junit.jupiter.api.function.Executable;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.beans.Transient;
-
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @SpringBootTest
