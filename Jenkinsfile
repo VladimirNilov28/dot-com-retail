@@ -42,7 +42,7 @@ pipeline {
         always {
 
             junit '**/build/test-results/test/*.xml'
-
+            archiveArtifacts artifacts: 'backend/build/reports/**', fingerprint: true
         }
 
         success {
