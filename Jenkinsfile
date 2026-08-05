@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    options {
+        skipDefaultCheckout(true)
+    }
+
     stages {
         stage('Checkout') {
             steps {
@@ -19,6 +23,17 @@ pipeline {
                   test -d frontend
                   test -d infrastructure
                 '''
+            }
+        }
+
+        stage('Backend test') {
+            steps {
+                dir('backend') {
+                    sh '''
+                      chmod +x gradlew
+                      ./gradlew test
+                    '''
+                }
             }
         }
     }
