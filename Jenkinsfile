@@ -77,6 +77,29 @@ pipeline {
 
         }
 
+        stage('GitHub API test') {
+
+            steps {
+
+                withCredentials([
+                        string(
+                            credentialsId: 'github-token',
+                            variable: 'TOKEN'
+                        )
+                    ]) {
+
+                    sh '''
+                curl \
+                -H "Authorization: Bearer $TOKEN" \
+                https://api.github.com/user
+            '''
+
+                }
+
+            }
+
+        }
+
     }
 
 
