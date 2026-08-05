@@ -4,8 +4,8 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: postgres
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
@@ -13,8 +13,12 @@ services:
       timeout: 5s
       retries: 5
     volumes:
-      - ./volumes/postgres:/var/lib/postgresql/data
-  
+      - postgres_volume:/var/lib/postgresql/data
+    env_file:
+      - path: ../../.env
+        required: true
+
+
   # TODO:
   # Spring Boot service
 
@@ -29,3 +33,6 @@ services:
 
   # TODO:
   # Redis service
+
+volumes:
+  postgres_volume:
