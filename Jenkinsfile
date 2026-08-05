@@ -1,56 +1,112 @@
 pipeline {
+
     agent any
 
+
     options {
+
         skipDefaultCheckout(true)
+
     }
+
 
     stages {
+
+
         stage('Checkout') {
+
             steps {
+
                 checkout scm
+
             }
+
         }
+
 
         stage('Verify') {
+
             steps {
+
                 sh '''
-                  echo "Project structure"
+                    echo "Project structure"
 
-                  ls -la
+                    ls -la
 
-                  test -d backend
-                  test -d frontend
-                  test -d infrastructure
+                    test -d backend
+                    test -d frontend
+                    test -d infrastructure
                 '''
+
             }
+
         }
 
-        stage('Backend test') {
+
+        stage('Backend build') {
+
             steps {
+
                 dir('backend') {
+
                     sh '''
-                      chmod +x gradlew
-                      ./gradlew test
+                        chmod +x gradlew
+                        ./gradlew classes
                     '''
+
                 }
+
             }
+
         }
+
+
+        stage('Backend tests') {
+
+            steps {
+
+                dir('backend') {
+
+                    sh '''
+                        ./gradlew test
+                    '''
+
+                }
+
+            }
+
+        }
+
     }
+
 
     post {
+
+
         always {
 
-            junit '**/build/test-results/test/*.xml'
-            archiveArtifacts artifacts: 'backend/build/reports/**', fingerprint: true
+            junit 'backend/build/test-results/test/*.xml'
+
+            archiveArtifacts artifacts: 'backend/build/reports/**',
+            fingerprint: true
+
         }
+
 
         success {
-            echo "Build succesful"
+
+            echo "Build successful"
+
         }
 
+
         failure {
+
             echo "Build failed"
+
         }
+
+
     }
+
 }
