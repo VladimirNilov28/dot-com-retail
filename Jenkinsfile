@@ -39,6 +39,11 @@ pipeline {
     }
 
     post {
+        always {
+
+            junit '**/build/test-results/test/*.xml'
+
+        }
 
         success {
             echo "Build succesful"
