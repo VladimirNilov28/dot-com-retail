@@ -77,27 +77,23 @@ pipeline {
 
         }
 
-        stage('GitHub API test') {
-
+        stage('Comment PR') {
             steps {
-
                 withCredentials([
-                        string(
+                    string(
                             credentialsId: 'github-token',
                             variable: 'TOKEN'
-                        )
-                    ]) {
-
+                        )]) {
                     sh '''
-                curl \
-                -H "Authorization: Bearer $TOKEN" \
-                https://api.github.com/user
-            '''
-
+                    curl \
+                    -X POST \
+                    -H "Authorization: Bearer $TOKEN" \
+                    -H "Accept: application/vnd.github+json" \
+                    https://api.github.com/repos/VladimirNilov28/dot-com-retail/issues/1/comments \
+                    -d '{"body":"🤖 Jenkins CI finished successfully"}'
+                    '''
                 }
-
             }
-
         }
 
     }
