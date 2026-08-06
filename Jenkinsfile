@@ -96,6 +96,35 @@ pipeline {
             }
         }
 
+        stage('GitHub access test') {
+
+            steps {
+
+                withCredentials([
+                        string(
+                            credentialsId: 'github-token',
+                            variable: 'TOKEN'
+                        )
+                    ]) {
+
+                    sh '''
+            echo "Current user:"
+            curl \
+              -H "Authorization: Bearer $TOKEN" \
+              https://api.github.com/user
+
+
+            echo "Repository:"
+            curl \
+              -H "Authorization: Bearer $TOKEN" \
+              https://api.github.com/repos/VladimirNilov28/dot-com-retail
+            '''
+
+                }
+
+            }
+        }
+
     }
 
 
