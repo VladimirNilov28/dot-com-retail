@@ -81,47 +81,22 @@ pipeline {
             steps {
                 withCredentials([
                     string(
-                            credentialsId: 'github-token',
-                            variable: 'TOKEN'
-                        )]) {
+                        credentialsId: 'github-token',
+                        variable: 'GITHUB_TOKEN'
+                    )
+                ]) {
                     sh '''
-                    curl \
-                    -X POST \
-                    -H "Authorization: Bearer $TOKEN" \
-                    -H "Accept: application/vnd.github+json" \
-                    https://api.github.com/repos/VladimirNilov28/dot-com-retail/issues/1/comments \
-                    -d '{"body":"🤖 Jenkins CI finished successfully"}'
+                        set -e
+
+                        curl --fail --silent --show-error \
+                            --request POST \
+                            -H "Authorization: Bearer $GITHUB_TOKEN" \
+                            -H "Accept: application/vnd.github+json" \
+                            -H "X-GitHub-Api-Version: 2022-11-28" \
+                            https://api.github.com/repos/VladimirNilov28/dot-com-retail/issues/1/comments \
+                            --data '{"body":"🤖 Jenkins CI finished successfully"}'
                     '''
                 }
-            }
-        }
-
-        stage('GitHub access test') {
-
-            steps {
-
-                withCredentials([
-                        string(
-                            credentialsId: 'github-token',
-                            variable: 'TOKEN'
-                        )
-                    ]) {
-
-                    sh '''
-            echo "Current user:"
-            curl \
-              -H "Authorization: Bearer $TOKEN" \
-              https://api.github.com/user
-
-
-            echo "Repository:"
-            curl \
-              -H "Authorization: Bearer $TOKEN" \
-              https://api.github.com/repos/VladimirNilov28/dot-com-retail
-            '''
-
-                }
-
             }
         }
 
