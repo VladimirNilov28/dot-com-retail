@@ -61,42 +61,17 @@ pipeline {
         }
 
 
-        stage('Backend tests') {
-
+        stage('Build context') {
             steps {
-
-                dir('backend') {
-
-                    sh '''
-                        ./gradlew test
-                    '''
-
-                }
-
-            }
-
-        }
-
-        stage('Comment PR') {
-            steps {
-                withCredentials([
-                    string(
-                        credentialsId: 'github-token',
-                        variable: 'GITHUB_TOKEN'
-                    )
-                ]) {
-                    sh '''
-                        set -e
-
-                        curl --fail --silent --show-error \
-                            --request POST \
-                            -H "Authorization: Bearer $GITHUB_TOKEN" \
-                            -H "Accept: application/vnd.github+json" \
-                            -H "X-GitHub-Api-Version: 2022-11-28" \
-                            https://api.github.com/repos/VladimirNilov28/dot-com-retail/issues/1/comments \
-                            --data '{"body":"🤖 Jenkins CI finished successfully"}'
-                    '''
-                }
+                sh '''
+                    echo "BRANCH_NAME=${BRANCH_NAME:-}"
+                    echo "CHANGE_ID=${CHANGE_ID:-}"
+                    echo "CHANGE_BRANCH=${CHANGE_BRANCH:-}"
+                    echo "CHANGE_TARGET=${CHANGE_TARGET:-}"
+                    echo "GIT_COMMIT=${GIT_COMMIT:-}"
+                    echo "BUILD_NUMBER=${BUILD_NUMBER:-}"
+                    echo "BUILD_URL=${BUILD_URL:-}"
+                '''
             }
         }
 
