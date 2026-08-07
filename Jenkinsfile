@@ -2,64 +2,30 @@ pipeline {
 
     agent any
 
-
     options {
-
         skipDefaultCheckout(true)
-
+        timestamps()
     }
-
 
     stages {
 
-
         stage('Checkout') {
-
             steps {
-
                 checkout scm
-
             }
-
         }
 
-
-        stage('Verify') {
-
+        stage('Build context') {
             steps {
-
                 sh '''
-                    echo "Project structure"
-
-                    ls -la
-
-                    test -d backend
-                    test -d frontend
-                    test -d infrastructure
+                    echo "BRANCH_NAME=${BRANCH_NAME:-}"
+                    echo "CHANGE_ID=${CHANGE_ID:-}"
+                    echo "CHANGE_BRANCH=${CHANGE_BRANCH:-}"
+                    echo "CHANGE_TARGET=${CHANGE_TARGET:-}"
+                    echo "BUILD_NUMBER=${BUILD_NUMBER:-}"
                 '''
-
             }
-
         }
-
-
-        stage('Backend build') {
-
-            steps {
-
-                dir('backend') {
-
-                    sh '''
-                        chmod +x gradlew
-                        ./gradlew classes
-                    '''
-
-                }
-
-            }
-
-        }
-
 
         stage('Ensure pull request') {
             when {
@@ -69,9 +35,9 @@ pipeline {
                     }
 
                     anyOf {
-                        branch pattern: 'feature/.*', comparator: 'REGEX'
-                        branch pattern: 'fix/.*', comparator: 'REGEX'
-                        branch pattern: 'ci/.*', comparator: 'REGEX'
+                        branch pattern: 'feature/.*', comparator: 'REGEXP'
+                        branch pattern: 'fix/.*', comparator: 'REGEXP'
+                        branch pattern: 'ci/.*', comparator: 'REGEXP'
                     }
                 }
             }
@@ -84,42 +50,72 @@ pipeline {
                     )
                 ]) {
                     sh '''
+                        chmod +x infrastructure/jenkins/scripts/ensure-pr.sh
                         infrastructure/jenkins/scripts/ensure-pr.sh
                     '''
                 }
             }
         }
 
-    }
+        stage('Verify') {
+            steps {
+                sh '''
+                    echo "Project structure"
 
+                    ls -la
+
+                    test -d backend
+                    test -d frontend
+                    test -d infrastructure
+                    test -f backend/gradlew
+                '''
+            }
+        }
+
+        stage('Backend build') {
+            steps {
+                dir('backend') {
+                    sh '''
+                        chmod +x gradlew
+                        ./gradlew --no-daemon classes
+                    '''
+                }
+            }
+        }
+
+        stage('Backend tests') {
+            steps {
+                dir('backend') {
+                    sh '''
+                        ./gradlew --no-daemon test
+                    '''
+                }
+            }
+        }
+    }
 
     post {
 
-
         always {
 
-            junit 'backend/build/test-results/test/*.xml'
+            junit(
+                allowEmptyResults: true,
+                testResults: 'backend/build/test-results/test/*.xml'
+            )
 
-            archiveArtifacts artifacts: 'backend/build/reports/**',
-            fingerprint: true
-
+            archiveArtifacts(
+                artifacts: 'backend/build/reports/**',
+                allowEmptyArchive: true,
+                fingerprint: true
+            )
         }
-
 
         success {
-
-            echo "Build successful"
-
+            echo 'Build successful'
         }
-
 
         failure {
-
-            echo "Build failed"
-
+            echo 'Build failed'
         }
-
-
     }
-
 }
