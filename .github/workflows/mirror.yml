@@ -1,20 +1,28 @@
-name: Mirror Gitea
+name: Mirror to Gitea
 
 on:
+  push:
+    branches:
+      - '**'
+    tags:
+      - '**'
+
   workflow_dispatch:
 
-  schedule:
-    - cron: "*/5 * * * *"
-
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   mirror:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Configure SSH
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Gitea SSH
         env:
           GITEA_SSH_KEY: ${{ secrets.GITEA_MIRROR_SSH_KEY }}
         run: |
@@ -25,38 +33,44 @@ jobs:
           chmod 600 ~/.ssh/gitea_mirror
 
           ssh-keyscan -H gitea.kood.tech >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
 
           cat >> ~/.ssh/config <<EOF
           Host gitea.kood.tech
+            HostName gitea.kood.tech
+            User git
             IdentityFile ~/.ssh/gitea_mirror
             IdentitiesOnly yes
           EOF
 
           chmod 600 ~/.ssh/config
-          chmod 600 ~/.ssh/known_hosts
 
-      - name: Clone Gitea repository
+      - name: Add Gitea remote
         run: |
-          git clone --mirror \
-            git@gitea.kood.tech:vladimirnilov/i-love-shopping1.git \
-            repository.git
+          git remote add gitea \
+            git@gitea.kood.tech:vladimirnilov/i-love-shopping1.git
 
-      - name: Push branches to GitHub
-        working-directory: repository.git
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Mirror branches to Gitea
         run: |
-          git push \
-            --prune \
-            "https://x-access-token:${GH_TOKEN}@github.com/VladimirNilov28/dot-com-retail.git" \
-            "refs/heads/*:refs/heads/*"
+          git fetch origin '+refs/heads/*:refs/remotes/origin/*'
 
-      - name: Push tags to GitHub
-        working-directory: repository.git
-        env:
-          GH_TOKEN: ${{ github.token }}
+          for branch in $(git for-each-ref \
+            --format='%(refname:strip=3)' \
+            refs/remotes/origin/); do
+
+            if [ "$branch" = "HEAD" ]; then
+              continue
+            fi
+
+            echo "Mirroring branch: $branch"
+
+            git push --force gitea \
+              "refs/remotes/origin/$branch:refs/heads/$branch"
+          done
+
+      - name: Mirror tags to Gitea
         run: |
-          git push \
-            --prune \
-            "https://x-access-token:${GH_TOKEN}@github.com/VladimirNilov28/dot-com-retail.git" \
-            "refs/tags/*:refs/tags/*"
+          git fetch origin --tags --force
+
+          git push --force gitea \
+            'refs/tags/*:refs/tags/*'
