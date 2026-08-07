@@ -83,9 +83,9 @@ pipeline {
                         variable: 'GITHUB_TOKEN'
                     )
                 ]) {
-                    sh ```
+                    sh '''
                         infrastructure/jenkins/scripts/ensure-pr.sh
-                    ```
+                    '''
                 }
             }
         }
