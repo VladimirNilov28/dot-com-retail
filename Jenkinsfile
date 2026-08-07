@@ -61,17 +61,32 @@ pipeline {
         }
 
 
-        stage('Build context') {
+        stage('Ensure pull request') {
+            when {
+                allOf {
+                    not {
+                        changeRequest()
+                    }
+
+                    anyOf {
+                        branch pattern: 'feature/.*', comparator: 'REGEX'
+                        branch pattern: 'fix/.*', comparator: 'REGEX'
+                        branch pattern: 'ci/.*', comparator: 'REGEX'
+                    }
+                }
+            }
+
             steps {
-                sh '''
-                    echo "BRANCH_NAME=${BRANCH_NAME:-}"
-                    echo "CHANGE_ID=${CHANGE_ID:-}"
-                    echo "CHANGE_BRANCH=${CHANGE_BRANCH:-}"
-                    echo "CHANGE_TARGET=${CHANGE_TARGET:-}"
-                    echo "GIT_COMMIT=${GIT_COMMIT:-}"
-                    echo "BUILD_NUMBER=${BUILD_NUMBER:-}"
-                    echo "BUILD_URL=${BUILD_URL:-}"
-                '''
+                withCredentials([
+                    string(
+                        credentialsId: 'github-token',
+                        variable: 'GITHUB_TOKEN'
+                    )
+                ]) {
+                    sh ```
+                        infrastructure/jenkins/scripts/ensure-pr.sh
+                    ```
+                }
             }
         }
 
