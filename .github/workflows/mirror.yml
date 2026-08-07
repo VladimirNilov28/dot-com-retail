@@ -22,20 +22,27 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Configure Gitea SSH
+      - name: Configure SSH
         env:
-          GITEA_SSH_KEY: ${{ secrets.GITEA_MIRROR_SSH_KEY }}
+          GITEA_SSH_KEY_B64: ${{ secrets.GITEA_MIRROR_SSH_KEY_B64 }}
         run: |
+          set -euo pipefail
+
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
 
-          printf '%s\n' "$GITEA_SSH_KEY" > ~/.ssh/gitea_mirror
+          printf '%s' "$GITEA_SSH_KEY_B64" \
+            | base64 --decode \
+            > ~/.ssh/gitea_mirror
+
           chmod 600 ~/.ssh/gitea_mirror
 
-          ssh-keyscan -H gitea.kood.tech >> ~/.ssh/known_hosts
+          ssh-keyscan -H gitea.kood.tech \
+            >> ~/.ssh/known_hosts
+
           chmod 600 ~/.ssh/known_hosts
 
-          cat >> ~/.ssh/config <<EOF
+          cat > ~/.ssh/config <<EOF
           Host gitea.kood.tech
             HostName gitea.kood.tech
             User git
@@ -45,32 +52,89 @@ jobs:
 
           chmod 600 ~/.ssh/config
 
+      - name: Validate SSH key
+        run: |
+          set -euo pipefail
+
+          ssh-keygen -y \
+            -f ~/.ssh/gitea_mirror \
+            > /tmp/gitea_mirror.pub
+
+          echo "Private key successfully loaded"
+
+          ssh-keygen -lf /tmp/gitea_mirror.pub
+
+      - name: Test Gitea SSH connection
+        run: |
+          set +e
+
+          ssh -T git@gitea.kood.tech
+
+          EXIT_CODE=$?
+
+          echo "SSH exit code: $EXIT_CODE"
+
+          # Gitea may intentionally reject interactive shell access.
+          # Authentication can still be successful.
+          exit 0
+
       - name: Add Gitea remote
         run: |
+          set -euo pipefail
+
+          git remote remove gitea 2>/dev/null || true
+
           git remote add gitea \
             git@gitea.kood.tech:vladimirnilov/i-love-shopping1.git
 
+          git remote -v
+
+      - name: Fetch all GitHub branches
+        run: |
+          set -euo pipefail
+
+          git fetch origin \
+            '+refs/heads/*:refs/remotes/origin/*'
+
       - name: Mirror branches to Gitea
         run: |
-          git fetch origin '+refs/heads/*:refs/remotes/origin/*'
+          set -euo pipefail
 
-          for branch in $(git for-each-ref \
+          git for-each-ref \
             --format='%(refname:strip=3)' \
-            refs/remotes/origin/); do
+            refs/remotes/origin/ \
+          | while read -r branch; do
 
-            if [ "$branch" = "HEAD" ]; then
-              continue
-            fi
+              if [ "$branch" = "HEAD" ]; then
+                continue
+              fi
 
-            echo "Mirroring branch: $branch"
+              echo "Mirroring branch: $branch"
 
-            git push --force gitea \
-              "refs/remotes/origin/$branch:refs/heads/$branch"
-          done
+              git push \
+                --force \
+                gitea \
+                "refs/remotes/origin/$branch:refs/heads/$branch"
+
+            done
+
+      - name: Fetch all GitHub tags
+        run: |
+          set -euo pipefail
+
+          git fetch origin \
+            --tags \
+            --force
 
       - name: Mirror tags to Gitea
         run: |
-          git fetch origin --tags --force
+          set -euo pipefail
 
-          git push --force gitea \
+          git push \
+            --force \
+            gitea \
             'refs/tags/*:refs/tags/*'
+
+      - name: Mirror completed
+        run: |
+          echo "GitHub → Gitea mirror completed successfully"
