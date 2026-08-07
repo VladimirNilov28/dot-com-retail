@@ -17,4 +17,4 @@ jobs:
         run: |
           git clone --mirror "https://github.com/${{ github.repository }}.git" repo.git
           cd repo.git
-          git push --mirror "https://${{ secrets.GITEA_USER }}:${{ secrets.GITEA_TOKEN }}@gitea.example.com/USERNAME/REPO.git"
+          git push --mirror "https://${{ secrets.GITEA_USER }}:${{ secrets.GITEA_TOKEN }}@gitea.kood.tech/vladimirnilov/i-love-shopping1.git"
