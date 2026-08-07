@@ -1,0 +1,20 @@
+name: Mirror to Gitea
+
+on:
+  push:
+    branches:
+      - '**'
+    tags:
+      - '**'
+  delete:
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clone repository as mirror
+        run: |
+          git clone --mirror "https://github.com/${{ github.repository }}.git" repo.git
+          cd repo.git
+          git push --mirror "https://${{ secrets.GITEA_USER }}:${{ secrets.GITEA_TOKEN }}@gitea.example.com/USERNAME/REPO.git"
