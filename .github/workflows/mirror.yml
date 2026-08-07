@@ -1,20 +1,62 @@
-name: Mirror to Gitea
+name: Mirror Gitea
 
 on:
-  push:
-    branches:
-      - '**'
-    tags:
-      - '**'
-  delete:
+  workflow_dispatch:
+
+  schedule:
+    - cron: "*/5 * * * *"
+
+permissions:
+  contents: write
 
 jobs:
   mirror:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Clone repository as mirror
+      - name: Configure SSH
+        env:
+          GITEA_SSH_KEY: ${{ secrets.GITEA_MIRROR_SSH_KEY }}
         run: |
-          git clone --mirror "https://github.com/${{ github.repository }}.git" repo.git
-          cd repo.git
-          git push --mirror "https://${{ secrets.GITEA_USER }}:${{ secrets.GITEA_TOKEN }}@gitea.kood.tech/vladimirnilov/i-love-shopping1.git"
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          printf '%s\n' "$GITEA_SSH_KEY" > ~/.ssh/gitea_mirror
+          chmod 600 ~/.ssh/gitea_mirror
+
+          ssh-keyscan -H gitea.kood.tech >> ~/.ssh/known_hosts
+
+          cat >> ~/.ssh/config <<EOF
+          Host gitea.kood.tech
+            IdentityFile ~/.ssh/gitea_mirror
+            IdentitiesOnly yes
+          EOF
+
+          chmod 600 ~/.ssh/config
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Clone Gitea repository
+        run: |
+          git clone --mirror \
+            git@gitea.kood.tech:vladimirnilov/i-love-shopping1.git \
+            repository.git
+
+      - name: Push branches to GitHub
+        working-directory: repository.git
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git push \
+            --prune \
+            "https://x-access-token:${GH_TOKEN}@github.com/VladimirNilov28/dot-com-retail.git" \
+            "refs/heads/*:refs/heads/*"
+
+      - name: Push tags to GitHub
+        working-directory: repository.git
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git push \
+            --prune \
+            "https://x-access-token:${GH_TOKEN}@github.com/VladimirNilov28/dot-com-retail.git" \
+            "refs/tags/*:refs/tags/*"
