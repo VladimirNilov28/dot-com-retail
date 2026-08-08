@@ -152,7 +152,8 @@ pipeline {
                         )
                     ]) {
                         withEnv([
-                            "BUILD_RESULT=${currentBuild.currentResult}"
+                            "BUILD_RESULT=${currentBuild.currentResult}",
+                            "BUILD_DURATION=${currentBuild.durationString}"
                         ]) {
                             sh '''
                                 chmod +x infrastructure/jenkins/scripts/comment-ci-result.sh
