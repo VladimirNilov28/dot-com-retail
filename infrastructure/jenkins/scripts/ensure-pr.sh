@@ -83,7 +83,7 @@ REQUEST_FILE="$(mktemp)"
 
 jq -n \
   --arg title "$PR_TITLE" \
-  --arg head "$SOURCE_BRANCH" \
+  --arg head "${OWNER}:${SOURCE_BRANCH}" \
   --arg base "$BASE_BRANCH" \
   --arg body "$PR_BODY" \
   '{
