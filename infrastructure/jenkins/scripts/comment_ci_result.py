@@ -1,7 +1,7 @@
 import os
 import subprocess
 
-from github import GitHubClient
+from github_client import GitHubClient
 from reports import TestReport
 
 from config import (
