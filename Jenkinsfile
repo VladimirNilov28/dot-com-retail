@@ -116,7 +116,10 @@ pipeline {
             steps {
                 dir('backend') {
                     sh '''
-                        ./gradlew --no-daemon test
+                        set -o pipefail
+
+                        chmod +x gradlew
+                        ./gradlew test 2>&1 | tee gradle-test.log
                     '''
                 }
             }
@@ -124,17 +127,39 @@ pipeline {
     }
 
     post {
-
         always {
-
             junit(
                 allowEmptyResults: true,
                 testResults: 'backend/build/test-results/test/*.xml'
             )
 
+            script{
+                if (env.CHANGE_ID) {
+                    withCredentials([
+                        string(
+                            credentialsId: 'github-token'
+                            variable: 'GITHUB_TOKEN'
+                        )
+                    ]) {
+                        withEnv([
+                            "BUILD_RESULT=${currentBuild.currentResult}"
+                        ]) {
+                            sh '''
+                                infrastructure/jenkins/scripts/comment-ci-result.sh
+                            '''
+                        }
+                    }
+                } else {
+                    echo 'This is not a PR build; skipping CI comment.'
+                }
+            }
+
             archiveArtifacts(
-                artifacts: 'backend/build/reports/**',
                 allowEmptyArchive: true,
+                artifacts: '''
+                    backend/gradle-test.log,
+                    backend/build/reports/**
+                ''',
                 fingerprint: true
             )
         }
