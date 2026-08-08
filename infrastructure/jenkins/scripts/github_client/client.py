@@ -1,6 +1,6 @@
 import requests
 
-from config import (
+from ..config import (
     GITHUB_TOKEN,
     GITHUB_OWNER,
     GITHUB_REPO
@@ -22,7 +22,7 @@ class GitHubClient:
         self.headers = {
             'Authorization': f'Bearer {GITHUB_TOKEN}',
             'Accept': 'application/vnd.github+json',
-            'X-GitHub-Api-Version': '2026-03-10'
+            'X-GitHub-Api-Version': '2022-11-28'
         }
 
 

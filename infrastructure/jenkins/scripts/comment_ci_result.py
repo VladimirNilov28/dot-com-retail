@@ -1,10 +1,10 @@
 import os
 import subprocess
 
-from github_client import GitHubClient
-from reports import TestReport
+from .github_client import GitHubClient
+from .reports import TestReport
 
-from config import (
+from .config import (
     JUNIT_RESULTS_PATH
 )
 

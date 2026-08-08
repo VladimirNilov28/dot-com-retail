@@ -1,7 +1,7 @@
 import os
 
-from github_client import GitHubClient
-from config import (
+from .github_client import GitHubClient
+from .config import (
     BASE_BRANCH,
     AUTO_PR_BRANCH_PREFIXES
 )
