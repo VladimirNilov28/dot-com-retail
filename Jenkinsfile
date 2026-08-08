@@ -61,17 +61,14 @@ pipeline {
         }
 
 
-        stage('Build context') {
+        stage('Test Gitea access') {
             steps {
-                sh '''
-                    echo "BRANCH_NAME=${BRANCH_NAME:-}"
-                    echo "CHANGE_ID=${CHANGE_ID:-}"
-                    echo "CHANGE_BRANCH=${CHANGE_BRANCH:-}"
-                    echo "CHANGE_TARGET=${CHANGE_TARGET:-}"
-                    echo "GIT_COMMIT=${GIT_COMMIT:-}"
-                    echo "BUILD_NUMBER=${BUILD_NUMBER:-}"
-                    echo "BUILD_URL=${BUILD_URL:-}"
-                '''
+                sshagent(credentials: ['gitea-ssh']) {
+                    sh '''
+                        git ls-remote \
+                            git@gitea.kood.tech:vladimirnilov/i-love-shopping1.git
+                    '''
+                }
             }
         }
 
