@@ -1,4 +1,15 @@
+import os
 import sys
+
+
+CURRENT_DIR = os.path.dirname(
+    os.path.abspath(__file__)
+)
+
+sys.path.insert(
+    0,
+    CURRENT_DIR
+)
 
 
 def main():
@@ -15,16 +26,16 @@ def main():
 
     if command == 'ensure-pr':
 
-        from scripts.ensure_pr import main as ensure_pr
+        from scripts.ensure_pr import main
 
-        ensure_pr()
+        main()
 
 
     elif command == 'comment-ci':
 
-        from scripts.comment_ci_result import main as comment_ci
+        from scripts.comment_ci_result import main
 
-        comment_ci()
+        main()
 
 
     else:
