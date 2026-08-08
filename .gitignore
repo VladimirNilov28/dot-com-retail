@@ -213,5 +213,7 @@ site/
 
 docs/generated/
 infrastructure/docker/volumes/*
-
+infrastructure/jenkins/venv/
+__pycache__/
+*.pyc
 

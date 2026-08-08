@@ -15,6 +15,7 @@ pipeline {
             }
         }
 
+
         stage('Build context') {
             steps {
                 sh '''
@@ -28,7 +29,9 @@ pipeline {
             }
         }
 
+
         stage('Mirror to Gitea') {
+
             when {
                 not {
                     changeRequest()
@@ -36,7 +39,9 @@ pipeline {
             }
 
             steps {
+
                 sshagent(credentials: ['gitea-ssh']) {
+
                     sh '''
                         set -euo pipefail
 
@@ -58,38 +63,52 @@ pipeline {
             }
         }
 
+
         stage('Ensure pull request') {
+
             when {
+
                 allOf {
+
                     not {
                         changeRequest()
                     }
 
                     anyOf {
+
                         branch pattern: 'feature/.*', comparator: 'REGEXP'
+
                         branch pattern: 'fix/.*', comparator: 'REGEXP'
+
                         branch pattern: 'ci/.*', comparator: 'REGEXP'
                     }
                 }
             }
 
+
             steps {
+
                 withCredentials([
+
                     string(
                         credentialsId: 'github-token',
                         variable: 'GITHUB_TOKEN'
                     )
+
                 ]) {
+
                     sh '''
-                        chmod +x infrastructure/jenkins/scripts/ensure-pr.sh
-                        infrastructure/jenkins/scripts/ensure-pr.sh
+                        python infrastructure/jenkins/run.py ensure-pr
                     '''
                 }
             }
         }
 
+
         stage('Verify') {
+
             steps {
+
                 sh '''
                     echo "Project structure"
 
@@ -101,9 +120,13 @@ pipeline {
             }
         }
 
+
         stage('Backend build') {
+
             steps {
+
                 dir('backend') {
+
                     sh '''
                         chmod +x gradlew
                         ./gradlew --no-daemon classes
@@ -112,13 +135,18 @@ pipeline {
             }
         }
 
+
         stage('Backend tests') {
+
             steps {
+
                 dir('backend') {
+
                     sh '''
                         set -o pipefail
 
                         chmod +x gradlew
+
                         ./gradlew test 2>&1 | tee gradle-test.log
                     '''
                 }
@@ -126,52 +154,75 @@ pipeline {
         }
     }
 
+
     post {
+
         always {
 
             archiveArtifacts(
+
                 allowEmptyArchive: true,
+
                 artifacts: '''
                     backend/gradle-test.log,
                     backend/build/reports/**
                 ''',
+
                 fingerprint: true
             )
 
+
             junit(
+
                 allowEmptyResults: true,
+
                 testResults: 'backend/build/test-results/test/*.xml'
             )
 
+
             script {
+
                 if (env.CHANGE_ID) {
+
                     withCredentials([
+
                         string(
                             credentialsId: 'github-token',
                             variable: 'GITHUB_TOKEN'
                         )
+
                     ]) {
+
                         withEnv([
+
                             "BUILD_RESULT=${currentBuild.currentResult}",
+
                             "BUILD_DURATION=${currentBuild.durationString}"
+
                         ]) {
+
                             sh '''
-                                chmod +x infrastructure/jenkins/scripts/comment-ci-result.sh
-                                infrastructure/jenkins/scripts/comment-ci-result.sh
+                                python infrastructure/jenkins/run.py comment-ci
                             '''
                         }
                     }
+
                 } else {
+
                     echo 'This is not a PR build; skipping CI comment.'
                 }
             }
         }
 
+
         success {
+
             echo 'Build successful'
         }
 
+
         failure {
+
             echo 'Build failed'
         }
     }
