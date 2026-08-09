@@ -32,20 +32,18 @@ pipeline {
 
         stage('Mirror to Gitea') {
 
-            when {
-                not {
-                    changeRequest()
-                }
-            }
-
             steps {
+
+                script {
+                    env.MIRROR_BRANCH = env.CHANGE_BRANCH ?: env.BRANCH_NAME
+                }
 
                 sshagent(credentials: ['gitea-ssh']) {
 
                     sh '''
                         set -euo pipefail
 
-                        echo "Mirroring branch '${BRANCH_NAME}' to Gitea"
+                        echo "Mirroring branch '${MIRROR_BRANCH}' to Gitea"
 
                         git remote remove gitea 2>/dev/null || true
 
@@ -55,7 +53,7 @@ pipeline {
                         git push \
                             --force \
                             gitea \
-                            "HEAD:refs/heads/${BRANCH_NAME}"
+                            "HEAD:refs/heads/${MIRROR_BRANCH}"
 
                         echo "Mirror completed"
                     '''
