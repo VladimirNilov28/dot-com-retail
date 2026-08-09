@@ -75,16 +75,26 @@ class TestReport:
                     'testcase'
             ):
 
-                if (
-                        test.find('failure') is None
-                        and test.find('error') is None
-                ):
+                failure_node = test.find('failure')
+
+                if failure_node is None:
+                    failure_node = test.find('error')
+
+                if failure_node is None:
                     continue
 
 
-                failed_tests.append(
-                    f"- `{test.attrib.get('classname')}.{test.attrib.get('name')}`"
+                message = (
+                        failure_node.attrib.get('message')
+                        or (failure_node.text or '').strip().split('\n')[0]
+                        or 'No message available'
                 )
+
+
+                failed_tests.append({
+                    'name': f"{test.attrib.get('classname')}.{test.attrib.get('name')}",
+                    'message': message[:200]
+                })
 
 
         return {

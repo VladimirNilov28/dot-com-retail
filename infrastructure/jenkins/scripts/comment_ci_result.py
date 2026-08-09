@@ -5,7 +5,9 @@ from .github_client import GitHubClient
 from .reports import TestReport
 
 from .config import (
-    JUNIT_RESULTS_PATH
+    JUNIT_RESULTS_PATH,
+    GITHUB_OWNER,
+    GITHUB_REPO
 )
 
 
@@ -37,21 +39,33 @@ def get_status():
 
 
     statuses = {
-        'SUCCESS': (':white_check_mark:', 'Passed'),
-        'UNSTABLE': (':warning:', 'Unstable'),
-        'FAILURE': (':x:', 'Failed')
+        'SUCCESS': (':white_check_mark:', 'Passed', 'brightgreen'),
+        'UNSTABLE': (':warning:', 'Unstable', 'yellow'),
+        'FAILURE': (':x:', 'Failed', 'red')
     }
 
 
     return statuses.get(
         result,
-        (':x:', result)
+        (':x:', result, 'red')
     )
+
+
+def make_badge(
+        label,
+        message,
+        color
+):
+
+    label_enc = label.replace(' ', '%20')
+    message_enc = message.replace(' ', '%20')
+
+    return f"![{label}](https://img.shields.io/badge/{label_enc}-{message_enc}-{color})"
 
 
 def create_markdown():
 
-    icon, status = get_status()
+    icon, status, color = get_status()
 
 
     report = TestReport(
@@ -62,36 +76,67 @@ def create_markdown():
     tests = report.collect()
 
 
-    failed = ''
+    status_badge = make_badge('CI', status, color)
+
+    tests_badge = make_badge(
+        'tests',
+        f"{tests['passed']}%20passed%2C%20{tests['failed']}%20failed",
+        color
+    )
+
+
+    failed_section = ''
 
 
     if tests['failed_tests']:
 
-        failed = f"""
-### Failed tests
+        failed_items = '\n'.join(
+            f"- `{t['name']}`\n  ```\n  {t['message']}\n  ```"
+            for t in tests['failed_tests']
+        )
 
-{chr(10).join(tests['failed_tests'])}
+        failed_section = f"""
+<details>
+<summary>❌ {tests['failed']} failed test(s) — click to expand</summary>
+
+{failed_items}
+
+</details>
 """
 
 
+    commit = get_commit()
+
+    commit_url = (
+        f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/commit/{commit}"
+    )
+
+    build_url = os.getenv('BUILD_URL', '')
+
+    build_number = os.getenv('BUILD_NUMBER', '?')
+
+
+    build_link = (
+        f"[#{build_number}]({build_url})"
+        if build_url else f"#{build_number}"
+    )
+
+
     return f"""
-## {icon} Jenkins CI {status}
+{status_badge} {tests_badge}
 
-Validation completed automatically.
-
-### Build summary
+### {icon} Jenkins CI — {status}
 
 | | |
 |-|-|
-| Status | {icon} {status} |
-| Commit | `{get_commit()}` |
+| Commit | [`{commit}`]({commit_url}) |
 | Tests | {tests['passed']} passed, {tests['failed']} failed, {tests['skipped']} skipped |
 | Duration | {os.getenv('BUILD_DURATION', 'unknown')} |
-| Build | [#{os.getenv('BUILD_NUMBER')}]({os.getenv('BUILD_URL')}) |
+| Build | {build_link} |
 
-{failed}
+{failed_section}
 
-_This comment represents one CI execution and is kept as part of the PR history._
+<sub>This comment reflects the latest CI run and updates only when the result changes.</sub>
 """
 
 
