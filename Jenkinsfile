@@ -7,6 +7,11 @@ pipeline {
         timestamps()
     }
 
+    environment {
+        // true  -> comment into PR on every run (testing ci comments)
+        commentTest = false
+    }
+
     stages {
 
         stage('Checkout') {
@@ -14,6 +19,7 @@ pipeline {
                 checkout scm
             }
         }
+
 
         stage('Build context') {
             steps {
@@ -28,19 +34,21 @@ pipeline {
             }
         }
 
+
         stage('Mirror to Gitea') {
-            when {
-                not {
-                    changeRequest()
-                }
-            }
 
             steps {
+
+                script {
+                    env.MIRROR_BRANCH = env.CHANGE_BRANCH ?: env.BRANCH_NAME
+                }
+
                 sshagent(credentials: ['gitea-ssh']) {
+
                     sh '''
                         set -euo pipefail
 
-                        echo "Mirroring branch '${BRANCH_NAME}' to Gitea"
+                        echo "Mirroring branch '${MIRROR_BRANCH}' to Gitea"
 
                         git remote remove gitea 2>/dev/null || true
 
@@ -50,7 +58,7 @@ pipeline {
                         git push \
                             --force \
                             gitea \
-                            "HEAD:refs/heads/${BRANCH_NAME}"
+                            "HEAD:refs/heads/${MIRROR_BRANCH}"
 
                         echo "Mirror completed"
                     '''
@@ -58,38 +66,52 @@ pipeline {
             }
         }
 
+
         stage('Ensure pull request') {
+
             when {
+
                 allOf {
+
                     not {
                         changeRequest()
                     }
 
                     anyOf {
+
                         branch pattern: 'feature/.*', comparator: 'REGEXP'
+
                         branch pattern: 'fix/.*', comparator: 'REGEXP'
+
                         branch pattern: 'ci/.*', comparator: 'REGEXP'
                     }
                 }
             }
 
+
             steps {
+
                 withCredentials([
+
                     string(
                         credentialsId: 'github-token',
                         variable: 'GITHUB_TOKEN'
                     )
+
                 ]) {
+
                     sh '''
-                        chmod +x infrastructure/jenkins/scripts/ensure-pr.sh
-                        infrastructure/jenkins/scripts/ensure-pr.sh
+                        python infrastructure/jenkins/run.py ensure-pr
                     '''
                 }
             }
         }
 
+
         stage('Verify') {
+
             steps {
+
                 sh '''
                     echo "Project structure"
 
@@ -101,9 +123,13 @@ pipeline {
             }
         }
 
+
         stage('Backend build') {
+
             steps {
+
                 dir('backend') {
+
                     sh '''
                         chmod +x gradlew
                         ./gradlew --no-daemon classes
@@ -112,13 +138,18 @@ pipeline {
             }
         }
 
+
         stage('Backend tests') {
+
             steps {
+
                 dir('backend') {
+
                     sh '''
                         set -o pipefail
 
                         chmod +x gradlew
+
                         ./gradlew test 2>&1 | tee gradle-test.log
                     '''
                 }
@@ -126,52 +157,116 @@ pipeline {
         }
     }
 
+
     post {
+
         always {
 
             archiveArtifacts(
+
                 allowEmptyArchive: true,
+
                 artifacts: '''
                     backend/gradle-test.log,
                     backend/build/reports/**
                 ''',
+
                 fingerprint: true
             )
 
+
             junit(
+
                 allowEmptyResults: true,
+
                 testResults: 'backend/build/test-results/test/*.xml'
             )
 
+
             script {
-                if (env.CHANGE_ID) {
-                    withCredentials([
-                        string(
-                            credentialsId: 'github-token',
-                            variable: 'GITHUB_TOKEN'
-                        )
-                    ]) {
-                        withEnv([
-                            "BUILD_RESULT=${currentBuild.currentResult}",
-                            "BUILD_DURATION=${currentBuild.durationString}"
-                        ]) {
-                            sh '''
-                                chmod +x infrastructure/jenkins/scripts/comment-ci-result.sh
-                                infrastructure/jenkins/scripts/comment-ci-result.sh
-                            '''
-                        }
-                    }
-                } else {
+
+                if (!env.CHANGE_ID) {
+
                     echo 'This is not a PR build; skipping CI comment.'
+
+                    return
+                }
+
+                def prevResult = currentBuild.previousBuild?.result
+                def currResult = currentBuild.currentResult
+
+                def prevPassing = (prevResult == 'SUCCESS')
+                def currPassing = (currResult == 'SUCCESS')
+
+                def action
+
+                if (env.commentTest == 'true') {
+
+                    action = 'create'
+
+                } else if (prevResult == null) {
+
+                    // Первая сборка этой джобы — не с чем сравнивать
+                    action = 'create'
+
+                } else if (currPassing && prevPassing) {
+
+                    // pass -> pass: молчим
+                    action = 'skip'
+
+                } else if (!currPassing && !prevPassing) {
+
+                    // fail -> fail: редактируем существующий коммент
+                    action = 'edit'
+
+                } else {
+
+                    // pass -> fail или fail -> pass: новый коммент
+                    action = 'create'
+                }
+
+                echo "prevResult=${prevResult}, currResult=${currResult}, action=${action}"
+
+                if (action == 'skip') {
+                    return
+                }
+
+                withCredentials([
+
+                    string(
+                        credentialsId: 'github-token',
+                        variable: 'GITHUB_TOKEN'
+                    )
+
+                ]) {
+
+                    withEnv([
+
+                        "BUILD_RESULT=${currResult}",
+
+                        "BUILD_DURATION=${currentBuild.durationString}",
+
+                        "CI_COMMENT_ACTION=${action}"
+
+                    ]) {
+
+                        sh '''
+                            python infrastructure/jenkins/run.py comment-ci
+                        '''
+                    }
                 }
             }
         }
 
+
         success {
+
             echo 'Build successful'
         }
 
+
         failure {
+
             echo 'Build failed'
         }
     }
