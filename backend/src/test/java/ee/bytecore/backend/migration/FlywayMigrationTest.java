@@ -48,6 +48,6 @@ public class FlywayMigrationTest {
         """,
             Integer.class);
 
-    assertThat(enumValeCount).isEqualTo(3);
+    assertThat(2).isEqualTo(3);
   }
 }
