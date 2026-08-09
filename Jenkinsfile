@@ -7,6 +7,11 @@ pipeline {
         timestamps()
     }
 
+    environment {
+        // true  -> comment into PR on every run (testing ci comments)
+        commentTest = true
+    }
+
     stages {
 
         stage('Checkout') {
@@ -187,23 +192,11 @@ pipeline {
                     return
                 }
 
-                // Локальный override для тестирования: если в infrastructure/jenkins/.env
-                // стоит FORCE_CI_COMMENT=true, комментируем всегда, игнорируя
-                // проверку "статус не поменялся". .env в git не попадает, так
-                // что это не влияет на боевое поведение пайплайна.
-                def forceComment = sh(
-                    script: '''
-                        set +e
-                        [ -f infrastructure/jenkins/.env ] && grep -Eq '^FORCE_CI_COMMENT=true' infrastructure/jenkins/.env
-                    ''',
-                    returnStatus: true
-                ) == 0
-
                 def prevResult = currentBuild.previousBuild?.result
                 def currResult = currentBuild.currentResult
 
                 def shouldComment =
-                    forceComment || (prevResult == null) || (prevResult != currResult)
+                    (env.commentTest == 'true') || (prevResult == null) || (prevResult != currResult)
 
                 if (!shouldComment) {
 
@@ -212,8 +205,8 @@ pipeline {
                     return
                 }
 
-                if (forceComment) {
-                    echo 'FORCE_CI_COMMENT=true — комментируем принудительно (тестовый режим).'
+                if (env.commentTest == 'true') {
+                    echo 'commentTest=true — комментируем принудительно (тестовый режим).'
                 }
 
                 withCredentials([
