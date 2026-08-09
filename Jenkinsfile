@@ -9,7 +9,7 @@ pipeline {
 
     environment {
         // true  -> comment into PR on every run (testing ci comments)
-        commentTest = true
+        commentTest = false
     }
 
     stages {
