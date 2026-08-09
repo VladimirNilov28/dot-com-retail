@@ -84,16 +84,18 @@ class TestReport:
                     continue
 
 
-                message = (
+                message_raw = (
                         failure_node.attrib.get('message')
-                        or (failure_node.text or '').strip().split('\n')[0]
+                        or (failure_node.text or '').strip()
                         or 'No message available'
                 )
+
+                message = ' '.join(message_raw.split())[:200]
 
 
                 failed_tests.append({
                     'name': f"{test.attrib.get('classname')}.{test.attrib.get('name')}",
-                    'message': message[:200]
+                    'message': message
                 })
 
 

@@ -195,18 +195,40 @@ pipeline {
                 def prevResult = currentBuild.previousBuild?.result
                 def currResult = currentBuild.currentResult
 
-                def shouldComment =
-                    (env.commentTest == 'true') || (prevResult == null) || (prevResult != currResult)
+                def prevPassing = (prevResult == 'SUCCESS')
+                def currPassing = (currResult == 'SUCCESS')
 
-                if (!shouldComment) {
-
-                    echo "Результат не изменился (${currResult} -> ${currResult}) — комментарий не нужен."
-
-                    return
-                }
+                def action
 
                 if (env.commentTest == 'true') {
-                    echo 'commentTest=true — комментируем принудительно (тестовый режим).'
+
+                    action = 'create'
+
+                } else if (prevResult == null) {
+
+                    // Первая сборка этой джобы — не с чем сравнивать
+                    action = 'create'
+
+                } else if (currPassing && prevPassing) {
+
+                    // pass -> pass: молчим
+                    action = 'skip'
+
+                } else if (!currPassing && !prevPassing) {
+
+                    // fail -> fail: редактируем существующий коммент
+                    action = 'edit'
+
+                } else {
+
+                    // pass -> fail или fail -> pass: новый коммент
+                    action = 'create'
+                }
+
+                echo "prevResult=${prevResult}, currResult=${currResult}, action=${action}"
+
+                if (action == 'skip') {
+                    return
                 }
 
                 withCredentials([
@@ -222,7 +244,9 @@ pipeline {
 
                         "BUILD_RESULT=${currResult}",
 
-                        "BUILD_DURATION=${currentBuild.durationString}"
+                        "BUILD_DURATION=${currentBuild.durationString}",
+
+                        "CI_COMMENT_ACTION=${action}"
 
                     ]) {
 

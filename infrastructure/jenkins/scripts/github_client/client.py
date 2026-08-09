@@ -100,3 +100,28 @@ class GitHubClient:
                 'body': body
             }
         )
+
+    def list_pr_comments(
+            self,
+            pr_number
+    ):
+
+        return self._request(
+            'GET',
+            f'{self.base_url}/issues/{pr_number}/comments'
+        )
+
+
+    def update_pr_comment(
+            self,
+            comment_id,
+            body
+    ):
+
+        return self._request(
+            'PATCH',
+            f'{self.base_url}/issues/comments/{comment_id}',
+            json={
+                'body': body
+            }
+        )

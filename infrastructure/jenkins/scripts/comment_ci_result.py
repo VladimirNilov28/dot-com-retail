@@ -11,6 +11,9 @@ from .config import (
 )
 
 
+CI_MARKER = '<!-- jenkins-ci-status -->'
+
+
 def get_commit():
 
     try:
@@ -91,7 +94,7 @@ def create_markdown():
     if tests['failed_tests']:
 
         failed_items = '\n'.join(
-            f"- `{t['name']}`\n  ```\n  {t['message']}\n  ```"
+            f"- `{t['name']}` — `{t['message']}`"
             for t in tests['failed_tests']
         )
 
@@ -140,6 +143,22 @@ def create_markdown():
 """
 
 
+def find_last_ci_comment(
+        client,
+        pr_number
+):
+
+    comments = client.list_pr_comments(pr_number)
+
+    for comment in reversed(comments):
+
+        if CI_MARKER in comment.get('body', ''):
+
+            return comment['id']
+
+    return None
+
+
 def main():
 
     change_id = os.getenv(
@@ -154,12 +173,54 @@ def main():
         return
 
 
+    action = os.getenv(
+        'CI_COMMENT_ACTION',
+        'create'
+    )
+
+
+    if action == 'skip':
+        print(
+            'Status unchanged, skipping comment.'
+        )
+        return
+
+
     client = GitHubClient()
+
+    pr_number = int(change_id)
+
+    body = f"{CI_MARKER}\n{create_markdown()}"
+
+
+    if action == 'edit':
+
+        comment_id = find_last_ci_comment(
+            client,
+            pr_number
+        )
+
+        if comment_id:
+
+            client.update_pr_comment(
+                comment_id,
+                body
+            )
+
+            print(
+                f'Updated comment #{comment_id}'
+            )
+
+            return
+
+        print(
+            'No previous CI comment found to edit, creating a new one.'
+        )
 
 
     client.create_pr_comment(
-        int(change_id),
-        create_markdown()
+        pr_number,
+        body
     )
 
 
