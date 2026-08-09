@@ -30,48 +30,6 @@ pipeline {
         }
 
 
-        // Новая стадия: определяем, менялся ли backend/ с прошлого раза.
-        // Логика:
-        // - если есть GIT_PREVIOUS_SUCCESSFUL_COMMIT (эта же джоба уже успешно
-        //   собиралась раньше) -> сравниваем HEAD с ним. Это ровно то, что
-        //   просил: "не гонять тесты повторно, если код с прошлого пуша не менялся".
-        // - если такой базы нет (первая сборка этой ветки/PR) -> считаем,
-        //   что backend поменялся, и гоняем всё. Лучше лишний раз прогнать
-        //   тесты, чем пропустить их по ошибке.
-        stage('Detect changes') {
-            steps {
-                script {
-
-                    def baseRef = env.GIT_PREVIOUS_SUCCESSFUL_COMMIT
-
-                    if (!baseRef) {
-
-                        echo 'Нет предыдущей успешной сборки для сравнения — гоняем всё.'
-
-                        env.BACKEND_CHANGED = 'true'
-
-                    } else {
-
-                        def changedFiles = sh(
-                            script: "git diff --name-only ${baseRef} HEAD",
-                            returnStdout: true
-                        ).trim()
-
-                        echo "Изменённые файлы с последней успешной сборки:\n${changedFiles}"
-
-                        def touched = changedFiles
-                            .split('\n')
-                            .any { it.startsWith('backend/') }
-
-                        env.BACKEND_CHANGED = touched.toString()
-                    }
-
-                    echo "BACKEND_CHANGED=${env.BACKEND_CHANGED}"
-                }
-            }
-        }
-
-
         stage('Mirror to Gitea') {
 
             steps {
@@ -161,12 +119,7 @@ pipeline {
         }
 
 
-        // Скипаются, если backend не менялся
         stage('Backend build') {
-
-            when {
-                expression { env.BACKEND_CHANGED == 'true' }
-            }
 
             steps {
 
@@ -182,10 +135,6 @@ pipeline {
 
 
         stage('Backend tests') {
-
-            when {
-                expression { env.BACKEND_CHANGED == 'true' }
-            }
 
             steps {
 
@@ -231,38 +180,63 @@ pipeline {
 
             script {
 
-                if (env.CHANGE_ID && env.BACKEND_CHANGED == 'true') {
+                if (!env.CHANGE_ID) {
 
-                    withCredentials([
+                    echo 'This is not a PR build; skipping CI comment.'
 
-                        string(
-                            credentialsId: 'github-token',
-                            variable: 'GITHUB_TOKEN'
-                        )
+                    return
+                }
+
+                // Локальный override для тестирования: если в infrastructure/jenkins/.env
+                // стоит FORCE_CI_COMMENT=true, комментируем всегда, игнорируя
+                // проверку "статус не поменялся". .env в git не попадает, так
+                // что это не влияет на боевое поведение пайплайна.
+                def forceComment = sh(
+                    script: '''
+                        set +e
+                        [ -f infrastructure/jenkins/.env ] && grep -Eq '^FORCE_CI_COMMENT=true' infrastructure/jenkins/.env
+                    ''',
+                    returnStatus: true
+                ) == 0
+
+                def prevResult = currentBuild.previousBuild?.result
+                def currResult = currentBuild.currentResult
+
+                def shouldComment =
+                    forceComment || (prevResult == null) || (prevResult != currResult)
+
+                if (!shouldComment) {
+
+                    echo "Результат не изменился (${currResult} -> ${currResult}) — комментарий не нужен."
+
+                    return
+                }
+
+                if (forceComment) {
+                    echo 'FORCE_CI_COMMENT=true — комментируем принудительно (тестовый режим).'
+                }
+
+                withCredentials([
+
+                    string(
+                        credentialsId: 'github-token',
+                        variable: 'GITHUB_TOKEN'
+                    )
+
+                ]) {
+
+                    withEnv([
+
+                        "BUILD_RESULT=${currResult}",
+
+                        "BUILD_DURATION=${currentBuild.durationString}"
 
                     ]) {
 
-                        withEnv([
-
-                            "BUILD_RESULT=${currentBuild.currentResult}",
-
-                            "BUILD_DURATION=${currentBuild.durationString}"
-
-                        ]) {
-
-                            sh '''
-                                python infrastructure/jenkins/run.py comment-ci
-                            '''
-                        }
+                        sh '''
+                            python infrastructure/jenkins/run.py comment-ci
+                        '''
                     }
-
-                } else if (env.CHANGE_ID) {
-
-                    echo 'Backend не менялся — комментарий в PR не нужен.'
-
-                } else {
-
-                    echo 'This is not a PR build; skipping CI comment.'
                 }
             }
         }
