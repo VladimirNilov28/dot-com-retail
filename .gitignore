@@ -115,7 +115,7 @@ coverage/
 
 test-output/
 
-reports/
+/backend/build/reports/
 
 allure-results/
 allure-report/
