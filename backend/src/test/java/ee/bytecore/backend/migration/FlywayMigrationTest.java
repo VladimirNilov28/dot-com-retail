@@ -32,7 +32,7 @@ public class FlywayMigrationTest {
         """,
             Integer.class);
 
-    assertThat(2).isEqualTo(1);
+    assertThat(userTableCount).isEqualTo(1);
   }
 
   @Test
@@ -48,6 +48,6 @@ public class FlywayMigrationTest {
         """,
             Integer.class);
 
-    assertThat(2).isEqualTo(3);
+    assertThat(enumValeCount).isEqualTo(3);
   }
 }
