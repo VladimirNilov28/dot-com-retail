@@ -1,9 +1,11 @@
-package ee.bytecore.backend.entity.users;
+package ee.bytecore.backend.entities.user;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.Instant;
 
@@ -12,6 +14,8 @@ import java.time.Instant;
 @Entity
 @Table(name = "user_address")
 public class UserAddress {
+  protected UserAddress() {}
+
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
@@ -52,9 +56,11 @@ public class UserAddress {
   @Column(name = "mobile", length = 20)
   private String mobile;
 
-  @Column(name = "created_at", nullable = false)
+  @CreationTimestamp
+  @Column(nullable = false, updatable = false)
   private Instant createdAt;
 
-  @Column(name = "updated_at", nullable = false)
+  @UpdateTimestamp
+  @Column(nullable = false)
   private Instant updatedAt;
 }

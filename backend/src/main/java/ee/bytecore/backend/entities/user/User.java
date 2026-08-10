@@ -1,4 +1,4 @@
-package ee.bytecore.backend.entity.users;
+package ee.bytecore.backend.entities.user;
 
 import ee.bytecore.backend.utils.UserRoleConverter;
 
@@ -18,12 +18,11 @@ import java.time.LocalDate;
 @Entity
 @Table(name = "users")
 public class User {
-
-  protected User() {
-  }
+  protected User() {}
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
+  @Column(name = "id", nullable = false)
   private Long id;
 
   @Convert(converter = UserRoleConverter.class)
@@ -42,13 +41,11 @@ public class User {
   @Column(name = "date_of_birth", nullable = false)
   private LocalDate dateOfBirth;
 
-  @NotNull
   @CreationTimestamp
-  @Column(name = "created_at", nullable = false, updatable = false)
+  @Column(nullable = false, updatable = false)
   private Instant createdAt;
 
-  @NotNull
   @UpdateTimestamp
-  @Column(name = "updated_at", nullable = false)
+  @Column(nullable = false)
   private Instant updatedAt;
 }
