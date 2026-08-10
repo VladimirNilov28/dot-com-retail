@@ -1,12 +1,12 @@
 CREATE TYPE user_role AS ENUM (
-    'ADMIN',
-    'USER',
-    'SUPPORT'
+    'admin',
+    'user',
+    'support'
 );
 
 CREATE TABLE users (
     id bigserial PRIMARY KEY,
-    role user_role NOT NULL DEFAULT 'USER',
+    ROLE user_role NOT NULL DEFAULT 'user',
     username varchar(255) NOT NULL UNIQUE,
     email varchar(255) UNIQUE NOT NULL,
     password_hash varchar(255) NOT NULL,

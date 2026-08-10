@@ -1,4 +1,6 @@
-package ee.bytecore.backend.entity.user;
+package ee.bytecore.backend.entity.users;
+
+import ee.bytecore.backend.utils.UserRoleConverter;
 
 import ee.bytecore.backend.enums.UserRole;
 import jakarta.persistence.*;
@@ -24,7 +26,7 @@ public class User {
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
-  @Enumerated(EnumType.STRING)
+  @Convert(converter = UserRoleConverter.class)
   @Column(name = "role", nullable = false)
   private UserRole role = UserRole.USER;
 
