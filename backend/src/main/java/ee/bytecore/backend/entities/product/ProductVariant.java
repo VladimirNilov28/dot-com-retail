@@ -12,6 +12,7 @@ import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 
 @Getter
@@ -39,7 +40,7 @@ public class ProductVariant {
 
   @JdbcTypeCode(SqlTypes.JSON)
   @Column(name = "attributes", nullable = false)
-  private Map<String, Object> attributes;
+  private Map<String, Object> attributes = new HashMap<>();
 
   @Size(max = 64)
   @Column(name = "barcode", length = 64)
@@ -49,7 +50,7 @@ public class ProductVariant {
   private Integer weightGrams;
 
   @Column(name = "is_active", nullable = false)
-  private Boolean isActive;
+  private Boolean isActive = true;
 
   @CreationTimestamp
   @Column(nullable = false, updatable = false)

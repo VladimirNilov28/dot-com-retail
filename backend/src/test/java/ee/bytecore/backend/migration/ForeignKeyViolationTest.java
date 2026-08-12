@@ -34,7 +34,7 @@ public class ForeignKeyViolationTest {
     jdbcTemplate.update(
         """
         INSERT INTO users (id, role, username, email, password_hash, date_of_birth)
-        VALUES (1, 'user', 'testuser', 'user@test.com', 'hash', '1900-01-01')
+        VALUES (1, 'USER', 'testuser', 'user@test.com', 'hash', '1900-01-01')
         """);
 
     jdbcTemplate.update(

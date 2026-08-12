@@ -1,14 +1,14 @@
 package ee.bytecore.backend.entities.user;
 
-import ee.bytecore.backend.utils.UserRoleConverter;
-
 import ee.bytecore.backend.enums.UserRole;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -25,7 +25,8 @@ public class User {
   @Column(name = "id", nullable = false)
   private Long id;
 
-  @Convert(converter = UserRoleConverter.class)
+  @Enumerated(EnumType.STRING)
+  @JdbcTypeCode(SqlTypes.NAMED_ENUM)
   @Column(name = "role", nullable = false)
   private UserRole role = UserRole.USER;
 
