@@ -1,178 +1,32 @@
 /**
- * # ByteCore E-commerce Backend Build Configuration
+ * ByteCore E-commerce Backend
  *
- * Main Gradle configuration for the ByteCore backend application.
+ * Spring Boot 4 backend: Web (MVC), GraphQL (Netflix DGS), PostgreSQL via
+ * Spring Data JPA, Flyway-owned schema (ddl-auto=validate), Kafka via plain
+ * spring-kafka listeners (@KafkaListener).
  *
- * This file defines:
- *
- * - Project metadata
- * - Java version and build configuration
- * - Application dependencies
- * - Testing environment
- * - Code quality tools
- * - Security scanning
- * - Production packaging
- *
- *
- * ## Technology Stack
- *
- * Backend:
- *
- * - Java 21
- * - Spring Boot 4.0.7
- * - Spring Web (MVC)
- * - GraphQL with Netflix DGS
- * - PostgreSQL
- * - Spring Data JPA / Hibernate
- * - Flyway
- * - Apache Kafka (spring-kafka)
- *
- *
- * ## Development Approach
- *
- * The project follows TDD principles:
- *
- * ```
- * Test
- *  |
- * Implementation
- *  |
- * Refactoring
- * ```
- *
- * Testing layers:
- *
- * - Unit tests:
- *   Business logic validation.
- *
- * - Integration tests:
- *   Application + infrastructure validation
- *   using Testcontainers.
- *
- *
- * ## Database Strategy
- *
- * Runtime database access:
- *
- * ```
- * Spring Web (MVC)
- *       |
- *       v
- *  Spring Data JPA
- *       |
- *       v
- *  PostgreSQL
- * ```
- *
- * Flyway owns the schema (source of truth); JPA/Hibernate is
- * configured with ddl-auto=validate and never generates or
- * alters schema.
- *
- * Database migrations:
- *
- * ```
- * Flyway
- *    |
- *    v
- * db/migration
- *
- * V1__create_users.sql
- * V2__create_products.sql
- * ```
- *
- *
- * ## Messaging Architecture
- *
- * Kafka is used for asynchronous communication via plain
- * spring-kafka listeners (@KafkaListener) — no reactive stack.
- *
- * Example:
- *
- * ```
- * Order Created
- *       |
- *       v
- * Kafka Event
- *       |
- *       +--> Inventory
- *       |
- *       +--> Notifications
- * ```
- *
- *
- * ## Build Commands
- *
- * Run application:
- *
- * ```
- * ./gradlew bootRun
- * ```
- *
- * Run tests:
- *
- * ```
- * ./gradlew test
- * ```
- *
- * Generate coverage:
- *
- * ```
- * ./gradlew jacocoTestReport
- * ```
- *
- * Format code:
- *
- * ```
- * ./gradlew spotlessApply
- * ```
- *
- * Check formatting (CI):
- *
- * ```
- * ./gradlew spotlessCheck
- * ```
- *
- * Build application:
- *
- * ```
- * ./gradlew build
- * ```
- *
- *
- * ## CI/CD Pipeline
- *
- * Prepared for Jenkins automation:
- *
- * ```
- * Git
- *  |
- * Jenkins
- *  |
- * Gradle Build
- *  |
- * Tests + Quality Checks
- *  |
- * Docker Image
- *  |
- * Kubernetes
- * ```
- *
+ * Commands:
+ *   ./gradlew bootRun            run the application
+ *   ./gradlew test               run tests
+ *   ./gradlew jacocoTestReport   generate coverage
+ *   ./gradlew spotlessApply      format code
+ *   ./gradlew spotlessCheck      check formatting (CI)
+ *   ./gradlew build              build application
  *
  * @author ByteCore Team
  * @since 0.0.1
  */
 
 import org.gradle.api.tasks.testing.TestDescriptor
+import org.gradle.api.tasks.testing.TestListener
 import org.gradle.api.tasks.testing.TestResult
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
-import org.gradle.kotlin.dsl.KotlinClosure2
 
 // =====================================================
 // Plugins
 // =====================================================
 
 plugins {
-
     java
 
     // Spring Boot build lifecycle
@@ -199,9 +53,7 @@ plugins {
 // =====================================================
 
 group = "ee.bytecore"
-
 version = "0.0.1-SNAPSHOT"
-
 description = "ByteCore e-commerce backend"
 
 // =====================================================
@@ -209,9 +61,7 @@ description = "ByteCore e-commerce backend"
 // =====================================================
 
 java {
-
     toolchain {
-
         // Project uses Java 21 LTS
         languageVersion = JavaLanguageVersion.of(21)
     }
@@ -222,7 +72,6 @@ java {
 // =====================================================
 
 repositories {
-
     mavenCentral()
 }
 
@@ -237,72 +86,35 @@ extra["netflixDgsVersion"] = "11.1.0"
 // =====================================================
 
 dependencies {
-
     // ---------------------
     // Core
     // ---------------------
-
-    implementation(
-        "org.springframework.boot:spring-boot-starter-actuator",
-    )
-
-    implementation(
-        "org.springframework.boot:spring-boot-starter-web",
-    )
-
-    implementation(
-        "org.springframework.boot:spring-boot-starter-validation",
-    )
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("org.springframework.boot:spring-boot-starter-validation")
 
     // ---------------------
     // Security
     // ---------------------
-
-    implementation(
-        "org.springframework.boot:spring-boot-starter-security",
-    )
-
-    implementation(
-        "org.springframework.boot:spring-boot-starter-oauth2-client",
-    )
+    implementation("org.springframework.boot:spring-boot-starter-security")
+    implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
 
     // ---------------------
     // Database
     // ---------------------
 
     // JPA / Hibernate (schema owned by Flyway, ddl-auto=validate)
-    implementation(
-        "org.springframework.boot:spring-boot-starter-data-jpa",
-    )
-
-    runtimeOnly(
-        "org.postgresql:postgresql",
-    )
+    implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+    runtimeOnly("org.postgresql:postgresql")
 
     // Database migrations
     implementation("org.springframework.boot:spring-boot-starter-flyway")
-
-//    implementation(
-//        "org.flywaydb:flyway-core"
-//    )
-//
-
-    implementation(
-        "org.flywaydb:flyway-database-postgresql",
-    )
+    implementation("org.flywaydb:flyway-database-postgresql")
 
     // ---------------------
     // GraphQL
     // ---------------------
-
-    implementation(
-        "com.netflix.graphql.dgs:graphql-dgs-spring-graphql-starter",
-    )
-
-    implementation(
-        "com.netflix.graphql.dgs:graphql-dgs-platform-dependencies"
-    )
-
+    implementation("com.netflix.graphql.dgs:graphql-dgs-platform-dependencies")
     implementation("com.graphql-java:graphql-java-extended-scalars:24.0")
     implementation("com.tailrocks.graphql:graphql-datetime-dgs-starter:6.0.0")
 
@@ -311,118 +123,63 @@ dependencies {
     // ---------------------
 
     // Plain blocking Kafka listeners (@KafkaListener) — no reactor-kafka
-    implementation(
-        "org.springframework.boot:spring-boot-starter-kafka",
-    )
+    implementation("org.springframework.boot:spring-boot-starter-kafka")
 
     // ---------------------
     // API Documentation
     // ---------------------
-
-    implementation(
-        "org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.2",
-    )
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.2")
 
     // ---------------------
     // Configuration Metadata
     // ---------------------
-
-    annotationProcessor(
-        "org.springframework.boot:spring-boot-configuration-processor",
-    )
+    annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
 
     // ---------------------
     // Lombok
     // ---------------------
-
-    compileOnly(
-        "org.projectlombok:lombok",
-    )
-
-    annotationProcessor(
-        "org.projectlombok:lombok",
-    )
+    compileOnly("org.projectlombok:lombok")
+    annotationProcessor("org.projectlombok:lombok")
 
     // ---------------------
     // Development
     // ---------------------
 
     // Automatic restart during development
-    developmentOnly(
-        "org.springframework.boot:spring-boot-devtools",
-    )
+    developmentOnly("org.springframework.boot:spring-boot-devtools")
 
     // Starts docker-compose services automatically
-    developmentOnly(
-        "org.springframework.boot:spring-boot-docker-compose",
-    )
+    developmentOnly("org.springframework.boot:spring-boot-docker-compose")
 
     // ---------------------
     // Testing / TDD
     // ---------------------
-
-    testImplementation(
-        "org.springframework.boot:spring-boot-starter-test",
-    )
-
-    // JUnit 5
-    testImplementation(
-        "org.junit.jupiter:junit-jupiter",
-    )
-
-    // Spring Security testing
-    testImplementation(
-        "org.springframework.security:spring-security-test",
-    )
-
-    // Mocking
-    testImplementation(
-        "org.mockito:mockito-core",
-    )
-
-    // Fluent assertions
-    testImplementation(
-        "org.assertj:assertj-core",
-    )
+    testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testImplementation("org.springframework.security:spring-security-test")
+    testImplementation("org.mockito:mockito-core")
+    testImplementation("org.assertj:assertj-core")
 
     // ---------------------
     // Integration Testing
     // ---------------------
-
-    testImplementation(
-        "org.springframework.boot:spring-boot-testcontainers",
-    )
-
-    testImplementation(
-        "org.testcontainers:testcontainers-junit-jupiter",
-    )
-
-    testImplementation(
-        "org.testcontainers:testcontainers-postgresql",
-    )
-
-    testImplementation(
-        "org.testcontainers:testcontainers-kafka",
-    )
+    testImplementation("org.springframework.boot:spring-boot-testcontainers")
+    testImplementation("org.testcontainers:testcontainers-junit-jupiter")
+    testImplementation("org.testcontainers:testcontainers-postgresql")
+    testImplementation("org.testcontainers:testcontainers-kafka")
 
     // GraphQL tests
-    testImplementation(
-        "com.netflix.graphql.dgs:graphql-dgs-spring-graphql-starter-test",
-    )
+    testImplementation("com.netflix.graphql.dgs:graphql-dgs-spring-graphql-starter-test")
 
     // JUnit launcher
-    testRuntimeOnly(
-        "org.junit.platform:junit-platform-launcher",
-    )
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
 
-    // Lombok in tests
-    testCompileOnly(
-        "org.projectlombok:lombok",
-    )
-
-    testAnnotationProcessor(
-        "org.projectlombok:lombok",
-    )
+// Test compilation reuses the main Lombok configuration instead of
+// redeclaring the dependency for testCompileOnly/testAnnotationProcessor.
+configurations {
+    testCompileOnly.get().extendsFrom(compileOnly.get())
+    testAnnotationProcessor.get().extendsFrom(annotationProcessor.get())
 }
 
 // =====================================================
@@ -430,12 +187,8 @@ dependencies {
 // =====================================================
 
 dependencyManagement {
-
     imports {
-
-        mavenBom(
-            "com.netflix.graphql.dgs:graphql-dgs-platform-dependencies:${property("netflixDgsVersion")}",
-        )
+        mavenBom("com.netflix.graphql.dgs:graphql-dgs-platform-dependencies:${property("netflixDgsVersion")}")
     }
 }
 
@@ -449,16 +202,15 @@ tasks.named<Test>("test") {
 
 // This section causes useful test output to go to the terminal.
 tasks.test {
-
     // Full output flag: ./gradlew test -Pfull
     val fullOutput = project.hasProperty("full")
 
     // Colors on by default. Disable with -Pnocolor or NO_COLOR env var.
     val useColor = !project.hasProperty("nocolor") && System.getenv("NO_COLOR") == null
-    val reset = if (useColor) "\u001B[0m" else ""
-    val green = if (useColor) "\u001B[32m" else ""
-    val red = if (useColor) "\u001B[31m" else ""
-    val bold = if (useColor) "\u001B[1m" else ""
+    val reset = if (useColor) "[0m" else ""
+    val green = if (useColor) "[32m" else ""
+    val red = if (useColor) "[31m" else ""
+    val bold = if (useColor) "[1m" else ""
 
     testLogging {
         events("passed", "skipped", "failed") // , "standardOut", "standardError"
@@ -473,25 +225,33 @@ tasks.test {
     }
 
     // Print a short summary at the end + a link to the full HTML report
-    afterSuite(
-        KotlinClosure2<TestDescriptor, TestResult, Unit>({ descriptor, result ->
-            if (descriptor.parent == null) {
-                val htmlReport =
-                    layout.buildDirectory
-                        .file("reports/tests/test/index.html")
-                        .get()
-                        .asFile
+    addTestListener(
+        object : TestListener {
+            override fun beforeSuite(suite: TestDescriptor) {}
 
-                val summaryColor = if (result.failedTestCount > 0) red else green
+            override fun beforeTest(testDescriptor: TestDescriptor) {}
 
-                println()
-                println(
-                    "${bold}${summaryColor}Summary: ${result.resultType}, total: ${result.testCount}, " +
-                        "failed: ${result.failedTestCount}, skipped: ${result.skippedTestCount}$reset",
-                )
-                println("Full report: file://$htmlReport")
+            override fun afterTest(testDescriptor: TestDescriptor, result: TestResult) {}
+
+            override fun afterSuite(suite: TestDescriptor, result: TestResult) {
+                if (suite.parent == null) {
+                    val htmlReport =
+                        layout.buildDirectory
+                            .file("reports/tests/test/index.html")
+                            .get()
+                            .asFile
+
+                    val summaryColor = if (result.failedTestCount > 0) red else green
+
+                    println()
+                    println(
+                        "${bold}${summaryColor}Summary: ${result.resultType}, total: ${result.testCount}, " +
+                            "failed: ${result.failedTestCount}, skipped: ${result.skippedTestCount}$reset",
+                    )
+                    println("Full report: file://$htmlReport")
+                }
             }
-        }),
+        },
     )
 
     finalizedBy(tasks.jacocoTestReport)
@@ -502,12 +262,10 @@ tasks.test {
 // =====================================================
 
 jacoco {
-
     toolVersion = "0.8.13"
 }
 
 tasks.jacocoTestReport {
-
     dependsOn(tasks.test)
 }
 
@@ -516,14 +274,12 @@ tasks.jacocoTestReport {
 // =====================================================
 
 spotless {
-
     // Only format files changed relative to main — avoids reformatting
     // the entire legacy codebase on first run. Remove this line if you
     // want spotless to check/format the whole project every time.
     ratchetFrom("origin/main")
 
     java {
-
         target("src/**/*.java")
         targetExclude("**/build/**", "**/generated/**")
 
@@ -543,20 +299,13 @@ spotless {
     }
 
     format("misc") {
-
-        target(
-            "*.md",
-            "*.yml",
-            "*.yaml",
-        )
+        target("*.md", "*.yml", "*.yaml")
 
         trimTrailingWhitespace()
-
         endWithNewline()
     }
 
     kotlinGradle {
-
         target("*.gradle.kts")
 
         ktlint()
@@ -577,11 +326,8 @@ tasks.named("check") {
 // =====================================================
 
 tasks.bootJar {
-
     // Stable name for Docker image builds
-    archiveFileName.set(
-        "bytecore-backend.jar",
-    )
+    archiveFileName.set("bytecore-backend.jar")
 }
 
 tasks.build {
