@@ -1,0 +1,14 @@
+type Product {
+  id: ID!
+  name: String!
+  description: String!
+
+  productVarints: [ProductVariant!]
+}
+
+type ProductVariant {
+  id: ID!
+  sku: String!
+  price: BigDecimal!
+
+}

@@ -1,0 +1,37 @@
+enum Role {
+  ADMIN
+  USER
+  SUPPORT
+}
+
+type User {
+  id: ID!
+  username: String!
+  email: String
+  role: Role!
+  dateOfBirth: LocalDate!
+  createdAt: Instant!
+
+  addresses: [UserAddress!]!
+  paymentMethods: [UserPaymentMethod!]!
+}
+
+type UserAddress {
+  id: ID!
+  firstName: String
+  lastName: String
+  city: String
+  country: String
+  postalCode: String
+  addressLine1: String
+  addressLine2: String
+  mobile: String
+}
+
+type UserPaymentMethod {
+  id: ID!
+  provider: String
+  #TODO Extend payments types
+  type: String
+}
+

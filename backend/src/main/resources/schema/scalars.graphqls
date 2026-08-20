@@ -1,0 +1,8 @@
+# Realized by graphql-java-extended-scalars ( Github: https://github.com/graphql-java/graphql-java-extended-scalars )
+scalar URL
+scalar UUID
+scalar BigDecimal
+scalar JSON
+# TODO Make realization for Instant and LocalDate scalar
+scalar Instant @specifiedBy(url: "https://scalars.graphql.org/apollographql/instant-v0.1.html")
+scalar LocalDate @specifiedBy(url: "https://scalars.graphql.org/apollographql/localdate-v0.1.html")

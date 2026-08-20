@@ -299,6 +299,13 @@ dependencies {
         "com.netflix.graphql.dgs:graphql-dgs-spring-graphql-starter",
     )
 
+    implementation(
+        "com.netflix.graphql.dgs:graphql-dgs-platform-dependencies"
+    )
+
+    implementation("com.graphql-java:graphql-java-extended-scalars:24.0")
+    implementation("com.tailrocks.graphql:graphql-datetime-dgs-starter:6.0.0")
+
     // ---------------------
     // Messaging
     // ---------------------
