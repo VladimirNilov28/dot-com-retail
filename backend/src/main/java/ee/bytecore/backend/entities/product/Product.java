@@ -1,17 +1,17 @@
 package ee.bytecore.backend.entities.product;
 
+import java.time.Instant;
+import java.util.HashSet;
+import java.util.Set;
+
 import ee.bytecore.backend.entities.category.Category;
+
 import jakarta.persistence.*;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
-
-import java.time.Instant;
-import java.util.HashSet;
-import java.util.Set;
 
 @Getter
 @Setter
@@ -50,4 +50,12 @@ public class Product {
   @UpdateTimestamp
   @Column(nullable = false)
   private Instant updatedAt;
+
+  public static Product create(String name, String slug, String description) {
+    Product product = new Product();
+    product.name = name;
+    product.slug = slug;
+    product.description = description;
+    return product;
+  }
 }

@@ -7,10 +7,11 @@ enum Role {
 type User {
   id: ID!
   username: String!
-  email: String
+  email: String!
   role: Role!
   dateOfBirth: LocalDate!
   createdAt: Instant!
+  updatedAt: Instant!
 
   addresses: [UserAddress!]!
   paymentMethods: [UserPaymentMethod!]!
@@ -26,6 +27,8 @@ type UserAddress {
   addressLine1: String
   addressLine2: String
   mobile: String
+  createdAt: Instant!
+  updatedAt: Instant!
 }
 
 type UserPaymentMethod {
@@ -33,5 +36,7 @@ type UserPaymentMethod {
   provider: String
   #TODO Extend payments types
   type: String
+  createdAt: Instant!
+  updatedAt: Instant!
 }
 

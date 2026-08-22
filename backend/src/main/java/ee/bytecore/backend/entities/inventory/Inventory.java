@@ -1,13 +1,14 @@
 package ee.bytecore.backend.entities.inventory;
 
+import java.time.Instant;
+
 import ee.bytecore.backend.entities.product.ProductVariant;
+
 import jakarta.persistence.*;
 import jakarta.validation.constraints.PositiveOrZero;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.UpdateTimestamp;
-
-import java.time.Instant;
 
 @Getter
 @Setter
@@ -38,4 +39,13 @@ public class Inventory {
   @UpdateTimestamp
   @Column(nullable = false)
   private Instant updatedAt;
+
+  public static Inventory create(
+      ProductVariant productVariant, Warehouse warehouse, Integer quantity) {
+    Inventory inventory = new Inventory();
+    inventory.productVariant = productVariant;
+    inventory.warehouse = warehouse;
+    inventory.quantity = quantity;
+    return inventory;
+  }
 }

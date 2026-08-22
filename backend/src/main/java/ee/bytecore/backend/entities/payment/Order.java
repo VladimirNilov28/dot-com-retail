@@ -1,7 +1,14 @@
 package ee.bytecore.backend.entities.payment;
 
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
 import ee.bytecore.backend.entities.user.User;
 import ee.bytecore.backend.enums.OrderStatus;
+
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -10,12 +17,6 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.annotations.UuidGenerator;
 import org.hibernate.type.SqlTypes;
-
-import java.math.BigDecimal;
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
 
 @Getter
 @Setter
@@ -37,10 +38,7 @@ public class Order {
   @JoinColumn(name = "user_id", nullable = false)
   private User user;
 
-  @OneToMany(
-      mappedBy = "order",
-      fetch = FetchType.LAZY
-  )
+  @OneToMany(mappedBy = "order", fetch = FetchType.LAZY)
   private List<OrderItem> items = new ArrayList<>();
 
   @Enumerated(EnumType.STRING)
@@ -58,4 +56,12 @@ public class Order {
   @UpdateTimestamp
   @Column(nullable = false)
   private Instant updatedAt;
+
+  public static Order create(User user, OrderStatus status, BigDecimal totalAmount) {
+    Order order = new Order();
+    order.user = user;
+    order.status = status;
+    order.totalAmount = totalAmount;
+    return order;
+  }
 }

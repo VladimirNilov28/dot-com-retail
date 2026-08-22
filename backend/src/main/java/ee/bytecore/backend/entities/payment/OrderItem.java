@@ -1,16 +1,16 @@
 package ee.bytecore.backend.entities.payment;
 
+import java.math.BigDecimal;
+import java.util.UUID;
+
 import ee.bytecore.backend.entities.product.ProductVariant;
+
 import jakarta.persistence.*;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.UuidGenerator;
-
-import java.math.BigDecimal;
-import java.util.UUID;
 
 @Getter
 @Setter
@@ -43,4 +43,14 @@ public class OrderItem {
   @PositiveOrZero
   @Column(name = "price_at_purchase", nullable = false, precision = 10, scale = 2)
   private BigDecimal priceAtPurchase;
+
+  public static OrderItem create(
+      Order order, ProductVariant productVariant, Integer quantity, BigDecimal priceAtPurchase) {
+    OrderItem orderItem = new OrderItem();
+    orderItem.order = order;
+    orderItem.productVariant = productVariant;
+    orderItem.quantity = quantity;
+    orderItem.priceAtPurchase = priceAtPurchase;
+    return orderItem;
+  }
 }

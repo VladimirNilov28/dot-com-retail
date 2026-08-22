@@ -14,11 +14,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import ee.bytecore.backend.config.PostgresTestConfiguration;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
 
 @SpringBootTest
 @Import(PostgresTestConfiguration.class)
+@Tag("integration")
 public class UserSchemaTest {
   private DataSource dataSource;
 
@@ -87,8 +89,8 @@ public class UserSchemaTest {
 
     jdbc.update(
         """
-    INSERT INTO products (id, name)
-    VALUES (1, 'Test Product');
+    INSERT INTO products (id, name, slug)
+    VALUES (1, 'Test Product', 'test-product');
     """);
 
     jdbc.update(

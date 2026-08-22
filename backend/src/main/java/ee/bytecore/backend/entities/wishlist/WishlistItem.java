@@ -1,12 +1,13 @@
 package ee.bytecore.backend.entities.wishlist;
 
+import java.time.Instant;
+
 import ee.bytecore.backend.entities.product.ProductVariant;
+
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
-
-import java.time.Instant;
 
 @Getter
 @Setter
@@ -33,4 +34,11 @@ public class WishlistItem {
   @CreationTimestamp
   @Column(name = "added_at", nullable = false, updatable = false)
   private Instant addedAt;
+
+  public static WishlistItem create(Wishlist wishlist, ProductVariant productVariant) {
+    WishlistItem wishlistItem = new WishlistItem();
+    wishlistItem.wishlist = wishlist;
+    wishlistItem.productVariant = productVariant;
+    return wishlistItem;
+  }
 }

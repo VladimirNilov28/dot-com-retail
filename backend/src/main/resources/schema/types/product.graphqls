@@ -1,14 +1,23 @@
 type Product {
   id: ID!
   name: String!
-  description: String!
-
-  productVarints: [ProductVariant!]
+  slug: String!
+  description: String
+  categories: [Category!]!
+  variants: [ProductVariant!]!
+  createdAt: Instant!
+  updatedAt: Instant!
 }
 
 type ProductVariant {
   id: ID!
+  product: Product!
   sku: String!
   price: BigDecimal!
-
+  attributes: JSON!
+  barcode: String
+  weightGrams: Int
+  isActive: Boolean!
+  createdAt: Instant!
+  updatedAt: Instant!
 }

@@ -1,5 +1,7 @@
 package ee.bytecore.backend.entities.inventory;
 
+import java.time.Instant;
+
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -7,8 +9,6 @@ import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
-
-import java.time.Instant;
 
 @Getter
 @Setter
@@ -38,4 +38,11 @@ public class Warehouse {
   @UpdateTimestamp
   @Column(nullable = false)
   private Instant updatedAt;
+
+  public static Warehouse create(String name, String location) {
+    Warehouse warehouse = new Warehouse();
+    warehouse.name = name;
+    warehouse.location = location;
+    return warehouse;
+  }
 }

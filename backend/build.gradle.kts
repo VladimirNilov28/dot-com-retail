@@ -8,6 +8,7 @@
  * Commands:
  *   ./gradlew bootRun            run the application
  *   ./gradlew test               run tests
+ *   ./gradlew test -Pgroup=unit  run tests tagged "unit" (also: graphql, integration, e2e; comma-separated)
  *   ./gradlew jacocoTestReport   generate coverage
  *   ./gradlew spotlessApply      format code
  *   ./gradlew spotlessCheck      check formatting (CI)
@@ -76,12 +77,6 @@ repositories {
 }
 
 // =====================================================
-// Dependency Versions
-// =====================================================
-
-extra["netflixDgsVersion"] = "11.1.0"
-
-// =====================================================
 // Dependencies
 // =====================================================
 
@@ -114,9 +109,13 @@ dependencies {
     // ---------------------
     // GraphQL
     // ---------------------
-    implementation("com.netflix.graphql.dgs:graphql-dgs-platform-dependencies")
-    implementation("com.graphql-java:graphql-java-extended-scalars:24.0")
-    implementation("com.tailrocks.graphql:graphql-datetime-dgs-starter:6.0.0")
+    implementation(platform("com.netflix.graphql.dgs:graphql-dgs-platform-dependencies:12.0.1"))
+    implementation("com.netflix.graphql.dgs:graphql-dgs-spring-graphql-starter")
+    implementation("com.graphql-java:graphql-java-extended-scalars")
+
+    // DGS requires json-path 3.0.0 (Jackson 3 support); Spring Boot's own
+    // dependency management otherwise downgrades it to the Jackson 2 era 2.10.0.
+    implementation("com.jayway.jsonpath:json-path:3.0.0")
 
     // ---------------------
     // Messaging
@@ -159,6 +158,7 @@ dependencies {
     testImplementation("org.springframework.security:spring-security-test")
     testImplementation("org.mockito:mockito-core")
     testImplementation("org.assertj:assertj-core")
+    testImplementation("org.springframework.boot:spring-boot-starter-graphql-test")
 
     // ---------------------
     // Integration Testing
@@ -169,6 +169,7 @@ dependencies {
     testImplementation("org.testcontainers:testcontainers-kafka")
 
     // GraphQL tests
+    testImplementation(platform("com.netflix.graphql.dgs:graphql-dgs-platform-dependencies:12.0.1"))
     testImplementation("com.netflix.graphql.dgs:graphql-dgs-spring-graphql-starter-test")
 
     // JUnit launcher
@@ -183,21 +184,17 @@ configurations {
 }
 
 // =====================================================
-// Dependency Management
-// =====================================================
-
-dependencyManagement {
-    imports {
-        mavenBom("com.netflix.graphql.dgs:graphql-dgs-platform-dependencies:${property("netflixDgsVersion")}")
-    }
-}
-
-// =====================================================
 // Tests Configuration
 // =====================================================
 
 tasks.named<Test>("test") {
-    useJUnitPlatform()
+    // Filter by tag: ./gradlew test -Pgroup=unit  (comma-separated: -Pgroup=unit,graphql)
+    useJUnitPlatform {
+        if (project.hasProperty("group")) {
+            val groups = (project.property("group") as String).split(",").map { it.trim() }
+            includeTags(*groups.toTypedArray())
+        }
+    }
 }
 
 // This section causes useful test output to go to the terminal.
@@ -245,8 +242,10 @@ tasks.test {
 
                     println()
                     println(
-                        "${bold}${summaryColor}Summary: ${result.resultType}, total: ${result.testCount}, " +
-                            "failed: ${result.failedTestCount}, skipped: ${result.skippedTestCount}$reset",
+                        "${bold}${summaryColor}Summary: ${result.resultType}, " +
+                            "total: ${result.testCount}, " +
+                            "failed: ${result.failedTestCount}, " +
+                            "skipped: ${result.skippedTestCount}$reset",
                     )
                     println("Full report: file://$htmlReport")
                 }
@@ -308,7 +307,16 @@ spotless {
     kotlinGradle {
         target("*.gradle.kts")
 
-        ktlint()
+        // Version pinned explicitly, same reasoning as googleJavaFormat above.
+        // Rules below mirror Google's Kotlin style guide (4-space indent, 100-col lines).
+        ktlint("1.5.0")
+            .editorConfigOverride(
+                mapOf(
+                    "indent_size" to "4",
+                    "max_line_length" to "100",
+                    "insert_final_newline" to "true",
+                ),
+            )
 
         trimTrailingWhitespace()
         endWithNewline()

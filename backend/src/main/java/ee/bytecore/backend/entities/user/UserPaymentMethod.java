@@ -1,13 +1,13 @@
 package ee.bytecore.backend.entities.user;
 
+import java.time.Instant;
+
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
-
-import java.time.Instant;
 
 @Getter
 @Setter
@@ -40,4 +40,12 @@ public class UserPaymentMethod {
   @UpdateTimestamp
   @Column(nullable = false)
   private Instant updatedAt;
+
+  public static UserPaymentMethod create(User user, String provider, String type) {
+    UserPaymentMethod userPaymentMethod = new UserPaymentMethod();
+    userPaymentMethod.user = user;
+    userPaymentMethod.provider = provider;
+    userPaymentMethod.type = type;
+    return userPaymentMethod;
+  }
 }

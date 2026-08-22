@@ -1,0 +1,45 @@
+enum OrderStatus {
+  PENDING
+  PAID
+  SHIPPING
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  SUCCESS
+  FAILED
+  PENDING
+}
+
+type Order {
+  id: ID!
+  publicId: UUID!
+  user: User!
+  items: [OrderItem!]!
+  status: OrderStatus!
+  totalAmount: BigDecimal!
+  createdAt: Instant!
+  updatedAt: Instant!
+}
+
+type OrderItem {
+  id: ID!
+  publicId: UUID!
+  order: Order!
+  productVariant: ProductVariant!
+  quantity: Int!
+  priceAtPurchase: BigDecimal!
+}
+
+type PaymentDetails {
+  id: ID!
+  publicId: UUID!
+  order: Order!
+  amount: BigDecimal!
+  provider: String!
+  type: String!
+  status: PaymentStatus!
+  createdAt: Instant!
+  updatedAt: Instant!
+}

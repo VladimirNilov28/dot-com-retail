@@ -1,15 +1,16 @@
 package ee.bytecore.backend.entities.cart;
 
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+
 import ee.bytecore.backend.entities.user.User;
+
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
-
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
 
 @Getter
 @Setter
@@ -27,10 +28,7 @@ public class Cart {
   @JoinColumn(name = "user_id", nullable = false)
   private User user;
 
-  @OneToMany(
-      mappedBy = "cart",
-      fetch = FetchType.LAZY
-  )
+  @OneToMany(mappedBy = "cart", fetch = FetchType.LAZY)
   private List<CartItem> items = new ArrayList<>();
 
   @CreationTimestamp
@@ -40,4 +38,10 @@ public class Cart {
   @UpdateTimestamp
   @Column(nullable = false)
   private Instant updatedAt;
+
+  public static Cart create(User user) {
+    Cart cart = new Cart();
+    cart.user = user;
+    return cart;
+  }
 }

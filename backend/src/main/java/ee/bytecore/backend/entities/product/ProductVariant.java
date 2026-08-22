@@ -1,19 +1,18 @@
 package ee.bytecore.backend.entities.product;
 
-import jakarta.persistence.*;
-import jakarta.validation.constraints.Size;
-import lombok.Getter;
-import lombok.Setter;
-import org.hibernate.annotations.ColumnDefault;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.annotations.UpdateTimestamp;
-import org.hibernate.type.SqlTypes;
-
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+
+import jakarta.persistence.*;
+import jakarta.validation.constraints.Size;
+import lombok.Getter;
+import lombok.Setter;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 @Getter
 @Setter
@@ -59,4 +58,12 @@ public class ProductVariant {
   @UpdateTimestamp
   @Column(nullable = false)
   private Instant updatedAt;
+
+  public static ProductVariant create(Product product, String sku, BigDecimal price) {
+    ProductVariant productVariant = new ProductVariant();
+    productVariant.product = product;
+    productVariant.sku = sku;
+    productVariant.price = price;
+    return productVariant;
+  }
 }

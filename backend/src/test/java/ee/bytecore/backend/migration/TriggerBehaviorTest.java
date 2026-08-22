@@ -7,9 +7,6 @@ import java.util.stream.Stream;
 
 import javax.sql.DataSource;
 
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
@@ -17,8 +14,14 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import ee.bytecore.backend.config.PostgresTestConfiguration;
 
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+
 @SpringBootTest
 @Import(PostgresTestConfiguration.class)
+@Tag("integration")
 class TriggerBehaviorTest {
 
   private final DataSource dataSource;
@@ -36,8 +39,7 @@ class TriggerBehaviorTest {
       String selectUpdatedAtSql,
       String updateSql,
       String cleanupSql,
-      Long id
-  ) {
+      Long id) {
 
     JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
 
@@ -48,11 +50,8 @@ class TriggerBehaviorTest {
     try {
       jdbcTemplate.execute(prepareSql);
 
-      OffsetDateTime updatedAtOnCreate = jdbcTemplate.queryForObject(
-          selectUpdatedAtSql,
-          OffsetDateTime.class,
-          id
-      );
+      OffsetDateTime updatedAtOnCreate =
+          jdbcTemplate.queryForObject(selectUpdatedAtSql, OffsetDateTime.class, id);
 
       // Capture the moment right before the UPDATE from the application side.
       // More reliable than Thread.sleep and does not depend on being inside
@@ -62,11 +61,8 @@ class TriggerBehaviorTest {
 
       jdbcTemplate.update(updateSql, id);
 
-      OffsetDateTime updatedAtOnUpdate = jdbcTemplate.queryForObject(
-          selectUpdatedAtSql,
-          OffsetDateTime.class,
-          id
-      );
+      OffsetDateTime updatedAtOnUpdate =
+          jdbcTemplate.queryForObject(selectUpdatedAtSql, OffsetDateTime.class, id);
 
       assertThat(updatedAtOnUpdate)
           .as("updated_at should change and be later than the original value")
@@ -74,7 +70,8 @@ class TriggerBehaviorTest {
 
       assertThat(updatedAtOnUpdate)
           .as("updated_at should not be earlier than when the UPDATE was issued")
-          .isAfterOrEqualTo(beforeUpdate.minusSeconds(1)); // small buffer for clock drift between app and DB
+          .isAfterOrEqualTo(
+              beforeUpdate.minusSeconds(1)); // small buffer for clock drift between app and DB
 
     } finally {
       jdbcTemplate.execute(cleanupSql);
@@ -83,7 +80,6 @@ class TriggerBehaviorTest {
 
   static Stream<Arguments> tablesWithUpdatedAtTrigger() {
     return Stream.of(
-
         Arguments.of(
             "users",
             """
@@ -105,15 +101,13 @@ class TriggerBehaviorTest {
             DELETE FROM users
             WHERE id = 1
             """,
-            1L
-        ),
-
+            1L),
         Arguments.of(
             "products",
             """
             INSERT INTO products
-            (id, name, description)
-            VALUES (1, 'product', 'description')
+            (id, name, slug, description)
+            VALUES (1, 'product', 'product', 'description')
             """,
             """
             SELECT updated_at
@@ -129,15 +123,13 @@ class TriggerBehaviorTest {
             DELETE FROM products
             WHERE id = 1
             """,
-            1L
-        ),
-
+            1L),
         Arguments.of(
             "product_variants",
             """
             INSERT INTO products
-            (id, name)
-            VALUES (1, 'product');
+            (id, name, slug)
+            VALUES (1, 'product', 'product');
 
             INSERT INTO product_variants
             (id, product_id, sku, price)
@@ -157,9 +149,7 @@ class TriggerBehaviorTest {
             DELETE FROM product_variants WHERE id = 1;
             DELETE FROM products WHERE id = 1
             """,
-            1L
-        ),
-
+            1L),
         Arguments.of(
             "carts",
             """
@@ -185,9 +175,7 @@ class TriggerBehaviorTest {
             DELETE FROM carts WHERE id = 1;
             DELETE FROM users WHERE id = 1
             """,
-            1L
-        ),
-
+            1L),
         Arguments.of(
             "user_address",
             """
@@ -213,9 +201,7 @@ class TriggerBehaviorTest {
             DELETE FROM user_address WHERE id = 1;
             DELETE FROM users WHERE id = 1
             """,
-            1L
-        ),
-
+            1L),
         Arguments.of(
             "user_payment_methods",
             """
@@ -241,9 +227,7 @@ class TriggerBehaviorTest {
             DELETE FROM user_payment_methods WHERE id = 1;
             DELETE FROM users WHERE id = 1
             """,
-            1L
-        ),
-
+            1L),
         Arguments.of(
             "categories",
             """
@@ -265,9 +249,7 @@ class TriggerBehaviorTest {
             DELETE FROM categories
             WHERE id = 1
             """,
-            1L
-        ),
-
+            1L),
         Arguments.of(
             "warehouses",
             """
@@ -289,15 +271,13 @@ class TriggerBehaviorTest {
             DELETE FROM warehouses
             WHERE id = 1
             """,
-            1L
-        ),
-
+            1L),
         Arguments.of(
             "inventory",
             """
             INSERT INTO products
-            (id, name)
-            VALUES (1, 'product');
+            (id, name, slug)
+            VALUES (1, 'product', 'product');
 
             INSERT INTO product_variants
             (id, product_id, sku, price)
@@ -327,8 +307,6 @@ class TriggerBehaviorTest {
             DELETE FROM warehouses WHERE id = 1;
             DELETE FROM products WHERE id = 1
             """,
-            1L
-        )
-    );
+            1L));
   }
 }

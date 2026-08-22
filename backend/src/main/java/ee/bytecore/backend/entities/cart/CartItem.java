@@ -1,8 +1,8 @@
 package ee.bytecore.backend.entities.cart;
 
 import ee.bytecore.backend.entities.product.ProductVariant;
+
 import jakarta.persistence.*;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import lombok.Getter;
 import lombok.Setter;
@@ -32,4 +32,12 @@ public class CartItem {
   @Positive
   @Column(name = "quantity", nullable = false)
   private Integer quantity;
+
+  public static CartItem create(Cart cart, ProductVariant productVariant, Integer quantity) {
+    CartItem cartItem = new CartItem();
+    cartItem.cart = cart;
+    cartItem.productVariant = productVariant;
+    cartItem.quantity = quantity;
+    return cartItem;
+  }
 }

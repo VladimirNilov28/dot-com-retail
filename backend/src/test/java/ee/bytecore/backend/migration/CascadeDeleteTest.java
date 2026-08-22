@@ -12,10 +12,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import ee.bytecore.backend.config.PostgresTestConfiguration;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 @SpringBootTest
 @Import(PostgresTestConfiguration.class)
+@Tag("integration")
 public class CascadeDeleteTest {
   private final DataSource dataSource;
 
@@ -77,8 +79,8 @@ public class CascadeDeleteTest {
 
     jdbcTemplate.update(
         """
-        INSERT INTO products (id, name)
-        VALUES (1, 'Test Product')
+        INSERT INTO products (id, name, slug)
+        VALUES (1, 'Test Product', 'test-product')
         """);
 
     jdbcTemplate.update(
@@ -124,8 +126,8 @@ public class CascadeDeleteTest {
 
     jdbcTemplate.update(
         """
-        INSERT INTO products (id, name)
-        VALUES (1, 'Test Product')
+        INSERT INTO products (id, name, slug)
+        VALUES (1, 'Test Product', 'test-product')
         """);
 
     jdbcTemplate.update(
@@ -171,8 +173,8 @@ public class CascadeDeleteTest {
 
     jdbcTemplate.update(
         """
-        INSERT INTO products (id, name)
-        VALUES (1, 'Test Product')
+        INSERT INTO products (id, name, slug)
+        VALUES (1, 'Test Product', 'test-product')
         """);
 
     jdbcTemplate.update(

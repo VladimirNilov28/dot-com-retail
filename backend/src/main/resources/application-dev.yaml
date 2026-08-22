@@ -6,6 +6,5 @@ spring:
   docker:
     compose:
       file: ../infrastructure/docker/compose.yml
-      host: 192.168.0.106
 jwt:
   secret: W6jBttEuxF+lKLbdLMaJ+zZNungPF65LGQnPdeY3eIU0BG+S5D0AQl8MLYRyHBv38ov4kHEG7tKHXkuu2vPi8g==

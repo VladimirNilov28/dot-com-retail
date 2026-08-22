@@ -1,13 +1,13 @@
 package ee.bytecore.backend.entities.user;
 
+import java.time.Instant;
+
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
-
-import java.time.Instant;
 
 @Getter
 @Setter
@@ -63,4 +63,27 @@ public class UserAddress {
   @UpdateTimestamp
   @Column(nullable = false)
   private Instant updatedAt;
+
+  public static UserAddress create(
+      User user,
+      String firstName,
+      String lastName,
+      String city,
+      String country,
+      String postalCode,
+      String addressLine1,
+      String addressLine2,
+      String mobile) {
+    UserAddress userAddress = new UserAddress();
+    userAddress.user = user;
+    userAddress.firstName = firstName;
+    userAddress.lastName = lastName;
+    userAddress.city = city;
+    userAddress.country = country;
+    userAddress.postalCode = postalCode;
+    userAddress.addressLine1 = addressLine1;
+    userAddress.addressLine2 = addressLine2;
+    userAddress.mobile = mobile;
+    return userAddress;
+  }
 }

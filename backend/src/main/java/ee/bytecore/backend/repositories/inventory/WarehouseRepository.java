@@ -1,7 +1,7 @@
 package ee.bytecore.backend.repositories.inventory;
 
-import ee.bytecore.backend.entities.inventory.Warehouse;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-public interface WarehouseRepository extends JpaRepository<Warehouse, Long> {
-}
+import ee.bytecore.backend.entities.inventory.Warehouse;
+
+public interface WarehouseRepository extends JpaRepository<Warehouse, Long> {}

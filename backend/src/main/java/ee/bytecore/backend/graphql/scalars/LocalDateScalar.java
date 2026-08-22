@@ -1,5 +1,10 @@
 package ee.bytecore.backend.graphql.scalars;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.Locale;
+
 import com.netflix.graphql.dgs.DgsScalar;
 import graphql.GraphQLContext;
 import graphql.execution.CoercedVariables;
@@ -8,25 +13,31 @@ import graphql.language.Value;
 import graphql.schema.*;
 import org.jspecify.annotations.NonNull;
 
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
-import java.util.Locale;
-
 @DgsScalar(name = "LocalDate")
 public class LocalDateScalar implements Coercing<LocalDate, String> {
   @Override
-  public String serialize(@NonNull Object dataFetcherResult, @NonNull GraphQLContext graphQLContext, @NonNull Locale locale) {
+  public String serialize(
+      @NonNull Object dataFetcherResult,
+      @NonNull GraphQLContext graphQLContext,
+      @NonNull Locale locale)
+      throws CoercingSerializeException {
     return serializeLocalDate(dataFetcherResult);
   }
 
   @Override
-  public LocalDate parseValue(@NonNull Object input, @NonNull GraphQLContext graphQLContext, @NonNull Locale locale) {
+  public LocalDate parseValue(
+      @NonNull Object input, @NonNull GraphQLContext graphQLContext, @NonNull Locale locale)
+      throws CoercingSerializeException {
     return parseLocalDateFromVariable(input);
   }
 
   @Override
-  public LocalDate parseLiteral(@NonNull Value<?> input, @NonNull CoercedVariables variables, @NonNull GraphQLContext graphQLContext, @NonNull Locale locale) {
+  public LocalDate parseLiteral(
+      @NonNull Value<?> input,
+      @NonNull CoercedVariables variables,
+      @NonNull GraphQLContext graphQLContext,
+      @NonNull Locale locale)
+      throws CoercingSerializeException {
     return parseLocalDateFromAstLiteral(input);
   }
 
@@ -49,8 +60,7 @@ public class LocalDateScalar implements Coercing<LocalDate, String> {
     }
 
     throw new CoercingSerializeException(
-        "Value is not a valid LocalDate: '" + dataFetcherResult + "'"
-    );
+        "Value is not a valid LocalDate: '" + dataFetcherResult + "'");
   }
 
   private static LocalDate parseLocalDateFromVariable(Object input) {
@@ -58,13 +68,11 @@ public class LocalDateScalar implements Coercing<LocalDate, String> {
       return LocalDate.parse(value, DateTimeFormatter.ISO_LOCAL_DATE);
     }
 
-    throw new CoercingParseValueException(
-        "Value is not a valid LocalDate: '" + input + "'"
-    );
+    throw new CoercingParseValueException("Value is not a valid LocalDate: '" + input + "'");
   }
 
   private static LocalDate parseLocalDateFromAstLiteral(Value<?> input) {
-    if (input instanceof StringValue stringValue ) {
+    if (input instanceof StringValue stringValue) {
       String value = stringValue.getValue();
 
       if (looksLikeALocalDate(value)) {
@@ -72,11 +80,6 @@ public class LocalDateScalar implements Coercing<LocalDate, String> {
       }
     }
 
-    throw new CoercingParseLiteralException(
-        "Value is not a valid LocalDate: '" + input + "'"
-    );
+    throw new CoercingParseLiteralException("Value is not a valid LocalDate: '" + input + "'");
   }
 }
-
-
-

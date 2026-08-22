@@ -1,6 +1,11 @@
 package ee.bytecore.backend.entities.payment;
 
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.UUID;
+
 import ee.bytecore.backend.enums.PaymentStatus;
+
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
@@ -12,10 +17,6 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.annotations.UuidGenerator;
 import org.hibernate.type.SqlTypes;
-
-import java.math.BigDecimal;
-import java.time.Instant;
-import java.util.UUID;
 
 @Getter
 @Setter
@@ -63,4 +64,14 @@ public class PaymentDetails {
   @UpdateTimestamp
   @Column(nullable = false)
   private Instant updatedAt;
+
+  public static PaymentDetails create(
+      Order order, BigDecimal amount, String provider, String type) {
+    PaymentDetails paymentDetails = new PaymentDetails();
+    paymentDetails.order = order;
+    paymentDetails.amount = amount;
+    paymentDetails.provider = provider;
+    paymentDetails.type = type;
+    return paymentDetails;
+  }
 }

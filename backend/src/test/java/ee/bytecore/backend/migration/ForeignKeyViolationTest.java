@@ -13,11 +13,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import ee.bytecore.backend.config.PostgresTestConfiguration;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
 
 @SpringBootTest
 @Import(PostgresTestConfiguration.class)
+@Tag("integration")
 public class ForeignKeyViolationTest {
   private final DataSource dataSource;
 
