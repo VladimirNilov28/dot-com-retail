@@ -19,51 +19,49 @@ import org.hibernate.type.SqlTypes;
 @Entity
 @Table(name = "product_variants")
 public class ProductVariant {
-  protected ProductVariant() {}
+    protected ProductVariant() {}
 
-  @Id
-  @GeneratedValue(strategy = GenerationType.IDENTITY)
-  @Column(name = "id", nullable = false)
-  private Long id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "id", nullable = false)
+    private Long id;
 
-  @ManyToOne(fetch = FetchType.LAZY)
-  @JoinColumn(name = "product_id", nullable = false)
-  private Product product;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "product_id", nullable = false)
+    private Product product;
 
-  @Size(max = 255)
-  @Column(name = "sku", nullable = false, unique = true)
-  private String sku;
+    @Size(max = 255) @Column(name = "sku", nullable = false, unique = true)
+    private String sku;
 
-  @Column(name = "price", nullable = false, precision = 10, scale = 2)
-  private BigDecimal price;
+    @Column(name = "price", nullable = false, precision = 10, scale = 2)
+    private BigDecimal price;
 
-  @JdbcTypeCode(SqlTypes.JSON)
-  @Column(name = "attributes", nullable = false)
-  private Map<String, Object> attributes = new HashMap<>();
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "attributes", nullable = false)
+    private Map<String, Object> attributes = new HashMap<>();
 
-  @Size(max = 64)
-  @Column(name = "barcode", length = 64)
-  private String barcode;
+    @Size(max = 64) @Column(name = "barcode", length = 64)
+    private String barcode;
 
-  @Column(name = "weight_grams")
-  private Integer weightGrams;
+    @Column(name = "weight_grams")
+    private Integer weightGrams;
 
-  @Column(name = "is_active", nullable = false)
-  private Boolean isActive = true;
+    @Column(name = "is_active", nullable = false)
+    private Boolean isActive = true;
 
-  @CreationTimestamp
-  @Column(nullable = false, updatable = false)
-  private Instant createdAt;
+    @CreationTimestamp
+    @Column(nullable = false, updatable = false)
+    private Instant createdAt;
 
-  @UpdateTimestamp
-  @Column(nullable = false)
-  private Instant updatedAt;
+    @UpdateTimestamp
+    @Column(nullable = false)
+    private Instant updatedAt;
 
-  public static ProductVariant create(Product product, String sku, BigDecimal price) {
-    ProductVariant productVariant = new ProductVariant();
-    productVariant.product = product;
-    productVariant.sku = sku;
-    productVariant.price = price;
-    return productVariant;
-  }
+    public static ProductVariant create(Product product, String sku, BigDecimal price) {
+        ProductVariant productVariant = new ProductVariant();
+        productVariant.product = product;
+        productVariant.sku = sku;
+        productVariant.price = price;
+        return productVariant;
+    }
 }

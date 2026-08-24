@@ -13,32 +13,32 @@ import org.hibernate.annotations.CreationTimestamp;
 @Setter
 @Entity
 @Table(
-    name = "wishlist_items",
-    uniqueConstraints = @UniqueConstraint(columnNames = {"wishlist_id", "product_variant_id"}))
+        name = "wishlist_items",
+        uniqueConstraints = @UniqueConstraint(columnNames = {"wishlist_id", "product_variant_id"}))
 public class WishlistItem {
-  protected WishlistItem() {}
+    protected WishlistItem() {}
 
-  @Id
-  @GeneratedValue(strategy = GenerationType.IDENTITY)
-  @Column(name = "id", nullable = false)
-  private Long id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "id", nullable = false)
+    private Long id;
 
-  @ManyToOne(fetch = FetchType.LAZY)
-  @JoinColumn(name = "wishlist_id", nullable = false)
-  private Wishlist wishlist;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "wishlist_id", nullable = false)
+    private Wishlist wishlist;
 
-  @ManyToOne(fetch = FetchType.LAZY)
-  @JoinColumn(name = "product_variant_id", nullable = false)
-  private ProductVariant productVariant;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "product_variant_id", nullable = false)
+    private ProductVariant productVariant;
 
-  @CreationTimestamp
-  @Column(name = "added_at", nullable = false, updatable = false)
-  private Instant addedAt;
+    @CreationTimestamp
+    @Column(name = "added_at", nullable = false, updatable = false)
+    private Instant addedAt;
 
-  public static WishlistItem create(Wishlist wishlist, ProductVariant productVariant) {
-    WishlistItem wishlistItem = new WishlistItem();
-    wishlistItem.wishlist = wishlist;
-    wishlistItem.productVariant = productVariant;
-    return wishlistItem;
-  }
+    public static WishlistItem create(Wishlist wishlist, ProductVariant productVariant) {
+        WishlistItem wishlistItem = new WishlistItem();
+        wishlistItem.wishlist = wishlist;
+        wishlistItem.productVariant = productVariant;
+        return wishlistItem;
+    }
 }

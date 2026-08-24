@@ -13,39 +13,35 @@ import org.hibernate.annotations.UpdateTimestamp;
 @Getter
 @Setter
 @Entity
-@Table(
-    name = "inventory",
-    uniqueConstraints = @UniqueConstraint(columnNames = {"product_variant_id", "warehouse_id"}))
+@Table(name = "inventory", uniqueConstraints = @UniqueConstraint(columnNames = {"product_variant_id", "warehouse_id"}))
 public class Inventory {
-  protected Inventory() {}
+    protected Inventory() {}
 
-  @Id
-  @GeneratedValue(strategy = GenerationType.IDENTITY)
-  @Column(name = "id", nullable = false)
-  private Long id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "id", nullable = false)
+    private Long id;
 
-  @ManyToOne(fetch = FetchType.LAZY)
-  @JoinColumn(name = "product_variant_id", nullable = false)
-  private ProductVariant productVariant;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "product_variant_id", nullable = false)
+    private ProductVariant productVariant;
 
-  @ManyToOne(fetch = FetchType.LAZY)
-  @JoinColumn(name = "warehouse_id", nullable = false)
-  private Warehouse warehouse;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "warehouse_id", nullable = false)
+    private Warehouse warehouse;
 
-  @PositiveOrZero
-  @Column(name = "quantity", nullable = false)
-  private Integer quantity = 0;
+    @PositiveOrZero @Column(name = "quantity", nullable = false)
+    private Integer quantity = 0;
 
-  @UpdateTimestamp
-  @Column(nullable = false)
-  private Instant updatedAt;
+    @UpdateTimestamp
+    @Column(nullable = false)
+    private Instant updatedAt;
 
-  public static Inventory create(
-      ProductVariant productVariant, Warehouse warehouse, Integer quantity) {
-    Inventory inventory = new Inventory();
-    inventory.productVariant = productVariant;
-    inventory.warehouse = warehouse;
-    inventory.quantity = quantity;
-    return inventory;
-  }
+    public static Inventory create(ProductVariant productVariant, Warehouse warehouse, Integer quantity) {
+        Inventory inventory = new Inventory();
+        inventory.productVariant = productVariant;
+        inventory.warehouse = warehouse;
+        inventory.quantity = quantity;
+        return inventory;
+    }
 }

@@ -16,27 +16,27 @@ import org.hibernate.annotations.CreationTimestamp;
 @Entity
 @Table(name = "wishlists")
 public class Wishlist {
-  protected Wishlist() {}
+    protected Wishlist() {}
 
-  @Id
-  @GeneratedValue(strategy = GenerationType.IDENTITY)
-  @Column(name = "id", nullable = false)
-  private Long id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "id", nullable = false)
+    private Long id;
 
-  @OneToOne(fetch = FetchType.LAZY)
-  @JoinColumn(name = "user_id", nullable = false, unique = true)
-  private User user;
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false, unique = true)
+    private User user;
 
-  @OneToMany(mappedBy = "wishlist", fetch = FetchType.LAZY)
-  private List<WishlistItem> items = new ArrayList<>();
+    @OneToMany(mappedBy = "wishlist", fetch = FetchType.LAZY)
+    private List<WishlistItem> items = new ArrayList<>();
 
-  @CreationTimestamp
-  @Column(nullable = false, updatable = false)
-  private Instant createdAt;
+    @CreationTimestamp
+    @Column(nullable = false, updatable = false)
+    private Instant createdAt;
 
-  public static Wishlist create(User user) {
-    Wishlist wishlist = new Wishlist();
-    wishlist.user = user;
-    return wishlist;
-  }
+    public static Wishlist create(User user) {
+        Wishlist wishlist = new Wishlist();
+        wishlist.user = user;
+        return wishlist;
+    }
 }

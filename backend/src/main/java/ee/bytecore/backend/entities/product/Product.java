@@ -18,44 +18,42 @@ import org.hibernate.annotations.UpdateTimestamp;
 @Entity
 @Table(name = "products")
 public class Product {
-  protected Product() {}
+    protected Product() {}
 
-  @Id
-  @GeneratedValue(strategy = GenerationType.IDENTITY)
-  @Column(name = "id", nullable = false)
-  private Long id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "id", nullable = false)
+    private Long id;
 
-  @Size(max = 255)
-  @Column(name = "name", nullable = false)
-  private String name;
+    @Size(max = 255) @Column(name = "name", nullable = false)
+    private String name;
 
-  @Size(max = 255)
-  @Column(name = "slug", nullable = false, unique = true)
-  private String slug;
+    @Size(max = 255) @Column(name = "slug", nullable = false, unique = true)
+    private String slug;
 
-  @Column(name = "description", length = Integer.MAX_VALUE)
-  private String description;
+    @Column(name = "description", length = Integer.MAX_VALUE)
+    private String description;
 
-  @ManyToMany(fetch = FetchType.LAZY)
-  @JoinTable(
-      name = "product_categories",
-      joinColumns = @JoinColumn(name = "product_id"),
-      inverseJoinColumns = @JoinColumn(name = "category_id"))
-  private Set<Category> categories = new HashSet<>();
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "product_categories",
+            joinColumns = @JoinColumn(name = "product_id"),
+            inverseJoinColumns = @JoinColumn(name = "category_id"))
+    private Set<Category> categories = new HashSet<>();
 
-  @CreationTimestamp
-  @Column(nullable = false, updatable = false)
-  private Instant createdAt;
+    @CreationTimestamp
+    @Column(nullable = false, updatable = false)
+    private Instant createdAt;
 
-  @UpdateTimestamp
-  @Column(nullable = false)
-  private Instant updatedAt;
+    @UpdateTimestamp
+    @Column(nullable = false)
+    private Instant updatedAt;
 
-  public static Product create(String name, String slug, String description) {
-    Product product = new Product();
-    product.name = name;
-    product.slug = slug;
-    product.description = description;
-    return product;
-  }
+    public static Product create(String name, String slug, String description) {
+        Product product = new Product();
+        product.name = name;
+        product.slug = slug;
+        product.description = description;
+        return product;
+    }
 }

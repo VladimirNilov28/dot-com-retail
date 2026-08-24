@@ -4,5 +4,5 @@ import com.netflix.graphql.dgs.DgsComponent;
 
 @DgsComponent
 public class UserDataFetcher {
-  public UserDataFetcher() {}
+    public UserDataFetcher() {}
 }

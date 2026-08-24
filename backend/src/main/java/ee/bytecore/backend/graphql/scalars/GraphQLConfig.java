@@ -7,12 +7,11 @@ import graphql.schema.idl.RuntimeWiring;
 
 @DgsComponent
 public class GraphQLConfig {
-  @DgsRuntimeWiring
-  public RuntimeWiring.Builder addScalars(RuntimeWiring.Builder builder) {
-    return builder
-        .scalar(ExtendedScalars.Url)
-        .scalar(ExtendedScalars.UUID)
-        .scalar(ExtendedScalars.GraphQLBigDecimal)
-        .scalar(ExtendedScalars.Json);
-  }
+    @DgsRuntimeWiring
+    public RuntimeWiring.Builder addScalars(RuntimeWiring.Builder builder) {
+        return builder.scalar(ExtendedScalars.Url)
+                .scalar(ExtendedScalars.UUID)
+                .scalar(ExtendedScalars.GraphQLBigDecimal)
+                .scalar(ExtendedScalars.Json);
+    }
 }

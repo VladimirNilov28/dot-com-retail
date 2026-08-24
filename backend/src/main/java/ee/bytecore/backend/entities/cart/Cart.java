@@ -17,31 +17,31 @@ import org.hibernate.annotations.UpdateTimestamp;
 @Entity
 @Table(name = "carts")
 public class Cart {
-  protected Cart() {}
+    protected Cart() {}
 
-  @Id
-  @GeneratedValue(strategy = GenerationType.IDENTITY)
-  @Column(name = "id", nullable = false)
-  private Long id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "id", nullable = false)
+    private Long id;
 
-  @ManyToOne(fetch = FetchType.LAZY)
-  @JoinColumn(name = "user_id", nullable = false)
-  private User user;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
 
-  @OneToMany(mappedBy = "cart", fetch = FetchType.LAZY)
-  private List<CartItem> items = new ArrayList<>();
+    @OneToMany(mappedBy = "cart", fetch = FetchType.LAZY)
+    private List<CartItem> items = new ArrayList<>();
 
-  @CreationTimestamp
-  @Column(nullable = false, updatable = false)
-  private Instant createdAt;
+    @CreationTimestamp
+    @Column(nullable = false, updatable = false)
+    private Instant createdAt;
 
-  @UpdateTimestamp
-  @Column(nullable = false)
-  private Instant updatedAt;
+    @UpdateTimestamp
+    @Column(nullable = false)
+    private Instant updatedAt;
 
-  public static Cart create(User user) {
-    Cart cart = new Cart();
-    cart.user = user;
-    return cart;
-  }
+    public static Cart create(User user) {
+        Cart cart = new Cart();
+        cart.user = user;
+        return cart;
+    }
 }

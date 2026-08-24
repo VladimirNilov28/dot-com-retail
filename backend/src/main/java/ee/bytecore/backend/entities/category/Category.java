@@ -15,40 +15,36 @@ import org.hibernate.annotations.UpdateTimestamp;
 @Entity
 @Table(name = "categories")
 public class Category {
-  protected Category() {}
+    protected Category() {}
 
-  @Id
-  @GeneratedValue(strategy = GenerationType.IDENTITY)
-  @Column(name = "id", nullable = false)
-  private Long id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "id", nullable = false)
+    private Long id;
 
-  @NotNull
-  @Size(max = 255)
-  @Column(name = "name", nullable = false)
-  private String name;
+    @NotNull @Size(max = 255) @Column(name = "name", nullable = false)
+    private String name;
 
-  @NotNull
-  @Size(max = 255)
-  @Column(name = "slug", nullable = false, unique = true)
-  private String slug;
+    @NotNull @Size(max = 255) @Column(name = "slug", nullable = false, unique = true)
+    private String slug;
 
-  @ManyToOne(fetch = FetchType.LAZY)
-  @JoinColumn(name = "parent_id")
-  private Category parent;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_id")
+    private Category parent;
 
-  @CreationTimestamp
-  @Column(nullable = false, updatable = false)
-  private Instant createdAt;
+    @CreationTimestamp
+    @Column(nullable = false, updatable = false)
+    private Instant createdAt;
 
-  @UpdateTimestamp
-  @Column(nullable = false)
-  private Instant updatedAt;
+    @UpdateTimestamp
+    @Column(nullable = false)
+    private Instant updatedAt;
 
-  public static Category create(String name, String slug, Category parent) {
-    Category category = new Category();
-    category.name = name;
-    category.slug = slug;
-    category.parent = parent;
-    return category;
-  }
+    public static Category create(String name, String slug, Category parent) {
+        Category category = new Category();
+        category.name = name;
+        category.slug = slug;
+        category.parent = parent;
+        return category;
+    }
 }

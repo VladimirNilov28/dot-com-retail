@@ -1,0 +1,57 @@
+input CreateUserInput {
+  username: String!
+  email: String!
+  password: String!
+  dateOfBirth: LocalDate!
+}
+
+input CreateAddressInput {
+  firstName: String
+  lastName: String
+  city: String
+  country: String
+  postalCode: String
+  addressLine1: String
+  addressLine2: String
+  mobile: String
+}
+
+input UpdateAddressInput {
+  firstName: String
+  lastName: String
+  city: String
+  country: String
+  postalCode: String
+  addressLine1: String
+  addressLine2: String
+  mobile: String
+}
+
+input UpdateRoleInput {
+  role: Role!
+}
+
+input CreatePaymentMethodInput {
+  method: String!
+  type: String!
+}
+
+
+extend type Mutation {
+  createUser(input: CreateUserInput!): User!
+
+  # USER
+  addMyAddress(input: CreateAddressInput!): UserAddress!
+  updateMyAddress(addressId: ID!, input: UpdateAddressInput!): UserAddress!
+  deleteMyAddress(addressId: ID!): Boolean!
+  addMyPaymentMethod(input: CreatePaymentMethodInput!): UserPaymentMethod!
+  deleteMyPaymentMethod(paymentMethodId: ID!): Boolean!
+
+  # ADMIN/SUPPORT
+  addUserAddress(userId: ID!, input: CreateAddressInput!): UserAddress!
+  updateUserAddress(userId: ID!, addressId: ID!, input: UpdateAddressInput!): UserAddress!
+  deleteUserAddress(userId: ID!, addressId: ID!): Boolean!
+  updateUserRole(userId: ID!, input: UpdateRoleInput): User!
+  addUserPaymentMethod(userId: ID!, input: CreatePaymentMethodInput!): UserPaymentMethod!
+  deleteUserPaymentMethod(userId: ID!, paymentMethodId: ID!): Boolean!
+}

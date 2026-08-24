@@ -18,45 +18,44 @@ import org.hibernate.type.SqlTypes;
 @Entity
 @Table(name = "users")
 public class User {
-  protected User() {}
+    protected User() {}
 
-  @Id
-  @GeneratedValue(strategy = GenerationType.IDENTITY)
-  @Column(name = "id", nullable = false)
-  private Long id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "id", nullable = false)
+    private Long id;
 
-  @Enumerated(EnumType.STRING)
-  @JdbcTypeCode(SqlTypes.NAMED_ENUM)
-  @Column(name = "role", nullable = false)
-  private UserRole role = UserRole.USER;
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(name = "role", nullable = false)
+    private UserRole role = UserRole.USER;
 
-  @Column(name = "username", nullable = false, unique = true)
-  private String username;
+    @Column(name = "username", nullable = false, unique = true)
+    private String username;
 
-  @Column(name = "email", nullable = false, unique = true)
-  private String email;
+    @Column(name = "email", nullable = false, unique = true)
+    private String email;
 
-  @Column(name = "password_hash", nullable = false)
-  private String passwordHash;
+    @Column(name = "password_hash", nullable = false)
+    private String passwordHash;
 
-  @Column(name = "date_of_birth", nullable = false)
-  private LocalDate dateOfBirth;
+    @Column(name = "date_of_birth", nullable = false)
+    private LocalDate dateOfBirth;
 
-  @CreationTimestamp
-  @Column(nullable = false, updatable = false)
-  private Instant createdAt;
+    @CreationTimestamp
+    @Column(nullable = false, updatable = false)
+    private Instant createdAt;
 
-  @UpdateTimestamp
-  @Column(nullable = false)
-  private Instant updatedAt;
+    @UpdateTimestamp
+    @Column(nullable = false)
+    private Instant updatedAt;
 
-  public static User create(
-      String username, String email, String passwordHash, LocalDate dateOfBirth) {
-    User user = new User();
-    user.username = username;
-    user.email = email;
-    user.passwordHash = passwordHash;
-    user.dateOfBirth = dateOfBirth;
-    return user;
-  }
+    public static User create(String username, String email, String passwordHash, LocalDate dateOfBirth) {
+        User user = new User();
+        user.username = username;
+        user.email = email;
+        user.passwordHash = passwordHash;
+        user.dateOfBirth = dateOfBirth;
+        return user;
+    }
 }

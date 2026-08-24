@@ -23,45 +23,45 @@ import org.hibernate.type.SqlTypes;
 @Entity
 @Table(name = "orders")
 public class Order {
-  protected Order() {}
+    protected Order() {}
 
-  @Id
-  @GeneratedValue(strategy = GenerationType.IDENTITY)
-  @Column(name = "id", nullable = false)
-  private Long id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "id", nullable = false)
+    private Long id;
 
-  @UuidGenerator(style = UuidGenerator.Style.RANDOM)
-  @Column(name = "public_id", nullable = false, unique = true, updatable = false)
-  private UUID publicId;
+    @UuidGenerator(style = UuidGenerator.Style.RANDOM)
+    @Column(name = "public_id", nullable = false, unique = true, updatable = false)
+    private UUID publicId;
 
-  @ManyToOne(fetch = FetchType.LAZY)
-  @JoinColumn(name = "user_id", nullable = false)
-  private User user;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
 
-  @OneToMany(mappedBy = "order", fetch = FetchType.LAZY)
-  private List<OrderItem> items = new ArrayList<>();
+    @OneToMany(mappedBy = "order", fetch = FetchType.LAZY)
+    private List<OrderItem> items = new ArrayList<>();
 
-  @Enumerated(EnumType.STRING)
-  @JdbcTypeCode(SqlTypes.NAMED_ENUM)
-  @Column(name = "status", nullable = false)
-  private OrderStatus status;
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(name = "status", nullable = false)
+    private OrderStatus status;
 
-  @Column(name = "total_amount", nullable = false, precision = 10, scale = 2)
-  private BigDecimal totalAmount;
+    @Column(name = "total_amount", nullable = false, precision = 10, scale = 2)
+    private BigDecimal totalAmount;
 
-  @CreationTimestamp
-  @Column(nullable = false, updatable = false)
-  private Instant createdAt;
+    @CreationTimestamp
+    @Column(nullable = false, updatable = false)
+    private Instant createdAt;
 
-  @UpdateTimestamp
-  @Column(nullable = false)
-  private Instant updatedAt;
+    @UpdateTimestamp
+    @Column(nullable = false)
+    private Instant updatedAt;
 
-  public static Order create(User user, OrderStatus status, BigDecimal totalAmount) {
-    Order order = new Order();
-    order.user = user;
-    order.status = status;
-    order.totalAmount = totalAmount;
-    return order;
-  }
+    public static Order create(User user, OrderStatus status, BigDecimal totalAmount) {
+        Order order = new Order();
+        order.user = user;
+        order.status = status;
+        order.totalAmount = totalAmount;
+        return order;
+    }
 }

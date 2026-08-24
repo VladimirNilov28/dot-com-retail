@@ -188,11 +188,20 @@ configurations {
 // =====================================================
 
 tasks.named<Test>("test") {
+    useJUnitPlatform()
+
     // Filter by tag: ./gradlew test -Pgroup=unit  (comma-separated: -Pgroup=unit,graphql)
-    useJUnitPlatform {
-        if (project.hasProperty("group")) {
-            val groups = (project.property("group") as String).split(",").map { it.trim() }
-            includeTags(*groups.toTypedArray())
+    val groups = providers.gradleProperty("group").orNull
+
+    if (!groups.isNullOrBlank()) {
+        useJUnitPlatform {
+            includeTags(
+                *groups
+                    .split(",")
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                    .toTypedArray(),
+            )
         }
     }
 }
@@ -269,7 +278,7 @@ tasks.jacocoTestReport {
 }
 
 // =====================================================
-// Code Formatting (Google Java Style)
+// Code Formatting (Palantir Java Format)
 // =====================================================
 
 spotless {
@@ -283,9 +292,11 @@ spotless {
         targetExclude("**/build/**", "**/generated/**")
 
         // Version pinned explicitly so formatting doesn't silently
-        // change when Spotless updates its default GJF version.
-        googleJavaFormat("1.28.0")
-        // .aosp() // uncomment for 4-space indent instead of Google's default 2-space
+        // change when Spotless updates its default Palantir version.
+        // Palantir Java Format uses 2-space indentation by default and
+        // keeps Spring/JPA/DGS/JUnit annotations clean and readable.
+        palantirJavaFormat("2.50.0")
+        formatAnnotations()
 
         removeUnusedImports()
 

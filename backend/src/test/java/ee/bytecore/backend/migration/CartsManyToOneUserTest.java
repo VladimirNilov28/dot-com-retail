@@ -19,45 +19,40 @@ import org.junit.jupiter.api.Test;
 @Import(PostgresTestConfiguration.class)
 @Tag("integration")
 public class CartsManyToOneUserTest {
-  private final DataSource dataSource;
+    private final DataSource dataSource;
 
-  @Autowired
-  CartsManyToOneUserTest(DataSource dataSource) {
-    this.dataSource = dataSource;
-  }
+    @Autowired
+    CartsManyToOneUserTest(DataSource dataSource) {
+        this.dataSource = dataSource;
+    }
 
-  @Test
-  @Transactional
-  void shouldAllowMultipleCartsForSameUserTest() {
-    JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+    @Test
+    @Transactional
+    void shouldAllowMultipleCartsForSameUserTest() {
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
 
-    jdbcTemplate.update(
-        """
+        jdbcTemplate.update(
+                """
     INSERT INTO users (id, username, email, password_hash, date_of_birth)
     VALUES (1, 'test-user', 'user@test.com', 'hash', '1991-01-01')
     """);
 
-    jdbcTemplate.update(
-        """
+        jdbcTemplate.update("""
     INSERT INTO carts (id, user_id)
     VALUES (1, 1)
     """);
 
-    jdbcTemplate.update(
-        """
+        jdbcTemplate.update("""
     INSERT INTO carts (id, user_id)
     VALUES (2, 1)
     """);
 
-    Integer countOfUserCarts =
-        jdbcTemplate.queryForObject(
-            """
+        Integer countOfUserCarts = jdbcTemplate.queryForObject(
+                """
         SELECT COUNT(*) FROM carts
         WHERE user_id = ?
-        """,
-            Integer.class,
-            1);
+        """, Integer.class, 1);
 
-    assertThat(countOfUserCarts).isEqualTo(2);
-  }
+        assertThat(countOfUserCarts).isEqualTo(2);
+    }
 }

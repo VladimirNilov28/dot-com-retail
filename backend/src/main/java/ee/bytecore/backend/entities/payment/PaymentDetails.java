@@ -23,55 +23,49 @@ import org.hibernate.type.SqlTypes;
 @Entity
 @Table(name = "payment_details")
 public class PaymentDetails {
-  protected PaymentDetails() {}
+    protected PaymentDetails() {}
 
-  @Id
-  @GeneratedValue(strategy = GenerationType.IDENTITY)
-  @Column(name = "id", nullable = false)
-  private Long id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "id", nullable = false)
+    private Long id;
 
-  @UuidGenerator(style = UuidGenerator.Style.RANDOM)
-  @Column(name = "public_id", nullable = false, unique = true, updatable = false)
-  private UUID publicId;
+    @UuidGenerator(style = UuidGenerator.Style.RANDOM)
+    @Column(name = "public_id", nullable = false, unique = true, updatable = false)
+    private UUID publicId;
 
-  @ManyToOne(fetch = FetchType.LAZY)
-  @JoinColumn(name = "order_id", nullable = false)
-  private Order order;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "order_id", nullable = false)
+    private Order order;
 
-  @PositiveOrZero
-  @Column(name = "amount", nullable = false, precision = 10, scale = 2)
-  private BigDecimal amount;
+    @PositiveOrZero @Column(name = "amount", nullable = false, precision = 10, scale = 2)
+    private BigDecimal amount;
 
-  @NotNull
-  @Size(max = 255)
-  @Column(name = "provider", nullable = false)
-  private String provider;
+    @NotNull @Size(max = 255) @Column(name = "provider", nullable = false)
+    private String provider;
 
-  @NotNull
-  @Size(max = 255)
-  @Column(name = "type", nullable = false)
-  private String type;
+    @NotNull @Size(max = 255) @Column(name = "type", nullable = false)
+    private String type;
 
-  @Enumerated(EnumType.STRING)
-  @JdbcTypeCode(SqlTypes.NAMED_ENUM)
-  @Column(name = "status", nullable = false)
-  private PaymentStatus status = PaymentStatus.PENDING;
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(name = "status", nullable = false)
+    private PaymentStatus status = PaymentStatus.PENDING;
 
-  @CreationTimestamp
-  @Column(nullable = false, updatable = false)
-  private Instant createdAt;
+    @CreationTimestamp
+    @Column(nullable = false, updatable = false)
+    private Instant createdAt;
 
-  @UpdateTimestamp
-  @Column(nullable = false)
-  private Instant updatedAt;
+    @UpdateTimestamp
+    @Column(nullable = false)
+    private Instant updatedAt;
 
-  public static PaymentDetails create(
-      Order order, BigDecimal amount, String provider, String type) {
-    PaymentDetails paymentDetails = new PaymentDetails();
-    paymentDetails.order = order;
-    paymentDetails.amount = amount;
-    paymentDetails.provider = provider;
-    paymentDetails.type = type;
-    return paymentDetails;
-  }
+    public static PaymentDetails create(Order order, BigDecimal amount, String provider, String type) {
+        PaymentDetails paymentDetails = new PaymentDetails();
+        paymentDetails.order = order;
+        paymentDetails.amount = amount;
+        paymentDetails.provider = provider;
+        paymentDetails.type = type;
+        return paymentDetails;
+    }
 }
