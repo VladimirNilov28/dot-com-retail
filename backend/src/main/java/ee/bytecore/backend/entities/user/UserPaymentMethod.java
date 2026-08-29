@@ -2,12 +2,16 @@ package ee.bytecore.backend.entities.user;
 
 import java.time.Instant;
 
+import ee.bytecore.backend.enums.PaymentMethodType;
+
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 @Getter
 @Setter
@@ -28,8 +32,10 @@ public class UserPaymentMethod {
     @Size(max = 255) @Column(name = "provider")
     private String provider;
 
-    @Size(max = 255) @Column(name = "type")
-    private String type;
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(name = "type", nullable = false)
+    private PaymentMethodType type;
 
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
@@ -39,7 +45,7 @@ public class UserPaymentMethod {
     @Column(nullable = false)
     private Instant updatedAt;
 
-    public static UserPaymentMethod create(User user, String provider, String type) {
+    public static UserPaymentMethod create(User user, String provider, PaymentMethodType type) {
         UserPaymentMethod userPaymentMethod = new UserPaymentMethod();
         userPaymentMethod.user = user;
         userPaymentMethod.provider = provider;

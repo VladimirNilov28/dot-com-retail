@@ -8,3 +8,9 @@ spring:
       file: ../infrastructure/docker/compose.yml
 jwt:
   secret: W6jBttEuxF+lKLbdLMaJ+zZNungPF65LGQnPdeY3eIU0BG+S5D0AQl8MLYRyHBv38ov4kHEG7tKHXkuu2vPi8g==
+dgs:
+  graphql:
+    graphiql:
+      enabled: true
+    introspection:
+      enabled: true

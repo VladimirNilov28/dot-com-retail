@@ -1,0 +1,4 @@
+extend type Query {
+  product(id: ID, slug: String): Product
+  products: [Product!]!
+}

@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
+import ee.bytecore.backend.enums.PaymentMethodType;
 import ee.bytecore.backend.enums.PaymentStatus;
 
 import jakarta.persistence.*;
@@ -44,8 +45,10 @@ public class PaymentDetails {
     @NotNull @Size(max = 255) @Column(name = "provider", nullable = false)
     private String provider;
 
-    @NotNull @Size(max = 255) @Column(name = "type", nullable = false)
-    private String type;
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(name = "type", nullable = false)
+    private PaymentMethodType type;
 
     @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.NAMED_ENUM)
@@ -60,7 +63,7 @@ public class PaymentDetails {
     @Column(nullable = false)
     private Instant updatedAt;
 
-    public static PaymentDetails create(Order order, BigDecimal amount, String provider, String type) {
+    public static PaymentDetails create(Order order, BigDecimal amount, String provider, PaymentMethodType type) {
         PaymentDetails paymentDetails = new PaymentDetails();
         paymentDetails.order = order;
         paymentDetails.amount = amount;

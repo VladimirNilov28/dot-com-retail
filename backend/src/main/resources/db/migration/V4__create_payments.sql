@@ -42,8 +42,7 @@ CREATE TABLE payment_details (
     order_id bigint NOT NULL,
     amount decimal(10, 2) NOT NULL CHECK (amount >= 0),
     provider varchar(255) NOT NULL,
-    -- TODO extend payment types
-    type varchar(255) NOT NULL,
+    type payment_method_type NOT NULL,
     status payment_status NOT NULL DEFAULT 'PENDING',
     created_at timestamptz NOT NULL DEFAULT NOW(),
     updated_at timestamptz NOT NULL DEFAULT NOW(),

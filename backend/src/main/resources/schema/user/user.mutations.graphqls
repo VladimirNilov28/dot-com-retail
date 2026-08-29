@@ -33,7 +33,7 @@ input UpdateRoleInput {
 
 input CreatePaymentMethodInput {
   method: String!
-  type: String!
+  type: PaymentMethodType!
 }
 
 

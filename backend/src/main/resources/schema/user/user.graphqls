@@ -34,8 +34,7 @@ type UserAddress {
 type UserPaymentMethod {
   id: ID!
   provider: String
-  #TODO Extend payments types
-  type: String
+  type: PaymentMethodType!
   createdAt: Instant!
   updatedAt: Instant!
 }
