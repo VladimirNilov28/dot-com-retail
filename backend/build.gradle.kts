@@ -91,8 +91,8 @@ dependencies {
     // ---------------------
     // Security
     // ---------------------
-    implementation("org.springframework.boot:spring-boot-starter-security")
-    implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
+//    implementation("org.springframework.boot:spring-boot-starter-security")
+//    implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
 
     // ---------------------
     // Database
@@ -351,4 +351,35 @@ tasks.bootJar {
 
 tasks.build {
     dependsOn(tasks.spotlessApply)
+}
+
+// =====================================================
+// Test Data
+// =====================================================
+
+// Fills the database with a sizeable, realistic test dataset.
+// Connection defaults match application-dev.yaml; override with
+// -PdbHost, -PdbPort, -PdbName, -PdbUser, -PdbPassword when needed.
+//   ./gradlew testData
+tasks.register<Exec>("testData") {
+    group = "database"
+    description = "Loads db/testdata/test-data.sql into the database (wipes and repopulates seed data)."
+
+    val dbHost = providers.gradleProperty("dbHost").getOrElse("127.0.0.1")
+    val dbPort = providers.gradleProperty("dbPort").getOrElse("5432")
+    val dbName = providers.gradleProperty("dbName").getOrElse("postgres")
+    val dbUser = providers.gradleProperty("dbUser").getOrElse("postgres")
+    val dbPassword = providers.gradleProperty("dbPassword").getOrElse("postgres")
+    val seedFile = project.file("src/main/resources/db/testdata/test-data.sql")
+
+    environment("PGPASSWORD", dbPassword)
+    commandLine(
+        "psql",
+        "-h", dbHost,
+        "-p", dbPort,
+        "-U", dbUser,
+        "-d", dbName,
+        "-v", "ON_ERROR_STOP=1",
+        "-f", seedFile.absolutePath,
+    )
 }

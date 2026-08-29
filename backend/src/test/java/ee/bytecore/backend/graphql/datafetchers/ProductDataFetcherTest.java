@@ -16,7 +16,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import ee.bytecore.backend.entities.product.Product;
 import ee.bytecore.backend.entities.product.ProductVariant;
-import ee.bytecore.backend.graphql.product.ProductDataFetcher;
+import ee.bytecore.backend.graphql.datafetchers.product.ProductDataFetcher;
 import ee.bytecore.backend.graphql.scalars.GraphQLConfig;
 import ee.bytecore.backend.graphql.scalars.InstantScalar;
 import ee.bytecore.backend.graphql.scalars.LocalDateScalar;
@@ -172,7 +172,12 @@ class ProductDataFetcherTest {
             }
         """;
 
-        graphQlTester.document(query).execute().path("products").entityList(Object.class).hasSize(0);
+        graphQlTester
+                .document(query)
+                .execute()
+                .path("products")
+                .entityList(Object.class)
+                .hasSize(0);
     }
 
     @Test

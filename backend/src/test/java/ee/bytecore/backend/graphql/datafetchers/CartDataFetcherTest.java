@@ -18,7 +18,7 @@ import ee.bytecore.backend.entities.cart.CartItem;
 import ee.bytecore.backend.entities.product.Product;
 import ee.bytecore.backend.entities.product.ProductVariant;
 import ee.bytecore.backend.entities.user.User;
-import ee.bytecore.backend.graphql.cart.CartDataFetcher;
+import ee.bytecore.backend.graphql.datafetchers.cart.CartDataFetcher;
 import ee.bytecore.backend.graphql.scalars.GraphQLConfig;
 import ee.bytecore.backend.graphql.scalars.InstantScalar;
 import ee.bytecore.backend.graphql.scalars.LocalDateScalar;
@@ -193,13 +193,17 @@ class CartDataFetcherTest {
         when(cartRepository.findByUserId(user.getId())).thenReturn(Optional.of(cart));
 
         @Language("GraphQl")
-        var mutation =
-                """
+        var mutation = """
             mutation {
               clearCart
             }
         """;
 
-        graphQlTester.document(mutation).execute().path("clearCart").entity(Boolean.class).isEqualTo(true);
+        graphQlTester
+                .document(mutation)
+                .execute()
+                .path("clearCart")
+                .entity(Boolean.class)
+                .isEqualTo(true);
     }
 }

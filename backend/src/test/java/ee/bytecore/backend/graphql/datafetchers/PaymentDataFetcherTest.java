@@ -24,10 +24,10 @@ import ee.bytecore.backend.entities.user.User;
 import ee.bytecore.backend.enums.OrderStatus;
 import ee.bytecore.backend.enums.PaymentMethodType;
 import ee.bytecore.backend.enums.PaymentStatus;
+import ee.bytecore.backend.graphql.datafetchers.payment.PaymentDataFetcher;
 import ee.bytecore.backend.graphql.scalars.GraphQLConfig;
 import ee.bytecore.backend.graphql.scalars.InstantScalar;
 import ee.bytecore.backend.graphql.scalars.LocalDateScalar;
-import ee.bytecore.backend.graphql.payment.PaymentDataFetcher;
 import ee.bytecore.backend.repositories.payment.OrderRepository;
 import ee.bytecore.backend.repositories.payment.PaymentDetailsRepository;
 
@@ -183,13 +183,19 @@ class PaymentDataFetcherTest {
             }
         """;
 
-        graphQlTester.document(query).execute().path("myOrders").entityList(Object.class).hasSize(0);
+        graphQlTester
+                .document(query)
+                .execute()
+                .path("myOrders")
+                .entityList(Object.class)
+                .hasSize(0);
     }
 
     @Test
     @WithMockUser(username = "test-user")
     void shouldCreateOrderTest() {
-        when(orderRepository.save(org.mockito.ArgumentMatchers.any(Order.class))).thenReturn(order);
+        when(orderRepository.save(org.mockito.ArgumentMatchers.any(Order.class)))
+                .thenReturn(order);
 
         @Language("GraphQl")
         var mutation =
