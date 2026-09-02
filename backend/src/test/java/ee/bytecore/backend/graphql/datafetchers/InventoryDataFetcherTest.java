@@ -18,7 +18,8 @@ import ee.bytecore.backend.entities.inventory.Inventory;
 import ee.bytecore.backend.entities.inventory.Warehouse;
 import ee.bytecore.backend.entities.product.Product;
 import ee.bytecore.backend.entities.product.ProductVariant;
-import ee.bytecore.backend.graphql.datafetchers.inventory.InventoryDataFetcher;
+import ee.bytecore.backend.graphql.datafetchers.inventory.InventoryMutation;
+import ee.bytecore.backend.graphql.datafetchers.inventory.InventoryQuery;
 import ee.bytecore.backend.graphql.scalars.GraphQLConfig;
 import ee.bytecore.backend.graphql.scalars.InstantScalar;
 import ee.bytecore.backend.graphql.scalars.LocalDateScalar;
@@ -33,7 +34,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-@SpringBootTest(classes = {InventoryDataFetcher.class, GraphQLConfig.class, LocalDateScalar.class, InstantScalar.class})
+@SpringBootTest(classes = {InventoryQuery.class, InventoryMutation.class, GraphQLConfig.class, LocalDateScalar.class, InstantScalar.class})
 @EnableDgsMockMvcTest
 @AutoConfigureHttpGraphQlTester
 @Tag("graphql")

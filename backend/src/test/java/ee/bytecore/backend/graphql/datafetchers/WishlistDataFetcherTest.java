@@ -18,7 +18,8 @@ import ee.bytecore.backend.entities.product.ProductVariant;
 import ee.bytecore.backend.entities.user.User;
 import ee.bytecore.backend.entities.wishlist.Wishlist;
 import ee.bytecore.backend.entities.wishlist.WishlistItem;
-import ee.bytecore.backend.graphql.datafetchers.wishlist.WishlistDataFetcher;
+import ee.bytecore.backend.graphql.datafetchers.wishlist.WishlistMutation;
+import ee.bytecore.backend.graphql.datafetchers.wishlist.WishlistQuery;
 import ee.bytecore.backend.graphql.scalars.GraphQLConfig;
 import ee.bytecore.backend.graphql.scalars.InstantScalar;
 import ee.bytecore.backend.graphql.scalars.LocalDateScalar;
@@ -32,7 +33,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-@SpringBootTest(classes = {WishlistDataFetcher.class, GraphQLConfig.class, LocalDateScalar.class, InstantScalar.class})
+@SpringBootTest(classes = {WishlistQuery.class, WishlistMutation.class, GraphQLConfig.class, LocalDateScalar.class, InstantScalar.class})
 @EnableDgsMockMvcTest
 @AutoConfigureHttpGraphQlTester
 @Tag("graphql")

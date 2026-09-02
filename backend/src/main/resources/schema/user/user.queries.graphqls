@@ -1,4 +1,4 @@
 extend type Query {
   me: User!
-  user(id: ID): User!
+  user(id: ID!): User!
 }

@@ -11,16 +11,15 @@ import ee.bytecore.backend.repositories.user.UserPaymentMethodRepository;
 import ee.bytecore.backend.repositories.user.UserRepository;
 
 import com.netflix.graphql.dgs.*;
-import jakarta.validation.constraints.NotNull;
 
 @DgsComponent
-public class UserDataFetcher {
+public class UserQuery {
 
     private final UserRepository userRepository;
     private final UserAddressRepository userAddressRepository;
     private final UserPaymentMethodRepository userPaymentMethodRepository;
 
-    public UserDataFetcher(UserRepository userRepository, UserAddressRepository userAddressRepository, UserPaymentMethodRepository userPaymentMethodRepository) {
+    public UserQuery(UserRepository userRepository, UserAddressRepository userAddressRepository, UserPaymentMethodRepository userPaymentMethodRepository) {
         this.userRepository = userRepository;
         this.userAddressRepository = userAddressRepository;
         this.userPaymentMethodRepository = userPaymentMethodRepository;
@@ -28,7 +27,7 @@ public class UserDataFetcher {
 
     @DgsQuery
     public User me() {
-        //TODO implement 'me:User!' query after Spring Security realization
+        //TODO implement 'me:User!' query after Spring Security implementation
         return null;
     }
 
@@ -62,5 +61,6 @@ public class UserDataFetcher {
     }
 }
 
-//TODO move business logic and repository manipulations to 
+//TODO move business logic and repository manipulations to service
 //TODO replace return null with custom exceptions
+//TODO implement DataLoaders and solve N+1 problem

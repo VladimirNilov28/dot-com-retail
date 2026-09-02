@@ -17,7 +17,7 @@ import org.hibernate.type.SqlTypes;
 @Setter
 @Entity
 @Table(name = "user_payment_methods")
-public class UserPaymentMethod {
+public class  UserPaymentMethod {
     protected UserPaymentMethod() {}
 
     @Id

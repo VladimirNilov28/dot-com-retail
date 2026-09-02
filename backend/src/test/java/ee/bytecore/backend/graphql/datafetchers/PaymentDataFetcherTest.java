@@ -24,7 +24,8 @@ import ee.bytecore.backend.entities.user.User;
 import ee.bytecore.backend.enums.OrderStatus;
 import ee.bytecore.backend.enums.PaymentMethodType;
 import ee.bytecore.backend.enums.PaymentStatus;
-import ee.bytecore.backend.graphql.datafetchers.payment.PaymentDataFetcher;
+import ee.bytecore.backend.graphql.datafetchers.payment.PaymentMutation;
+import ee.bytecore.backend.graphql.datafetchers.payment.PaymentQuery;
 import ee.bytecore.backend.graphql.scalars.GraphQLConfig;
 import ee.bytecore.backend.graphql.scalars.InstantScalar;
 import ee.bytecore.backend.graphql.scalars.LocalDateScalar;
@@ -38,7 +39,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-@SpringBootTest(classes = {PaymentDataFetcher.class, GraphQLConfig.class, LocalDateScalar.class, InstantScalar.class})
+@SpringBootTest(classes = {PaymentQuery.class, PaymentMutation.class, GraphQLConfig.class, LocalDateScalar.class, InstantScalar.class})
 @EnableDgsMockMvcTest
 @AutoConfigureHttpGraphQlTester
 @Tag("graphql")

@@ -22,6 +22,8 @@ import org.gradle.api.tasks.testing.TestDescriptor
 import org.gradle.api.tasks.testing.TestListener
 import org.gradle.api.tasks.testing.TestResult
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
+import org.gradle.kotlin.dsl.withGroovyBuilder
+
 
 // =====================================================
 // Plugins
@@ -47,6 +49,8 @@ plugins {
 
     // Dependency vulnerability scanning
     id("org.owasp.dependencycheck") version "12.1.3"
+
+    id("com.netflix.dgs.codegen") version "8.6.0"
 }
 
 // =====================================================
@@ -91,8 +95,8 @@ dependencies {
     // ---------------------
     // Security
     // ---------------------
-//    implementation("org.springframework.boot:spring-boot-starter-security")
-//    implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
+    implementation("org.springframework.boot:spring-boot-starter-security")
+    implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
 
     // ---------------------
     // Database
@@ -110,9 +114,9 @@ dependencies {
     // GraphQL
     // ---------------------
     implementation(platform("com.netflix.graphql.dgs:graphql-dgs-platform-dependencies:12.0.1"))
-    implementation("com.netflix.graphql.dgs:graphql-dgs-spring-graphql-starter")
-    implementation("com.graphql-java:graphql-java-extended-scalars")
+    implementation("com.netflix.graphql.dgs:dgs-starter")
 
+    implementation("com.graphql-java:graphql-java-extended-scalars")
     // DGS requires json-path 3.0.0 (Jackson 3 support); Spring Boot's own
     // dependency management otherwise downgrades it to the Jackson 2 era 2.10.0.
     implementation("com.jayway.jsonpath:json-path:3.0.0")
@@ -363,7 +367,8 @@ tasks.build {
 //   ./gradlew testData
 tasks.register<Exec>("testData") {
     group = "database"
-    description = "Loads db/testdata/test-data.sql into the database (wipes and repopulates seed data)."
+    description =
+        "Loads db/testdata/test-data.sql into the database (wipes and repopulates seed data)."
 
     val dbHost = providers.gradleProperty("dbHost").getOrElse("127.0.0.1")
     val dbPort = providers.gradleProperty("dbPort").getOrElse("5432")
@@ -382,4 +387,20 @@ tasks.register<Exec>("testData") {
         "-v", "ON_ERROR_STOP=1",
         "-f", seedFile.absolutePath,
     )
+}
+
+tasks.named("generateJava") {
+    withGroovyBuilder {
+        setProperty(
+            "typeMapping",
+            mutableMapOf(
+                "UUID" to "java.util.UUID",
+                "BigDecimal" to "java.math.BigDecimal",
+                "JSON" to "com.fasterxml.jackson.databind.JsonNode",
+                "Instant" to "java.time.Instant",
+                "LocalDate" to "java.time.LocalDate",
+                "Url" to "java.net.URI",
+            ),
+        )
+    }
 }

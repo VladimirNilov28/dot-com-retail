@@ -16,7 +16,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import ee.bytecore.backend.entities.product.Product;
 import ee.bytecore.backend.entities.product.ProductVariant;
-import ee.bytecore.backend.graphql.datafetchers.product.ProductDataFetcher;
+import ee.bytecore.backend.graphql.datafetchers.product.ProductMutation;
+import ee.bytecore.backend.graphql.datafetchers.product.ProductQuery;
 import ee.bytecore.backend.graphql.scalars.GraphQLConfig;
 import ee.bytecore.backend.graphql.scalars.InstantScalar;
 import ee.bytecore.backend.graphql.scalars.LocalDateScalar;
@@ -29,7 +30,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-@SpringBootTest(classes = {ProductDataFetcher.class, GraphQLConfig.class, LocalDateScalar.class, InstantScalar.class})
+@SpringBootTest(classes = {ProductQuery.class, ProductMutation.class, GraphQLConfig.class, LocalDateScalar.class, InstantScalar.class})
 @EnableDgsMockMvcTest
 @AutoConfigureHttpGraphQlTester
 @Tag("graphql")
