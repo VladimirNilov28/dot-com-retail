@@ -1,0 +1,21 @@
+input UpdateOrderStatusInput {
+  status: OrderStatus!
+}
+
+input CreatePaymentInput {
+  orderId: ID!
+  provider: String!
+  type: PaymentMethodType!
+}
+
+input UpdatePaymentStatusInput {
+  status: PaymentStatus!
+}
+
+extend type Mutation {
+  createOrder: Order!
+  updateOrderStatus(orderId: ID!, input: UpdateOrderStatusInput!): Order!
+
+  createPayment(input: CreatePaymentInput!): PaymentDetails!
+  updatePaymentStatus(paymentId: ID!, input: UpdatePaymentStatusInput!): PaymentDetails!
+}

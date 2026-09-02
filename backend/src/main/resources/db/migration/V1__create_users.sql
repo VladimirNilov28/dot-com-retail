@@ -1,12 +1,19 @@
 CREATE TYPE user_role AS ENUM (
-    'admin',
-    'user',
-    'support'
+    'ADMIN',
+    'USER',
+    'SUPPORT'
+);
+
+CREATE TYPE payment_method_type AS ENUM (
+    'CARD',
+    'BANK_TRANSFER',
+    'DIGITAL_WALLET',
+    'CASH_ON_DELIVERY'
 );
 
 CREATE TABLE users (
     id bigserial PRIMARY KEY,
-    ROLE user_role NOT NULL DEFAULT 'user',
+    ROLE user_role NOT NULL DEFAULT 'USER',
     username varchar(255) NOT NULL UNIQUE,
     email varchar(255) UNIQUE NOT NULL,
     password_hash varchar(255) NOT NULL,
@@ -35,8 +42,7 @@ CREATE TABLE user_payment_methods (
     id bigserial PRIMARY KEY,
     user_id bigint NOT NULL,
     provider varchar(255),
-    -- TODO extend payment types
-    type varchar(255),
+    type payment_method_type NOT NULL,
     created_at timestamptz NOT NULL DEFAULT NOW(),
     updated_at timestamptz NOT NULL DEFAULT NOW(),
     CONSTRAINT fk_user_payment_methods_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE

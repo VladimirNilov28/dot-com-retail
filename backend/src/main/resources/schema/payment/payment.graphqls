@@ -1,0 +1,53 @@
+enum OrderStatus {
+  PENDING
+  PAID
+  SHIPPING
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  SUCCESS
+  FAILED
+  PENDING
+}
+
+# Shared with User.paymentMethods; keep it here so both domains reference one definition.
+enum PaymentMethodType {
+  CARD
+  BANK_TRANSFER
+  DIGITAL_WALLET
+  CASH_ON_DELIVERY
+}
+
+type Order {
+  id: ID!
+  publicId: UUID!
+  user: User!
+  items: [OrderItem!]!
+  status: OrderStatus!
+  totalAmount: BigDecimal!
+  createdAt: Instant!
+  updatedAt: Instant!
+}
+
+type OrderItem {
+  id: ID!
+  publicId: UUID!
+  order: Order!
+  productVariant: ProductVariant!
+  quantity: Int!
+  priceAtPurchase: BigDecimal!
+}
+
+type PaymentDetails {
+  id: ID!
+  publicId: UUID!
+  order: Order!
+  amount: BigDecimal!
+  provider: String!
+  type: PaymentMethodType!
+  status: PaymentStatus!
+  createdAt: Instant!
+  updatedAt: Instant!
+}

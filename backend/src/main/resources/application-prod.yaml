@@ -5,3 +5,9 @@ spring:
     password: ${DB_PASSWORD}
 jwt:
   secret: ${JWT_SECRET}
+dgs:
+  graphql:
+    introspection:
+      enabled: false
+    graphiql:
+      enabled: false
