@@ -213,7 +213,7 @@ erDiagram
 ## Known Open Points
 
 - **No resolvers implemented yet.** Every `@DgsComponent` class under
-  `graphql/datafetchers/` is currently an empty stub (`UserDataFetcher`,
+  `graphql/datafetchers/` is currently an empty stub (`UserQuery`,
   `ProductDataFetcher`, ...). Root query/mutation/subscription fields fall
   through to the default `PropertyDataFetcher`, which resolves to `null` and
   fails GraphQL's non-null validation for almost every field in this

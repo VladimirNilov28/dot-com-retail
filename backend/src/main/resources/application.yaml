@@ -6,6 +6,9 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
+  docker:
+    compose:
+      file: ../infrastructure/compose.yml
 
 logging:
   level:

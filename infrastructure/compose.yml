@@ -1,0 +1,96 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: postgres
+
+    ports:
+      - "5432:5432"
+
+    environment:
+      POSTGRES_DB: retail
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+
+      HYDRA_DB_USER: ${HYDRA_DB_USER}
+      HYDRA_DB_PASSWORD: ${HYDRA_DB_PASSWORD}
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d retail"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+    volumes:
+      - postgres_volume:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+
+    env_file:
+      - path: ../.env
+        required: true
+
+    restart: unless-stopped
+
+  # Hydra database migrations
+  hydra-migrate:
+    image: oryd/hydra:v26.2.0
+    container_name: hydra-migrate
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    environment:
+      DSN: ${HYDRA_DSN}
+
+    command:
+      - migrate
+      - sql
+      - up
+      - -e
+      - --yes
+
+    env_file:
+      - path: ../.env
+        required: true
+
+    restart: "no"
+
+  # OAuth2/OIDC authorization server
+  hydra:
+    build:
+      context: ./hydra
+
+    container_name: hydra
+
+    depends_on:
+      hydra-migrate:
+        condition: service_completed_successfully
+
+    ports:
+      - "4444:4444"
+      - "4445:4445"
+
+    environment:
+      DSN: ${HYDRA_DSN}
+      SECRETS_SYSTEM: ${HYDRA_SYSTEM_SECRET}
+
+    env_file:
+      - path: ../.env
+        required: true
+
+    restart: unless-stopped
+
+  # TODO:
+  # Spring Boot service
+
+  # TODO:
+  # Angular service
+
+  # TODO:
+  # Kafka service
+
+  # TODO:
+  # Redis service
+
+volumes:
+  postgres_volume:
