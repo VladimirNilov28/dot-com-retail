@@ -33,8 +33,8 @@ public class OrdersSchemaTest {
 
         jdbcTemplate.update(
                 """
-    INSERT INTO users (id, username, email, password_hash, date_of_birth)
-    VALUES (1, 'test-user', 'user@test.com', 'hash', '1991-01-01')
+    INSERT INTO users (id, username, email, date_of_birth)
+    VALUES (1, 'test-user', 'user@test.com', '1991-01-01')
     """);
 
         jdbcTemplate.update("""
@@ -77,8 +77,8 @@ public class OrdersSchemaTest {
 
         jdbcTemplate.update(
                 """
-    INSERT INTO users (id, username, email, password_hash, date_of_birth)
-    VALUES (1, 'test-user', 'user@test.com', 'hash', '1991-01-01')
+    INSERT INTO users (id, username, email, date_of_birth)
+    VALUES (1, 'test-user', 'user@test.com', '1991-01-01')
     """);
 
         jdbcTemplate.update(

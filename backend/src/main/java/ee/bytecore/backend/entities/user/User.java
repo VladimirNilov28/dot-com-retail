@@ -36,9 +36,6 @@ public class User {
     @Column(name = "email", nullable = false, unique = true)
     private String email;
 
-    @Column(name = "password_hash", nullable = false)
-    private String passwordHash;
-
     @Column(name = "date_of_birth", nullable = false)
     private LocalDate dateOfBirth;
 
@@ -50,11 +47,10 @@ public class User {
     @Column(nullable = false)
     private Instant updatedAt;
 
-    public static User create(String username, String email, String passwordHash, LocalDate dateOfBirth) {
+    public static User create(String username, String email, LocalDate dateOfBirth) {
         User user = new User();
         user.username = username;
         user.email = email;
-        user.passwordHash = passwordHash;
         user.dateOfBirth = dateOfBirth;
         return user;
     }

@@ -29,22 +29,22 @@ TRUNCATE TABLE
 -- Users
 -- =====================================================
 
-INSERT INTO users (id, role, username, email, password_hash, date_of_birth) VALUES
-(1, 'ADMIN', 'admin', 'admin@bytecore.ee', '$2a$10$N9qo8uLOickgx2ZMRZoMy.Mrq4Q8x6q6q6q6q6q6q6q6q6q6q6q6q', '1985-02-11'),
-(2, 'SUPPORT', 'kadri.support', 'kadri.tamm@bytecore.ee', '$2a$10$N9qo8uLOickgx2ZMRZoMy.Mrq4Q8x6q6q6q6q6q6q6q6q6q6q6q6q', '1990-06-23'),
-(3, 'USER', 'mart.saar', 'mart.saar@gmail.com', '$2a$10$N9qo8uLOickgx2ZMRZoMy.Mrq4Q8x6q6q6q6q6q6q6q6q6q6q6q6q', '1992-01-15'),
-(4, 'USER', 'liisa.kask', 'liisa.kask@gmail.com', '$2a$10$N9qo8uLOickgx2ZMRZoMy.Mrq4Q8x6q6q6q6q6q6q6q6q6q6q6q6q', '1988-09-02'),
-(5, 'USER', 'jaan.tamm', 'jaan.tamm@hot.ee', '$2a$10$N9qo8uLOickgx2ZMRZoMy.Mrq4Q8x6q6q6q6q6q6q6q6q6q6q6q6q', '1995-11-30'),
-(6, 'USER', 'anna.mets', 'anna.mets@gmail.com', '$2a$10$N9qo8uLOickgx2ZMRZoMy.Mrq4Q8x6q6q6q6q6q6q6q6q6q6q6q6q', '1999-03-18'),
-(7, 'USER', 'peeter.oja', 'peeter.oja@mail.ee', '$2a$10$N9qo8uLOickgx2ZMRZoMy.Mrq4Q8x6q6q6q6q6q6q6q6q6q6q6q6q', '1983-07-07'),
-(8, 'USER', 'kristiina.laur', 'kristiina.laur@gmail.com', '$2a$10$N9qo8uLOickgx2ZMRZoMy.Mrq4Q8x6q6q6q6q6q6q6q6q6q6q6q6q', '1991-12-25'),
-(9, 'USER', 'tanel.roos', 'tanel.roos@gmail.com', '$2a$10$N9qo8uLOickgx2ZMRZoMy.Mrq4Q8x6q6q6q6q6q6q6q6q6q6q6q6q', '1997-04-09'),
-(10, 'USER', 'egle.viik', 'egle.viik@gmail.com', '$2a$10$N9qo8uLOickgx2ZMRZoMy.Mrq4Q8x6q6q6q6q6q6q6q6q6q6q6q6q', '1993-08-14'),
-(11, 'USER', 'raul.kukk', 'raul.kukk@gmail.com', '$2a$10$N9qo8uLOickgx2ZMRZoMy.Mrq4Q8x6q6q6q6q6q6q6q6q6q6q6q6q', '1989-05-05'),
-(12, 'USER', 'marta.lind', 'marta.lind@gmail.com', '$2a$10$N9qo8uLOickgx2ZMRZoMy.Mrq4Q8x6q6q6q6q6q6q6q6q6q6q6q6q', '2000-10-19'),
-(13, 'USER', 'toomas.aas', 'toomas.aas@gmail.com', '$2a$10$N9qo8uLOickgx2ZMRZoMy.Mrq4Q8x6q6q6q6q6q6q6q6q6q6q6q6q', '1986-02-28'),
-(14, 'USER', 'kati.pold', 'kati.pold@gmail.com', '$2a$10$N9qo8uLOickgx2ZMRZoMy.Mrq4Q8x6q6q6q6q6q6q6q6q6q6q6q6q', '1994-06-11'),
-(15, 'USER', 'indrek.vaher', 'indrek.vaher@gmail.com', '$2a$10$N9qo8uLOickgx2ZMRZoMy.Mrq4Q8x6q6q6q6q6q6q6q6q6q6q6q6q', '1998-01-22');
+INSERT INTO users (id, role, username, email, date_of_birth) VALUES
+(1, 'ADMIN', 'admin', 'admin@bytecore.ee', '1985-02-11'),
+(2, 'SUPPORT', 'kadri.support', 'kadri.tamm@bytecore.ee', '1990-06-23'),
+(3, 'USER', 'mart.saar', 'mart.saar@gmail.com', '1992-01-15'),
+(4, 'USER', 'liisa.kask', 'liisa.kask@gmail.com', '1988-09-02'),
+(5, 'USER', 'jaan.tamm', 'jaan.tamm@hot.ee', '1995-11-30'),
+(6, 'USER', 'anna.mets', 'anna.mets@gmail.com', '1999-03-18'),
+(7, 'USER', 'peeter.oja', 'peeter.oja@mail.ee', '1983-07-07'),
+(8, 'USER', 'kristiina.laur', 'kristiina.laur@gmail.com', '1991-12-25'),
+(9, 'USER', 'tanel.roos', 'tanel.roos@gmail.com', '1997-04-09'),
+(10, 'USER', 'egle.viik', 'egle.viik@gmail.com', '1993-08-14'),
+(11, 'USER', 'raul.kukk', 'raul.kukk@gmail.com', '1989-05-05'),
+(12, 'USER', 'marta.lind', 'marta.lind@gmail.com', '2000-10-19'),
+(13, 'USER', 'toomas.aas', 'toomas.aas@gmail.com', '1986-02-28'),
+(14, 'USER', 'kati.pold', 'kati.pold@gmail.com', '1994-06-11'),
+(15, 'USER', 'indrek.vaher', 'indrek.vaher@gmail.com', '1998-01-22');
 
 INSERT INTO user_address (user_id, first_name, last_name, city, country, postal_code, address_line1, address_line2, mobile) VALUES
 (3, 'Mart', 'Saar', 'Tallinn', 'Estonia', '10111', 'Narva mnt 5', NULL, '+37256123456'),

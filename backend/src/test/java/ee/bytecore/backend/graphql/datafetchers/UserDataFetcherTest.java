@@ -58,7 +58,7 @@ class UserDataFetcherTest {
 
     @BeforeEach
     void setUp() {
-        user = User.create("test-user", "test@example.com", "hashed-password", LocalDate.of(1995, 6, 15));
+        user = User.create("test-user", "test@example.com", LocalDate.of(1995, 6, 15));
         user.setId(1L);
 
         userAddress = UserAddress.create(
@@ -229,7 +229,6 @@ class UserDataFetcherTest {
               createUser(input: {
                 username: "test-user"
                 email: "test@example.com"
-                password: "super-secret"
                 dateOfBirth: "1995-06-15"
               }) {
                 username

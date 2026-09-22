@@ -7,11 +7,11 @@ serve:
 
 urls:
   self:
-    issuer: http://localhost:4444
+    issuer: http://127.0.0.1:4444
 
-  login: http://localhost:3000/login
-  consent: http://localhost:3000/consent
-  logout: http://localhost:3000/logout
+  login: http://127.0.0.1:3000/login
+  consent: http://127.0.0.1:3000/consent
+  logout: http://127.0.0.1:3000/logout
 
 log:
   level: debug

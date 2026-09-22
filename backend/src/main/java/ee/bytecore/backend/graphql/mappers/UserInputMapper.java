@@ -12,14 +12,13 @@ import java.util.Arrays;
 
 public class UserInputMapper {
     // Mapping from graphQlType into entity
-    public static User fromCreateInput(CreateUserInput input, String passwordHash) {
+    public static User fromCreateInput(CreateUserInput input) {
         if (input == null) {
             return null;
         }
         return User.create(
                 input.getUsername(),
                 input.getEmail(),
-                passwordHash,
                 input.getDateOfBirth()
         ); //TODO move user creating to user service
 

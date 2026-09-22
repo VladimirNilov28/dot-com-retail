@@ -1,7 +1,10 @@
 CREATE TYPE user_role AS ENUM (
     'ADMIN',
     'USER',
-    'SUPPORT'
+    'SUPPORT',
+    'CATALOG_MANAGER',
+    'ORDER_MANAGER',
+    'WAREHOUSE'
 );
 
 CREATE TYPE payment_method_type AS ENUM (
@@ -16,7 +19,6 @@ CREATE TABLE users (
     ROLE user_role NOT NULL DEFAULT 'USER',
     username varchar(255) NOT NULL UNIQUE,
     email varchar(255) UNIQUE NOT NULL,
-    password_hash varchar(255) NOT NULL,
     date_of_birth date NOT NULL,
     created_at timestamptz NOT NULL DEFAULT NOW(),
     updated_at timestamptz NOT NULL DEFAULT NOW()

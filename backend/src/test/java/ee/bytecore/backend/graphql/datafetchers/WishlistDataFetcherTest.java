@@ -58,7 +58,7 @@ class WishlistDataFetcherTest {
 
     @BeforeEach
     void setUp() {
-        user = User.create("test-user", "test@example.com", "hashed-password", LocalDate.of(1995, 6, 15));
+        user = User.create("test-user", "test@example.com", LocalDate.of(1995, 6, 15));
         wishlist = Wishlist.create(user);
         Product product = Product.create("T-Shirt", "t-shirt", "A plain t-shirt");
         productVariant = ProductVariant.create(product, "TSHIRT-M-BLACK", new BigDecimal("19.99"));

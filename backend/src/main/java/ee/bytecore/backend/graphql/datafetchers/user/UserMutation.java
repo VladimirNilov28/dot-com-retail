@@ -31,10 +31,7 @@ public class UserMutation {
     @DgsMutation
     public User createUser(@InputArgument CreateUserInput input) {
         //TODO move to UserService + add duplicate email/username check + custom exceptions
-        //TODO hash password before storing, do not create real users until this is done
-        String plainPassword = input.getPassword();
-
-        ee.bytecore.backend.entities.user.User newUser = UserInputMapper.fromCreateInput(input, plainPassword);
+        ee.bytecore.backend.entities.user.User newUser = UserInputMapper.fromCreateInput(input);
         ee.bytecore.backend.entities.user.User saved = userRepository.save(newUser);
 
         return UserMapper.toGraphQlType(saved);

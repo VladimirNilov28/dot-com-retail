@@ -33,8 +33,8 @@ public class CascadeDeleteTest {
 
         jdbcTemplate.update(
                 """
-      INSERT INTO users (id, role, username, email, password_hash, date_of_birth)
-      VALUES (1, 'USER', 'username', 'user@test.com', 'hash', '1999-01-01')
+      INSERT INTO users (id, role, username, email, date_of_birth)
+      VALUES (1, 'USER', 'username', 'user@test.com', '1999-01-01')
       """);
 
         jdbcTemplate.update(
@@ -63,8 +63,8 @@ public class CascadeDeleteTest {
 
         jdbcTemplate.update(
                 """
-        INSERT INTO users (id, role, username, email, password_hash, date_of_birth)
-        VALUES (1, 'USER', 'username', 'user@test.com', 'hash', '1991-01-01')
+        INSERT INTO users (id, role, username, email, date_of_birth)
+        VALUES (1, 'USER', 'username', 'user@test.com', '1991-01-01')
         """);
 
         jdbcTemplate.update("""
@@ -110,8 +110,8 @@ public class CascadeDeleteTest {
 
         jdbcTemplate.update(
                 """
-        INSERT INTO users (id, role, username, email, password_hash, date_of_birth)
-        VALUES (1, 'USER', 'username', 'user@test.com', 'hash', '1991-01-01')
+        INSERT INTO users (id, role, username, email, date_of_birth)
+        VALUES (1, 'USER', 'username', 'user@test.com', '1991-01-01')
         """);
 
         jdbcTemplate.update(

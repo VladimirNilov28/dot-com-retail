@@ -83,8 +83,8 @@ class TriggerBehaviorTest {
                         "users",
                         """
             INSERT INTO users
-            (id, username, email, password_hash, date_of_birth)
-            VALUES (1, 'testuser', 'user@test.com', 'hash', '1991-01-01')
+            (id, username, email, date_of_birth)
+            VALUES (1, 'testuser', 'user@test.com', '1991-01-01')
             """,
                         """
             SELECT updated_at
@@ -153,8 +153,8 @@ class TriggerBehaviorTest {
                         "carts",
                         """
             INSERT INTO users
-            (id, username, email, password_hash, date_of_birth)
-            VALUES (1, 'cart-user', 'cart@test.com', 'hash', '1991-01-01');
+            (id, username, email, date_of_birth)
+            VALUES (1, 'cart-user', 'cart@test.com', '1991-01-01');
 
             INSERT INTO carts
             (id, user_id)
@@ -179,8 +179,8 @@ class TriggerBehaviorTest {
                         "user_address",
                         """
             INSERT INTO users
-            (id, username, email, password_hash, date_of_birth)
-            VALUES (1, 'address-user', 'address@test.com', 'hash', '1991-01-01');
+            (id, username, email, date_of_birth)
+            VALUES (1, 'address-user', 'address@test.com', '1991-01-01');
 
             INSERT INTO user_address
             (id, user_id, city)
@@ -205,8 +205,8 @@ class TriggerBehaviorTest {
                         "user_payment_methods",
                         """
             INSERT INTO users
-            (id, username, email, password_hash, date_of_birth)
-            VALUES (1, 'payment-user', 'payment@test.com', 'hash', '1991-01-01');
+            (id, username, email, date_of_birth)
+            VALUES (1, 'payment-user', 'payment@test.com', '1991-01-01');
 
             INSERT INTO user_payment_methods
             (id, user_id, provider, type)

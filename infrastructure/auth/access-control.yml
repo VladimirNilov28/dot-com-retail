@@ -1,0 +1,159 @@
+# Declarative access-control specification for the retail application.
+#
+# This file is the source of truth for:
+#   - application roles (owned by the Spring/retail domain, never stored in Hydra/Kratos)
+#   - OAuth2 scopes exposed by the API
+#   - role -> scope mapping (forward-looking metadata; not yet consumed by any
+#     runtime enforcement — no Spring authorization reads this today)
+#   - OAuth2 client desired state, reconciled into Ory Hydra by the
+#     infrastructure/hydra/bootstrap mini-service
+#
+# The `roles[].scopes` mapping has no runtime consumer yet. It exists purely as
+# forward-looking documentation for a future Spring-side authorization task
+# (role -> GrantedAuthority mapping, @PreAuthorize, GraphQL authorization, etc).
+#
+# The Hydra bootstrap service does NOT filter the `bytecore-web` client's scope
+# list by role. A client's `scope` field is always the full, space-joined,
+# sorted list of every scope declared below — the role -> scope mapping is not
+# used to compute it.
+
+version: 1
+
+scopes:
+  - name: user:read
+    description: >
+      Read a user's profile, addresses, and payment methods (me / user query,
+      nested addresses / paymentMethods fields).
+  - name: user:write
+    description: >
+      Create, update, or delete a user, including self-service address and
+      payment-method management and admin/support-initiated management of a
+      user's address or payment methods (createUser, deleteUser,
+      addMyAddress, updateMyAddress, deleteMyAddress, deleteUserAddress,
+      addMyPaymentMethod, deleteMyPaymentMethod, addUserPaymentMethod,
+      deleteUserPaymentMethod).
+  - name: user:manage-role
+    description: >
+      Change a user's assigned role (updateUserRole). Kept separate from
+      user:write because it is a privileged, security-sensitive action.
+  - name: product:read
+    description: Query products and product variants (product, products).
+  - name: product:write
+    description: >
+      Create, update, or delete products and product variants
+      (createProduct, updateProduct, deleteProduct, createProductVariant,
+      updateProductVariant, deleteProductVariant).
+  - name: category:read
+    description: Query categories (category, categories).
+  - name: category:write
+    description: >
+      Create, update, or delete categories (createCategory, updateCategory,
+      deleteCategory).
+  - name: cart:read
+    description: Query the caller's cart (myCart).
+  - name: cart:write
+    description: >
+      Modify the caller's cart (addCartItem, updateCartItem, removeCartItem,
+      clearCart).
+  - name: wishlist:read
+    description: Query the caller's wishlist (myWishlist).
+  - name: wishlist:write
+    description: >
+      Modify the caller's wishlist (addWishlistItem, removeWishlistItem).
+  - name: warehouse:read
+    description: >
+      Query warehouses and their inventory (warehouse, warehouses, and
+      nested Inventory fields).
+  - name: warehouse:write
+    description: >
+      Create, update, or delete warehouses and set inventory stock levels
+      (createWarehouse, updateWarehouse, deleteWarehouse, setInventory).
+  - name: order:read
+    description: >
+      Query orders and subscribe to order status changes (order, myOrders,
+      orderStatusChanged).
+  - name: order:write
+    description: Create an order / checkout (createOrder).
+  - name: order:manage-status
+    description: >
+      Transition an order's status (updateOrderStatus). Kept separate from
+      order:write because it is a privileged operational action distinct
+      from customer-initiated checkout.
+  - name: payment:read
+    description: Read payment details attached to an order.
+  - name: payment:write
+    description: Create a payment for an order (createPayment).
+  - name: payment:manage-status
+    description: >
+      Transition a payment's status (updatePaymentStatus). Kept separate
+      from payment:write because it is a privileged operational action.
+
+roles:
+  - name: ADMIN
+    description: Full administrative access to every declared capability.
+    scopes: "*" # Sentinel: expands to every scope declared above. Tooling
+    # MUST expand this to a concrete scope list before using it for
+    # anything; it is never sent to Hydra as a literal "*" scope string.
+
+  - name: USER
+    description: Regular authenticated customer; self-service capabilities only.
+    scopes:
+      - user:read
+      - user:write
+      - product:read
+      - category:read
+      - cart:read
+      - cart:write
+      - wishlist:read
+      - wishlist:write
+      - order:read
+      - order:write
+      - payment:read
+      - payment:write
+
+  - name: SUPPORT
+    description: >
+      Customer-support agent; can view and assist customers but has no
+      catalog, warehouse, order-status, or role-management authority.
+    scopes:
+      - user:read
+      - user:write
+      - order:read
+      - payment:read
+
+  - name: CATALOG_MANAGER
+    description: Manages the product and category catalog.
+    scopes:
+      - product:read
+      - product:write
+      - category:read
+      - category:write
+
+  - name: ORDER_MANAGER
+    description: Manages order lifecycle and payment status operationally.
+    scopes:
+      - order:read
+      - order:manage-status
+      - payment:read
+      - payment:manage-status
+
+  - name: WAREHOUSE
+    description: Manages warehouses and inventory stock levels.
+    scopes:
+      - warehouse:read
+      - warehouse:write
+
+clients:
+  - client_id: bytecore-web
+    client_name: Bytecore Web (SPA)
+    grant_types:
+      - authorization_code
+      - refresh_token
+    response_types:
+      - code
+    token_endpoint_auth_method: none
+    redirect_uris:
+      - http://localhost:4200/auth/callback
+    # scope is derived by the bootstrap service as the space-joined, sorted
+    # list of every scope declared above — this value is not read directly.
+    scope: __ALL_DECLARED_SCOPES__

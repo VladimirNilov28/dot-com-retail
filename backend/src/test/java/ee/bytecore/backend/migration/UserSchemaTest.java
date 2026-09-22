@@ -36,8 +36,8 @@ public class UserSchemaTest {
 
         Executable inputWithNullEmail = () -> jdbcTemplate.update(
                 """
-    INSERT INTO users (role, username, email, password_hash, date_of_birth)
-    VALUES ('USER', 'testuser', NULL, 'hash', '2000-01-01')
+    INSERT INTO users (role, username, email, date_of_birth)
+    VALUES ('USER', 'testuser', NULL, '2000-01-01')
     """);
 
         assertThrows(DataIntegrityViolationException.class, inputWithNullEmail);
@@ -50,14 +50,14 @@ public class UserSchemaTest {
 
         jdbc.update(
                 """
-    INSERT INTO users (role, username, email, password_hash, date_of_birth)
-    VALUES ('USER', 'testuser', 'user@test.com', 'hash', '2000-01-01')
+    INSERT INTO users (role, username, email, date_of_birth)
+    VALUES ('USER', 'testuser', 'user@test.com', '2000-01-01')
     """);
 
         Executable inputSameEmail = () -> jdbc.update(
                 """
-    INSERT INTO users (role, username, email, password_hash, date_of_birth)
-    VALUES ('USER', 'testuser', 'user@test.com', 'hash', '2000-01-01')
+    INSERT INTO users (role, username, email, date_of_birth)
+    VALUES ('USER', 'testuser', 'user@test.com', '2000-01-01')
     """);
         assertThrows(DuplicateKeyException.class, inputSameEmail);
     }
@@ -120,8 +120,8 @@ public class UserSchemaTest {
 
         jdbc.update(
                 """
-    INSERT INTO users (id, role, username, email, password_hash, date_of_birth)
-    VALUES (1, 'USER', 'testuser', 'user@test.com', 'hash', '2000-01-01')
+    INSERT INTO users (id, role, username, email, date_of_birth)
+    VALUES (1, 'USER', 'testuser', 'user@test.com', '2000-01-01')
     """);
 
         jdbc.update("""

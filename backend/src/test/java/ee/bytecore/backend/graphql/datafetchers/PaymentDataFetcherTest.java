@@ -63,7 +63,7 @@ class PaymentDataFetcherTest {
 
     @BeforeEach
     void setUp() {
-        user = User.create("test-user", "test@example.com", "hashed-password", LocalDate.of(1995, 6, 15));
+        user = User.create("test-user", "test@example.com", LocalDate.of(1995, 6, 15));
         order = Order.create(user, OrderStatus.PENDING, new BigDecimal("39.98"));
         paymentDetails = PaymentDetails.create(order, new BigDecimal("39.98"), "mastercard", PaymentMethodType.CARD);
     }

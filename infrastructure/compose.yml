@@ -14,6 +14,9 @@ services:
       HYDRA_DB_USER: ${HYDRA_DB_USER}
       HYDRA_DB_PASSWORD: ${HYDRA_DB_PASSWORD}
 
+      KRATOS_DB_USER: ${KRATOS_DB_USER}
+      KRATOS_DB_PASSWORD: ${KRATOS_DB_PASSWORD}
+
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d retail"]
       interval: 5s
@@ -73,6 +76,80 @@ services:
     environment:
       DSN: ${HYDRA_DSN}
       SECRETS_SYSTEM: ${HYDRA_SYSTEM_SECRET}
+
+    env_file:
+      - path: ../.env
+        required: true
+
+    restart: unless-stopped
+
+  # Reconciles declarative OAuth2 client state into Hydra (idempotent, one-shot)
+  hydra-bootstrap:
+    build:
+      context: ./hydra/bootstrap
+
+    container_name: hydra-bootstrap
+
+    depends_on:
+      hydra:
+        condition: service_started
+
+    environment:
+      HYDRA_ADMIN_URL: ${HYDRA_ADMIN_URL}
+      ACCESS_CONTROL_FILE: /app/access-control.yml
+
+    volumes:
+      - ./auth/access-control.yml:/app/access-control.yml:ro
+
+    env_file:
+      - path: ../.env
+        required: true
+
+    restart: "no"
+
+  # Kratos database migrations
+  kratos-migrate:
+    image: oryd/kratos:v26.2.0
+    container_name: kratos-migrate
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    environment:
+      DSN: ${KRATOS_DSN}
+
+    command:
+      - migrate
+      - sql
+      - -e
+      - --yes
+
+    env_file:
+      - path: ../.env
+        required: true
+
+    restart: "no"
+
+  # Identity and credential management
+  kratos:
+    build:
+      context: ./kratos
+
+    container_name: kratos
+
+    depends_on:
+      kratos-migrate:
+        condition: service_completed_successfully
+
+    ports:
+      - "4433:4433"
+      - "4434:4434"
+
+    environment:
+      DSN: ${KRATOS_DSN}
+      SECRETS_COOKIE: ${KRATOS_SECRETS_COOKIE}
+      SECRETS_CIPHER: ${KRATOS_SECRETS_CIPHER}
 
     env_file:
       - path: ../.env

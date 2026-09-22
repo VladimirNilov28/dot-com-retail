@@ -1,0 +1,34 @@
+version: v26.2.0
+
+serve:
+  public:
+    base_url: http://localhost:4433/
+    cors:
+      enabled: true
+  admin:
+    base_url: http://localhost:4434/
+
+selfservice:
+  default_browser_return_url: http://localhost:3000/
+  allowed_return_urls:
+    - http://localhost:3000/
+  methods:
+    password:
+      enabled: true
+  flows:
+    registration:
+      enabled: true
+    login:
+      enabled: true
+    settings:
+      enabled: true
+
+identity:
+  default_schema_id: default
+  schemas:
+    - id: default
+      url: file:///etc/kratos/identity.schema.json
+
+log:
+  level: debug
+  format: text
