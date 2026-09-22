@@ -1,12 +1,30 @@
+import logging
 import re
 from dataclasses import dataclass
 from typing import Union
 
 import yaml
 
-SCOPE_NAME_PATTERN = re.compile(r"^[a-z][a-z-]*:[a-z][a-z-]*$")
+import hydra_client
+import kratos_client
+from config import Config
 
+logger = logging.getLogger(__name__)
+
+SCOPE_NAME_PATTERN = re.compile(r"^[a-z][a-z-]*:[a-z][a-z-]*$")
 ADMIN_WILDCARD = "*"
+
+# Fields the bootstrap owns and reconciles on the Hydra client. Any other
+# field Hydra returns (timestamps, internal metadata, etc.) is ignored so
+# re-runs don't spuriously report a diff.
+_MANAGED_CLIENT_FIELDS = (
+    "client_name",
+    "grant_types",
+    "response_types",
+    "token_endpoint_auth_method",
+    "redirect_uris",
+    "scope",
+)
 
 
 class AccessControlSpecError(ValueError):
@@ -52,7 +70,7 @@ def expand_admin_scopes(spec: AccessControlSpec) -> list[str]:
     return sorted(scope.name for scope in spec.scopes)
 
 
-def load_and_validate(path: str) -> AccessControlSpec:
+def load_and_validate_spec(path: str) -> AccessControlSpec:
     with open(path, encoding="utf-8") as f:
         raw = yaml.safe_load(f)
 
@@ -143,3 +161,112 @@ def _parse_clients(raw_clients, path: str) -> list[ClientSpec]:
         )
 
     return clients
+
+
+# --- Hydra OAuth2 client reconciliation ---
+
+
+def _build_desired_client_payload(client: ClientSpec, spec: AccessControlSpec) -> dict:
+    all_scopes = sorted(scope.name for scope in spec.scopes)
+    return {
+        "client_id": client.client_id,
+        "client_name": client.client_name,
+        "grant_types": list(client.grant_types),
+        "response_types": list(client.response_types),
+        "token_endpoint_auth_method": client.token_endpoint_auth_method,
+        "redirect_uris": list(client.redirect_uris),
+        "scope": " ".join(all_scopes),
+    }
+
+
+def _is_client_in_sync(existing: dict, desired: dict) -> bool:
+    for field in _MANAGED_CLIENT_FIELDS:
+        existing_value = existing.get(field)
+        desired_value = desired.get(field)
+
+        if field == "scope":
+            if set((existing_value or "").split()) != set((desired_value or "").split()):
+                return False
+            continue
+
+        if isinstance(desired_value, list):
+            if set(existing_value or []) != set(desired_value):
+                return False
+            continue
+
+        if existing_value != desired_value:
+            return False
+
+    return True
+
+
+def reconcile_hydra_clients(admin_url: str, spec: AccessControlSpec) -> None:
+    for client in spec.clients:
+        desired = _build_desired_client_payload(client, spec)
+        existing = hydra_client.get_client(admin_url, client.client_id)
+
+        if existing is None:
+            hydra_client.create_client(admin_url, desired)
+            logger.info("created Hydra client %s", client.client_id)
+            continue
+
+        if not _is_client_in_sync(existing, desired):
+            hydra_client.update_client(admin_url, client.client_id, desired)
+            logger.info("updated Hydra client %s", client.client_id)
+            continue
+
+        logger.info("Hydra client %s already in sync, no-op", client.client_id)
+
+
+# --- Kratos dev admin identity reconciliation ---
+
+# The dev admin's application role, stored in metadata_admin — never exposed
+# via public Kratos APIs (e.g. /sessions/whoami), only through Admin API
+# calls. This is not a general-purpose role store; it exists solely to seed
+# the one bootstrapped dev admin identity.
+DEV_ADMIN_ROLE = "ADMIN"
+
+
+def reconcile_kratos_admin_identity(config: Config, schema_id: str = "default") -> None:
+    existing = kratos_client.find_identity_by_email(config.kratos_admin_url, config.admin_email)
+
+    if existing is None:
+        identity = kratos_client.create_identity(
+            config.kratos_admin_url,
+            schema_id,
+            config.admin_email,
+            config.admin_password,
+            metadata_admin={"role": DEV_ADMIN_ROLE},
+        )
+        logger.info(
+            "created Kratos identity %s (id=%s) with role=%s",
+            config.admin_email,
+            identity.get("id"),
+            DEV_ADMIN_ROLE,
+        )
+        return
+
+    current_role = (existing.get("metadata_admin") or {}).get("role")
+    if current_role == DEV_ADMIN_ROLE:
+        logger.info(
+            "Kratos identity %s already exists with role=%s, no-op", config.admin_email, DEV_ADMIN_ROLE
+        )
+        return
+
+    kratos_client.set_identity_metadata_admin(
+        config.kratos_admin_url, existing["id"], {"role": DEV_ADMIN_ROLE}
+    )
+    logger.info(
+        "updated Kratos identity %s metadata_admin.role -> %s", config.admin_email, DEV_ADMIN_ROLE
+    )
+
+
+def run(config: Config) -> None:
+    hydra_client.wait_until_ready(config.hydra_admin_url, config.retry_attempts, config.retry_delay_seconds)
+    kratos_client.wait_until_ready(
+        config.kratos_admin_url, config.retry_attempts, config.retry_delay_seconds
+    )
+
+    spec = load_and_validate_spec(config.access_control_file)
+    reconcile_hydra_clients(config.hydra_admin_url, spec)
+    reconcile_kratos_admin_identity(config)

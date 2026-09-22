@@ -95,7 +95,7 @@ dependencies {
     // ---------------------
     // Security
     // ---------------------
-    implementation("org.springframework.boot:spring-boot-starter-security-oauth2-resource-server")
+    implementation("org.springframework.boot:spring-boot-starter-oauth2-resource-server")
     // ---------------------
     // Database
     // ---------------------
@@ -104,8 +104,10 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     runtimeOnly("org.postgresql:postgresql")
 
-    // Database migrations
-    implementation("org.springframework.boot:spring-boot-starter-flyway")
+    // Database migrations. Boot 4 moved Flyway autoconfiguration into its own
+    // module (spring-boot-flyway); flyway-database-postgresql itself only
+    // brings in flyway-core, it does not trigger autoconfiguration.
+    implementation("org.springframework.boot:spring-boot-flyway")
     implementation("org.flywaydb:flyway-database-postgresql")
 
     // ---------------------
@@ -124,7 +126,7 @@ dependencies {
     // ---------------------
 
     // Plain blocking Kafka listeners (@KafkaListener) — no reactor-kafka
-    implementation("org.springframework.boot:spring-boot-starter-kafka")
+    implementation("org.springframework.kafka:spring-kafka")
 
     // ---------------------
     // API Documentation

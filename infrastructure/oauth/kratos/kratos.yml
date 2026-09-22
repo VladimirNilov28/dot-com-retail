@@ -2,26 +2,25 @@ version: v26.2.0
 
 serve:
   public:
-    base_url: http://localhost:4433/
+    base_url: http://127.0.0.1:4433/
     cors:
       enabled: true
   admin:
-    base_url: http://localhost:4434/
+    base_url: http://127.0.0.1:4434/
 
 selfservice:
-  default_browser_return_url: http://localhost:3000/
+  default_browser_return_url: http://127.0.0.1:3000/
   allowed_return_urls:
-    - http://localhost:3000/
+    - http://127.0.0.1:3000/
+    - http://127.0.0.1:4446/
   methods:
     password:
       enabled: true
   flows:
     registration:
       enabled: true
-    login:
-      enabled: true
-    settings:
-      enabled: true
+    login: {}
+    settings: {}
 
 identity:
   default_schema_id: default

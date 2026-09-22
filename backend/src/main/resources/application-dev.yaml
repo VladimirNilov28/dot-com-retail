@@ -4,7 +4,6 @@ spring:
     username: retail
     password: retail
 
-
 dgs:
   graphql:
     graphiql:

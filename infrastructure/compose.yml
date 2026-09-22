@@ -61,7 +61,7 @@ services:
   # OAuth2/OIDC authorization server
   hydra:
     build:
-      context: ./hydra
+      context: ./oauth/hydra
 
     container_name: hydra
 
@@ -82,30 +82,6 @@ services:
         required: true
 
     restart: unless-stopped
-
-  # Reconciles declarative OAuth2 client state into Hydra (idempotent, one-shot)
-  hydra-bootstrap:
-    build:
-      context: ./hydra/bootstrap
-
-    container_name: hydra-bootstrap
-
-    depends_on:
-      hydra:
-        condition: service_started
-
-    environment:
-      HYDRA_ADMIN_URL: ${HYDRA_ADMIN_URL}
-      ACCESS_CONTROL_FILE: /app/access-control.yml
-
-    volumes:
-      - ./auth/access-control.yml:/app/access-control.yml:ro
-
-    env_file:
-      - path: ../.env
-        required: true
-
-    restart: "no"
 
   # Kratos database migrations
   kratos-migrate:
@@ -134,7 +110,7 @@ services:
   # Identity and credential management
   kratos:
     build:
-      context: ./kratos
+      context: ./oauth/kratos
 
     container_name: kratos
 
@@ -150,6 +126,42 @@ services:
       DSN: ${KRATOS_DSN}
       SECRETS_COOKIE: ${KRATOS_SECRETS_COOKIE}
       SECRETS_CIPHER: ${KRATOS_SECRETS_CIPHER}
+
+    env_file:
+      - path: ../.env
+        required: true
+
+    restart: unless-stopped
+
+  # Hydra <-> Kratos bootstrap (client + dev admin identity reconciliation)
+  # and the minimal Hydra login/consent challenge bridge. Long-running: it
+  # bootstraps once at startup, then serves /login and /consent.
+  oauth-service:
+    build:
+      context: ./oauth/service
+
+    container_name: oauth-service
+
+    depends_on:
+      hydra:
+        condition: service_started
+      kratos:
+        condition: service_started
+
+    ports:
+      - "4446:4446"
+
+    environment:
+      HYDRA_ADMIN_URL: ${HYDRA_ADMIN_URL}
+      KRATOS_ADMIN_URL: ${KRATOS_ADMIN_URL}
+      KRATOS_PUBLIC_URL: ${KRATOS_PUBLIC_URL}
+      KRATOS_BROWSER_URL: ${KRATOS_BROWSER_URL}
+      ACCESS_CONTROL_FILE: /app/access-control.yml
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+
+    volumes:
+      - ./auth/access-control.yml:/app/access-control.yml:ro
 
     env_file:
       - path: ../.env
