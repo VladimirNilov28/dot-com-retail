@@ -5,6 +5,7 @@ import java.util.List;
 import com.netflix.dgs.codegen.generated.types.User;
 import com.netflix.dgs.codegen.generated.types.UserAddress;
 import com.netflix.dgs.codegen.generated.types.UserPaymentMethod;
+import ee.bytecore.backend.config.CurrentUser;
 import ee.bytecore.backend.graphql.mappers.UserMapper;
 import ee.bytecore.backend.repositories.user.UserAddressRepository;
 import ee.bytecore.backend.repositories.user.UserPaymentMethodRepository;
@@ -26,9 +27,10 @@ public class UserQuery {
     }
 
     @DgsQuery
-    public User me() {
-        //TODO implement 'me:User!' query after Spring Security implementation
-        return null;
+    public User me(@CurrentUser String sub) {
+        return userRepository.findById(Long.valueOf(sub))
+                .map(UserMapper::toGraphQlType)
+                .orElse(null);
     }
 
     @DgsQuery

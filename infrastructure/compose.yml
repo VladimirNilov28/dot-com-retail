@@ -150,9 +150,11 @@ services:
 
     ports:
       - "4446:4446"
+      - "127.0.0.1:4447:4447"
 
     environment:
       HYDRA_ADMIN_URL: ${HYDRA_ADMIN_URL}
+      HYDRA_PUBLIC_URL: ${HYDRA_PUBLIC_URL}
       KRATOS_ADMIN_URL: ${KRATOS_ADMIN_URL}
       KRATOS_PUBLIC_URL: ${KRATOS_PUBLIC_URL}
       KRATOS_BROWSER_URL: ${KRATOS_BROWSER_URL}
@@ -161,7 +163,7 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
 
     volumes:
-      - ./auth/access-control.yml:/app/access-control.yml:ro
+      - ./oauth/access-control.yml:/app/access-control.yml:ro
 
     env_file:
       - path: ../.env

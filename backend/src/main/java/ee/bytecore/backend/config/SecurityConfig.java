@@ -11,6 +11,7 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
 
+import java.lang.annotation.Target;
 import java.util.ArrayList;
 
 import static org.springframework.security.config.Customizer.withDefaults;
@@ -63,8 +64,8 @@ public class SecurityConfig {
                 )
 
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/graphiql/**").hasRole("ADMIN")
-                        .requestMatchers("/graphql/**").permitAll()
+                        .requestMatchers("/graphiql/**").permitAll()
+                        .requestMatchers("/graphql").authenticated()
                         .anyRequest().denyAll()
                 )
 

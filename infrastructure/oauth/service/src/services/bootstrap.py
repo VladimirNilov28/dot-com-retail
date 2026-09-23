@@ -5,8 +5,8 @@ from typing import Union
 
 import yaml
 
-import hydra_client
-import kratos_client
+from clients.hydra import HydraClient
+from clients.kratos import KratosClient
 from config import Config
 
 logger = logging.getLogger(__name__)
@@ -200,18 +200,18 @@ def _is_client_in_sync(existing: dict, desired: dict) -> bool:
     return True
 
 
-def reconcile_hydra_clients(admin_url: str, spec: AccessControlSpec) -> None:
+def reconcile_hydra_clients(hydra_client: HydraClient, spec: AccessControlSpec) -> None:
     for client in spec.clients:
         desired = _build_desired_client_payload(client, spec)
-        existing = hydra_client.get_client(admin_url, client.client_id)
+        existing = hydra_client.get_client(client.client_id)
 
         if existing is None:
-            hydra_client.create_client(admin_url, desired)
+            hydra_client.create_client(desired)
             logger.info("created Hydra client %s", client.client_id)
             continue
 
         if not _is_client_in_sync(existing, desired):
-            hydra_client.update_client(admin_url, client.client_id, desired)
+            hydra_client.update_client(client.client_id, desired)
             logger.info("updated Hydra client %s", client.client_id)
             continue
 
@@ -227,12 +227,13 @@ def reconcile_hydra_clients(admin_url: str, spec: AccessControlSpec) -> None:
 DEV_ADMIN_ROLE = "ADMIN"
 
 
-def reconcile_kratos_admin_identity(config: Config, schema_id: str = "default") -> None:
-    existing = kratos_client.find_identity_by_email(config.kratos_admin_url, config.admin_email)
+def reconcile_kratos_admin_identity(
+    kratos_client: KratosClient, config: Config, schema_id: str = "default"
+) -> None:
+    existing = kratos_client.find_identity_by_email(config.admin_email)
 
     if existing is None:
         identity = kratos_client.create_identity(
-            config.kratos_admin_url,
             schema_id,
             config.admin_email,
             config.admin_password,
@@ -253,20 +254,16 @@ def reconcile_kratos_admin_identity(config: Config, schema_id: str = "default") 
         )
         return
 
-    kratos_client.set_identity_metadata_admin(
-        config.kratos_admin_url, existing["id"], {"role": DEV_ADMIN_ROLE}
-    )
+    kratos_client.set_identity_metadata_admin(existing["id"], {"role": DEV_ADMIN_ROLE})
     logger.info(
         "updated Kratos identity %s metadata_admin.role -> %s", config.admin_email, DEV_ADMIN_ROLE
     )
 
 
-def run(config: Config) -> None:
-    hydra_client.wait_until_ready(config.hydra_admin_url, config.retry_attempts, config.retry_delay_seconds)
-    kratos_client.wait_until_ready(
-        config.kratos_admin_url, config.retry_attempts, config.retry_delay_seconds
-    )
+def run(config: Config, hydra_client: HydraClient, kratos_client: KratosClient) -> None:
+    hydra_client.wait_until_ready(config.retry_attempts, config.retry_delay_seconds)
+    kratos_client.wait_until_ready(config.retry_attempts, config.retry_delay_seconds)
 
     spec = load_and_validate_spec(config.access_control_file)
-    reconcile_hydra_clients(config.hydra_admin_url, spec)
-    reconcile_kratos_admin_identity(config)
+    reconcile_hydra_clients(hydra_client, spec)
+    reconcile_kratos_admin_identity(kratos_client, config)
