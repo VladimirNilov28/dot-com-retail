@@ -1,0 +1,41 @@
+input CreateProductInput {
+  name: String!
+  slug: String!
+  description: String
+  categoryIds: [ID!]
+}
+
+input UpdateProductInput {
+  name: String
+  slug: String
+  description: String
+  categoryIds: [ID!]
+}
+
+input CreateProductVariantInput {
+  productId: ID!
+  sku: String!
+  price: BigDecimal!
+  attributes: JSON
+  barcode: String
+  weightGrams: Int
+}
+
+input UpdateProductVariantInput {
+  sku: String
+  price: BigDecimal
+  attributes: JSON
+  barcode: String
+  weightGrams: Int
+  isActive: Boolean
+}
+
+extend type Mutation {
+  createProduct(input: CreateProductInput!): Product!
+  updateProduct(productId: ID!, input: UpdateProductInput!): Product!
+  deleteProduct(productId: ID!): Boolean!
+
+  createProductVariant(input: CreateProductVariantInput!): ProductVariant!
+  updateProductVariant(variantId: ID!, input: UpdateProductVariantInput!): ProductVariant!
+  deleteProductVariant(variantId: ID!): Boolean!
+}

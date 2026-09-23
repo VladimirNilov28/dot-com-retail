@@ -1,0 +1,35 @@
+serve:
+  public:
+    port: 4444
+
+  admin:
+    port: 4445
+
+urls:
+  self:
+    issuer: http://127.0.0.1:4444
+
+  login: http://127.0.0.1:4446/login
+  consent: http://127.0.0.1:4446/consent
+  logout: http://127.0.0.1:3000/logout
+
+log:
+  level: debug
+  format: text
+
+oauth2:
+  expose_internal_errors: true
+  # Custom claims set via the consent session's access_token data are nested
+  # under the "ext" claim unless explicitly whitelisted here — this promotes
+  # "role" to a genuine top-level JWT claim so Spring's JWT authority
+  # conversion (which reads a top-level `role` claim) can find it.
+  allowed_top_level_claims:
+    - role
+
+# JWT access tokens so the Spring resource server (which validates JWTs
+# locally via the issuer's JWKS) can decode `sub` without an introspection
+# call. Ory generally recommends opaque tokens + introspection instead
+# (see docs), but this repo's resource server is already configured for
+# JWT decoding, so this keeps the token consumable end-to-end for now.
+strategies:
+  access_token: jwt

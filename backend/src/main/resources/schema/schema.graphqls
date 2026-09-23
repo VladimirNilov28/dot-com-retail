@@ -1,0 +1,3 @@
+type Mutation
+type Query
+type Subscription

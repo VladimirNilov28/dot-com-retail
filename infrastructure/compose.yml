@@ -1,0 +1,187 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: postgres
+
+    ports:
+      - "5432:5432"
+
+    environment:
+      POSTGRES_DB: retail
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+
+      HYDRA_DB_USER: ${HYDRA_DB_USER}
+      HYDRA_DB_PASSWORD: ${HYDRA_DB_PASSWORD}
+
+      KRATOS_DB_USER: ${KRATOS_DB_USER}
+      KRATOS_DB_PASSWORD: ${KRATOS_DB_PASSWORD}
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d retail"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+    volumes:
+      - postgres_volume:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+
+    env_file:
+      - path: ../.env
+        required: true
+
+    restart: unless-stopped
+
+  # Hydra database migrations
+  hydra-migrate:
+    image: oryd/hydra:v26.2.0
+    container_name: hydra-migrate
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    environment:
+      DSN: ${HYDRA_DSN}
+
+    command:
+      - migrate
+      - sql
+      - up
+      - -e
+      - --yes
+
+    env_file:
+      - path: ../.env
+        required: true
+
+    restart: "no"
+
+  # OAuth2/OIDC authorization server
+  hydra:
+    build:
+      context: ./oauth/hydra
+
+    container_name: hydra
+
+    depends_on:
+      hydra-migrate:
+        condition: service_completed_successfully
+
+    ports:
+      - "4444:4444"
+      - "4445:4445"
+
+    environment:
+      DSN: ${HYDRA_DSN}
+      SECRETS_SYSTEM: ${HYDRA_SYSTEM_SECRET}
+
+    env_file:
+      - path: ../.env
+        required: true
+
+    restart: unless-stopped
+
+  # Kratos database migrations
+  kratos-migrate:
+    image: oryd/kratos:v26.2.0
+    container_name: kratos-migrate
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    environment:
+      DSN: ${KRATOS_DSN}
+
+    command:
+      - migrate
+      - sql
+      - -e
+      - --yes
+
+    env_file:
+      - path: ../.env
+        required: true
+
+    restart: "no"
+
+  # Identity and credential management
+  kratos:
+    build:
+      context: ./oauth/kratos
+
+    container_name: kratos
+
+    depends_on:
+      kratos-migrate:
+        condition: service_completed_successfully
+
+    ports:
+      - "4433:4433"
+      - "4434:4434"
+
+    environment:
+      DSN: ${KRATOS_DSN}
+      SECRETS_COOKIE: ${KRATOS_SECRETS_COOKIE}
+      SECRETS_CIPHER: ${KRATOS_SECRETS_CIPHER}
+
+    env_file:
+      - path: ../.env
+        required: true
+
+    restart: unless-stopped
+
+  # Hydra <-> Kratos bootstrap (client + dev admin identity reconciliation)
+  # and the minimal Hydra login/consent challenge bridge. Long-running: it
+  # bootstraps once at startup, then serves /login and /consent.
+  oauth-service:
+    build:
+      context: ./oauth/service
+
+    container_name: oauth-service
+
+    depends_on:
+      hydra:
+        condition: service_started
+      kratos:
+        condition: service_started
+
+    ports:
+      - "4446:4446"
+      - "127.0.0.1:4447:4447"
+
+    environment:
+      HYDRA_ADMIN_URL: ${HYDRA_ADMIN_URL}
+      HYDRA_PUBLIC_URL: ${HYDRA_PUBLIC_URL}
+      KRATOS_ADMIN_URL: ${KRATOS_ADMIN_URL}
+      KRATOS_PUBLIC_URL: ${KRATOS_PUBLIC_URL}
+      KRATOS_BROWSER_URL: ${KRATOS_BROWSER_URL}
+      ACCESS_CONTROL_FILE: /app/access-control.yml
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+
+    volumes:
+      - ./oauth/access-control.yml:/app/access-control.yml:ro
+
+    env_file:
+      - path: ../.env
+        required: true
+
+    restart: unless-stopped
+
+  # TODO:
+  # Spring Boot service
+
+  # TODO:
+  # Angular service
+
+  # TODO:
+  # Kafka service
+
+  # TODO:
+  # Redis service
+
+volumes:
+  postgres_volume:

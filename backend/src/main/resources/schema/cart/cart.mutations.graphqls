@@ -1,0 +1,15 @@
+input AddCartItemInput {
+  productVariantId: ID!
+  quantity: Int!
+}
+
+input UpdateCartItemInput {
+  quantity: Int!
+}
+
+extend type Mutation {
+  addCartItem(input: AddCartItemInput!): CartItem!
+  updateCartItem(cartItemId: ID!, input: UpdateCartItemInput!): CartItem!
+  removeCartItem(cartItemId: ID!): Boolean!
+  clearCart: Boolean!
+}

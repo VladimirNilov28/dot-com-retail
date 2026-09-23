@@ -14,6 +14,7 @@ CREATE TYPE order_status AS ENUM (
 
 CREATE TABLE orders (
     id bigserial PRIMARY KEY,
+    public_id uuid NOT NULL UNIQUE DEFAULT gen_random_uuid(),
     user_id bigint NOT NULL,
     cart_id bigint,
     status order_status NOT NULL DEFAULT 'PENDING',
@@ -26,6 +27,7 @@ CREATE TABLE orders (
 
 CREATE TABLE order_items (
     id bigserial PRIMARY KEY,
+    public_id uuid NOT NULL UNIQUE DEFAULT gen_random_uuid(),
     order_id bigint NOT NULL,
     product_variant_id bigint NOT NULL,
     quantity integer NOT NULL CHECK (quantity > 0),
@@ -36,11 +38,11 @@ CREATE TABLE order_items (
 
 CREATE TABLE payment_details (
     id bigserial PRIMARY KEY,
+    public_id uuid NOT NULL UNIQUE DEFAULT gen_random_uuid(),
     order_id bigint NOT NULL,
     amount decimal(10, 2) NOT NULL CHECK (amount >= 0),
     provider varchar(255) NOT NULL,
-    -- TODO extend payment types
-    type varchar(255) NOT NULL,
+    type payment_method_type NOT NULL,
     status payment_status NOT NULL DEFAULT 'PENDING',
     created_at timestamptz NOT NULL DEFAULT NOW(),
     updated_at timestamptz NOT NULL DEFAULT NOW(),

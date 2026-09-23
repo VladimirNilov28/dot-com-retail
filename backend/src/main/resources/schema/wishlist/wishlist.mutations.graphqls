@@ -1,0 +1,8 @@
+input AddWishlistItemInput {
+  productVariantId: ID!
+}
+
+extend type Mutation {
+  addWishlistItem(input: AddWishlistItemInput!): WishlistItem!
+  removeWishlistItem(wishlistItemId: ID!): Boolean!
+}

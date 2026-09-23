@@ -1,0 +1,17 @@
+input CreateCategoryInput {
+  name: String!
+  slug: String!
+  parentId: ID
+}
+
+input UpdateCategoryInput {
+  name: String
+  slug: String
+  parentId: ID
+}
+
+extend type Mutation {
+  createCategory(input: CreateCategoryInput!): Category!
+  updateCategory(categoryId: ID!, input: UpdateCategoryInput!): Category!
+  deleteCategory(categoryId: ID!): Boolean!
+}

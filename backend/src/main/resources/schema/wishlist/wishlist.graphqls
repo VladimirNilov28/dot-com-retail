@@ -1,0 +1,13 @@
+type Wishlist {
+  id: ID!
+  user: User!
+  items: [WishlistItem!]!
+  createdAt: Instant!
+}
+
+type WishlistItem {
+  id: ID!
+  wishlist: Wishlist!
+  productVariant: ProductVariant!
+  addedAt: Instant!
+}
