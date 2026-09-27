@@ -8,14 +8,14 @@ services:
 
     environment:
       POSTGRES_DB: retail
-      POSTGRES_USER: ${DB_USERNAME}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_USER: ${DB_USERNAME:?DB_USERNAME is required}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
 
-      HYDRA_DB_USER: ${HYDRA_DB_USER}
-      HYDRA_DB_PASSWORD: ${HYDRA_DB_PASSWORD}
+      HYDRA_DB_USER: ${HYDRA_DB_USER:?HYDRA_DB_USER is required}
+      HYDRA_DB_PASSWORD: ${HYDRA_DB_PASSWORD:?HYDRA_DB_PASSWORD is required}
 
-      KRATOS_DB_USER: ${KRATOS_DB_USER}
-      KRATOS_DB_PASSWORD: ${KRATOS_DB_PASSWORD}
+      KRATOS_DB_USER: ${KRATOS_DB_USER:?KRATOS_DB_USER is required}
+      KRATOS_DB_PASSWORD: ${KRATOS_DB_PASSWORD:?KRATOS_DB_PASSWORD is required}
 
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d retail"]
@@ -26,10 +26,6 @@ services:
     volumes:
       - postgres_volume:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
-
-    env_file:
-      - path: ../.env
-        required: true
 
     restart: unless-stopped
 
@@ -43,7 +39,7 @@ services:
         condition: service_healthy
 
     environment:
-      DSN: ${HYDRA_DSN}
+      DSN: ${HYDRA_DSN:?HYDRA_DSN is required}
 
     command:
       - migrate
@@ -51,10 +47,6 @@ services:
       - up
       - -e
       - --yes
-
-    env_file:
-      - path: ../.env
-        required: true
 
     restart: "no"
 
@@ -74,12 +66,15 @@ services:
       - "4445:4445"
 
     environment:
-      DSN: ${HYDRA_DSN}
-      SECRETS_SYSTEM: ${HYDRA_SYSTEM_SECRET}
+      DSN: ${HYDRA_DSN:?HYDRA_DSN is required}
+      SECRETS_SYSTEM: ${HYDRA_SYSTEM_SECRET:?HYDRA_SYSTEM_SECRET is required}
 
-    env_file:
-      - path: ../.env
-        required: true
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4445/health/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
     restart: unless-stopped
 
@@ -93,17 +88,13 @@ services:
         condition: service_healthy
 
     environment:
-      DSN: ${KRATOS_DSN}
+      DSN: ${KRATOS_DSN:?KRATOS_DSN is required}
 
     command:
       - migrate
       - sql
       - -e
       - --yes
-
-    env_file:
-      - path: ../.env
-        required: true
 
     restart: "no"
 
@@ -123,13 +114,16 @@ services:
       - "4434:4434"
 
     environment:
-      DSN: ${KRATOS_DSN}
-      SECRETS_COOKIE: ${KRATOS_SECRETS_COOKIE}
-      SECRETS_CIPHER: ${KRATOS_SECRETS_CIPHER}
+      DSN: ${KRATOS_DSN:?KRATOS_DSN is required}
+      SECRETS_COOKIE: ${KRATOS_SECRETS_COOKIE:?KRATOS_SECRETS_COOKIE is required}
+      SECRETS_CIPHER: ${KRATOS_SECRETS_CIPHER:?KRATOS_SECRETS_CIPHER is required}
 
-    env_file:
-      - path: ../.env
-        required: true
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4434/health/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
     restart: unless-stopped
 
@@ -144,30 +138,45 @@ services:
 
     depends_on:
       hydra:
-        condition: service_started
+        condition: service_healthy
       kratos:
-        condition: service_started
+        condition: service_healthy
+
+    # Spring runs on the host (not in this compose file, by design — see
+    # infrastructure/compose.yml comments below), so oauth-service needs a
+    # route back to the host. Linux Docker doesn't resolve
+    # host.docker.internal by default; this maps it to the host gateway.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
     ports:
       - "4446:4446"
       - "127.0.0.1:4447:4447"
 
     environment:
-      HYDRA_ADMIN_URL: ${HYDRA_ADMIN_URL}
-      HYDRA_PUBLIC_URL: ${HYDRA_PUBLIC_URL}
-      KRATOS_ADMIN_URL: ${KRATOS_ADMIN_URL}
-      KRATOS_PUBLIC_URL: ${KRATOS_PUBLIC_URL}
-      KRATOS_BROWSER_URL: ${KRATOS_BROWSER_URL}
+      HYDRA_ADMIN_URL: ${HYDRA_ADMIN_URL:?HYDRA_ADMIN_URL is required}
+      HYDRA_PUBLIC_URL: ${HYDRA_PUBLIC_URL:?HYDRA_PUBLIC_URL is required}
+      KRATOS_ADMIN_URL: ${KRATOS_ADMIN_URL:?KRATOS_ADMIN_URL is required}
+      KRATOS_PUBLIC_URL: ${KRATOS_PUBLIC_URL:?KRATOS_PUBLIC_URL is required}
+      KRATOS_BROWSER_URL: ${KRATOS_BROWSER_URL:?KRATOS_BROWSER_URL is required}
       ACCESS_CONTROL_FILE: /app/access-control.yml
-      ADMIN_EMAIL: ${ADMIN_EMAIL}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      SPRING_INTERNAL_BASE_URL: ${SPRING_INTERNAL_BASE_URL:?SPRING_INTERNAL_BASE_URL is required}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:?ADMIN_USERNAME is required}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
+      OAUTH_SERVICE_CLIENT_ID: ${OAUTH_SERVICE_CLIENT_ID:?OAUTH_SERVICE_CLIENT_ID is required}
+      OAUTH_SERVICE_CLIENT_SECRET: ${OAUTH_SERVICE_CLIENT_SECRET:?OAUTH_SERVICE_CLIENT_SECRET is required}
+      BOOTSTRAP_RETRY_ATTEMPTS: "30"
+      BOOTSTRAP_RETRY_DELAY_SECONDS: "3"
+
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4446/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
 
     volumes:
       - ./oauth/access-control.yml:/app/access-control.yml:ro
-
-    env_file:
-      - path: ../.env
-        required: true
 
     restart: unless-stopped
 
@@ -182,6 +191,16 @@ services:
 
   # TODO:
   # Redis service
+
+networks:
+  default:
+    ipam:
+      config:
+        # Pinned so the Docker->host firewall rule (see README "Local
+        # development architecture") targets a stable subnet instead of
+        # whatever Docker happens to auto-assign this project on network
+        # recreation.
+        - subnet: 172.28.88.0/24
 
 volumes:
   postgres_volume:

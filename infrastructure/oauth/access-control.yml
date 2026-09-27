@@ -87,6 +87,13 @@ scopes:
     description: >
       Transition a payment's status (updatePaymentStatus). Kept separate
       from payment:write because it is a privileged operational action.
+  - name: internal:provision-user
+    description: >
+      Service-to-service only. Resolve or provision the canonical Spring
+      user for a Kratos identity via the internal REST API
+      (GET/POST /internal/users). Never granted to the bytecore-web client
+      or any application role below — only to machine (client_credentials)
+      callers such as oauth-service.
 
 roles:
   - name: ADMIN
@@ -157,3 +164,18 @@ clients:
     # scope is derived by the bootstrap service as the space-joined, sorted
     # list of every scope declared above — this value is not read directly.
     scope: __ALL_DECLARED_SCOPES__
+
+  - client_id: oauth-service-internal
+    client_name: oauth-service (machine, client_credentials)
+    grant_types:
+      - client_credentials
+    response_types: []
+    token_endpoint_auth_method: client_secret_post
+    redirect_uris: []
+    # Unlike bytecore-web, this client declares an explicit scope list
+    # instead of getting every declared scope — it must only ever be able to
+    # call the internal Spring auth API, nothing else. The actual
+    # client_secret is never stored here; it's injected at reconcile time
+    # from OAUTH_SERVICE_CLIENT_SECRET.
+    scopes:
+      - internal:provision-user

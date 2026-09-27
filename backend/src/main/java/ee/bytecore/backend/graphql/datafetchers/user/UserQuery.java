@@ -5,37 +5,43 @@ import java.util.List;
 import com.netflix.dgs.codegen.generated.types.User;
 import com.netflix.dgs.codegen.generated.types.UserAddress;
 import com.netflix.dgs.codegen.generated.types.UserPaymentMethod;
-import ee.bytecore.backend.config.CurrentUser;
 import ee.bytecore.backend.graphql.mappers.UserMapper;
 import ee.bytecore.backend.repositories.user.UserAddressRepository;
 import ee.bytecore.backend.repositories.user.UserPaymentMethodRepository;
-import ee.bytecore.backend.repositories.user.UserRepository;
+import ee.bytecore.backend.services.UserService;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import com.netflix.graphql.dgs.*;
 
 @DgsComponent
 public class UserQuery {
 
-    private final UserRepository userRepository;
+    private final UserService userService;
     private final UserAddressRepository userAddressRepository;
     private final UserPaymentMethodRepository userPaymentMethodRepository;
 
-    public UserQuery(UserRepository userRepository, UserAddressRepository userAddressRepository, UserPaymentMethodRepository userPaymentMethodRepository) {
-        this.userRepository = userRepository;
+    public UserQuery(UserService userService, UserAddressRepository userAddressRepository, UserPaymentMethodRepository userPaymentMethodRepository) {
+        this.userService = userService;
         this.userAddressRepository = userAddressRepository;
         this.userPaymentMethodRepository = userPaymentMethodRepository;
     }
 
     @DgsQuery
-    public User me(@CurrentUser String sub) {
-        return userRepository.findById(Long.valueOf(sub))
+    public User me() {
+        // Not resolved via a @CurrentSecurityContext parameter: DGS's
+        // @DgsQuery methods don't get Spring MVC's HandlerMethodArgumentResolver
+        // bridging for it in this setup, so the annotation silently injects
+        // null. Direct SecurityContextHolder access works reliably since
+        // root query fields execute synchronously on the request thread.
+        String sub = SecurityContextHolder.getContext().getAuthentication().getName();
+        return userService.findById(Long.valueOf(sub))
                 .map(UserMapper::toGraphQlType)
                 .orElse(null);
     }
 
     @DgsQuery
     public User user(@InputArgument String id) {
-        return userRepository.findById(Long.valueOf(id))
+        return userService.findById(Long.valueOf(id))
                 .map(UserMapper::toGraphQlType)
                 .orElse(null);
     }

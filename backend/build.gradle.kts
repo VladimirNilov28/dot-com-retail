@@ -163,6 +163,7 @@ dependencies {
     testImplementation("org.mockito:mockito-core")
     testImplementation("org.assertj:assertj-core")
     testImplementation("org.springframework.boot:spring-boot-starter-graphql-test")
+    testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
 
     // ---------------------
     // Integration Testing

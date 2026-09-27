@@ -1,5 +1,6 @@
 package ee.bytecore.backend.graphql.datafetchers;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
@@ -27,6 +28,7 @@ import ee.bytecore.backend.graphql.scalars.LocalDateScalar;
 import ee.bytecore.backend.repositories.user.UserAddressRepository;
 import ee.bytecore.backend.repositories.user.UserPaymentMethodRepository;
 import ee.bytecore.backend.repositories.user.UserRepository;
+import ee.bytecore.backend.services.UserService;
 
 import com.netflix.graphql.dgs.test.EnableDgsMockMvcTest;
 import org.intellij.lang.annotations.Language;
@@ -42,6 +44,9 @@ class UserDataFetcherTest {
 
     @MockitoBean
     UserRepository userRepository;
+
+    @MockitoBean
+    UserService userService;
 
     @MockitoBean
     UserAddressRepository userAddressRepository;
@@ -68,9 +73,11 @@ class UserDataFetcherTest {
         userPaymentMethod = UserPaymentMethod.create(user, "mastercard", PaymentMethodType.CARD);
         userPaymentMethod.setId(1L);
 
+        when(userService.findById(user.getId())).thenReturn(Optional.of(user));
+        // addUserPaymentMethod still looks up the owning user directly via
+        // the repository — out of this refactor's scope (only User CRUD
+        // itself moved to UserService), so both collaborators need stubbing.
         when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
-
-        when(userRepository.findByUsername(user.getUsername())).thenReturn(Optional.of(user));
     }
 
     @Test
@@ -193,7 +200,7 @@ class UserDataFetcherTest {
     }
 
     @Test
-    @WithMockUser(username = "test-user")
+    @WithMockUser(username = "1")
     void shouldReturnMeTest() {
         @Language("GraphQl")
         var query =
@@ -219,9 +226,7 @@ class UserDataFetcherTest {
 
     @Test
     @WithMockUser
-    void shouldCreateUserTest() {
-        when(userRepository.save(any(User.class))).thenReturn(user);
-
+    void shouldNotExposeCreateUserMutationTest() {
         @Language("GraphQl")
         var mutation =
                 """
@@ -240,9 +245,8 @@ class UserDataFetcherTest {
         graphQlTester
                 .document(mutation)
                 .execute()
-                .path("createUser.username")
-                .entity(String.class)
-                .isEqualTo(user.getUsername());
+                .errors()
+                .satisfy(errors -> assertThat(errors).isNotEmpty());
     }
 
     @Test
@@ -443,6 +447,28 @@ class UserDataFetcherTest {
 
     @Test
     @WithMockUser(roles = "ADMIN")
+    void shouldDeleteUserTest() {
+        Long userId = user.getId();
+
+        @Language("GraphQl")
+        var mutation =
+                """
+            mutation($userId: ID!) {
+              deleteUser(userId: $userId)
+            }
+        """;
+
+        graphQlTester
+                .document(mutation)
+                .variable("userId", userId)
+                .execute()
+                .path("deleteUser")
+                .entity(Boolean.class)
+                .isEqualTo(true);
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
     void shouldDeleteUserAddressTest() {
         Long userId = user.getId();
         Long addressId = userAddress.getId();
@@ -470,7 +496,8 @@ class UserDataFetcherTest {
     @WithMockUser(roles = "ADMIN")
     void shouldUpdateUserRoleTest() {
         Long userId = user.getId();
-        when(userRepository.save(user)).thenReturn(user);
+        user.setRole(UserRole.SUPPORT);
+        when(userService.updateRole(userId, UserRole.SUPPORT)).thenReturn(user);
 
         @Language("GraphQl")
         var mutation =

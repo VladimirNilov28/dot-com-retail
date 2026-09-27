@@ -10,18 +10,20 @@ import ee.bytecore.backend.graphql.mappers.UserMapper;
 import ee.bytecore.backend.repositories.user.UserAddressRepository;
 import ee.bytecore.backend.repositories.user.UserPaymentMethodRepository;
 import ee.bytecore.backend.repositories.user.UserRepository;
+import ee.bytecore.backend.services.UserService;
 import jakarta.persistence.EntityNotFoundException;
-import org.springframework.transaction.annotation.Transactional;
 
 
 @DgsComponent
 public class UserMutation {
     private final UserRepository userRepository;
+    private final UserService userService;
     private final UserAddressRepository userAddressRepository;
     private final UserPaymentMethodRepository userPaymentMethodRepository;
 
-    public UserMutation(UserRepository userRepository, UserAddressRepository userAddressRepository, UserPaymentMethodRepository userPaymentMethodRepository) {
+    public UserMutation(UserRepository userRepository, UserService userService, UserAddressRepository userAddressRepository, UserPaymentMethodRepository userPaymentMethodRepository) {
         this.userRepository = userRepository;
+        this.userService = userService;
         this.userAddressRepository = userAddressRepository;
         this.userPaymentMethodRepository = userPaymentMethodRepository;
     }
@@ -29,34 +31,21 @@ public class UserMutation {
     // User
 
     @DgsMutation
-    public User createUser(@InputArgument CreateUserInput input) {
-        //TODO move to UserService + add duplicate email/username check + custom exceptions
-        ee.bytecore.backend.entities.user.User newUser = UserInputMapper.fromCreateInput(input);
-        ee.bytecore.backend.entities.user.User saved = userRepository.save(newUser);
-
-        return UserMapper.toGraphQlType(saved);
-    }
-
-    @DgsMutation
     public Boolean deleteUser(@InputArgument String userId) {
         long id = parseId(userId, "user");
 
-        if (!userRepository.existsById(id)) {
-            throw new EntityNotFoundException(String.format("User with id %s not found", id));
-        }
-        userRepository.deleteById(id);
+        userService.deleteById(id);
         return true;
     }
 
     @DgsMutation
-    @Transactional
-    public void updateUserRole(@InputArgument String userId, @InputArgument UpdateRoleInput input) {
+    public User updateUserRole(@InputArgument String userId, @InputArgument UpdateRoleInput input) {
         long id = parseId(userId, "user");
 
-        ee.bytecore.backend.entities.user.User user = userRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException(String.format("User with id %s not found", id)));
+        ee.bytecore.backend.entities.user.User updated =
+                userService.updateRole(id, UserInputMapper.mapEnum(UserRole.class, input.getRole()));
 
-        user.setRole(UserInputMapper.mapEnum(UserRole.class, input.getRole()));
+        return UserMapper.toGraphQlType(updated);
     }
 
     // User address

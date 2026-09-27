@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 
 from clients.hydra import HydraClient
 from clients.kratos import KratosAuthenticationError, KratosClient
+from clients.spring_auth import SpringAuthClient
 from config import Config
 from models import ErrorResponse, InvalidRequestError, TokenRequest
 from services.dev_token import issue_dev_token
@@ -37,7 +38,9 @@ def _default_gateway_ip() -> Optional[str]:
 _ALLOWED_ADDRESSES = {"127.0.0.1", "::1", _default_gateway_ip()} - {None}
 
 
-def make_internal_handler(config: Config, hydra_client: HydraClient, kratos_client: KratosClient):
+def make_internal_handler(
+    config: Config, hydra_client: HydraClient, kratos_client: KratosClient, spring_auth_client: SpringAuthClient
+):
     class InternalRequestHandler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):  # noqa: A002 - matches BaseHTTPRequestHandler signature
             logger.info("%s - %s", self.address_string(), fmt % args)
@@ -61,7 +64,12 @@ def make_internal_handler(config: Config, hydra_client: HydraClient, kratos_clie
 
             try:
                 token_response = issue_dev_token(
-                    config, hydra_client, kratos_client, token_request.email, token_request.password
+                    config,
+                    hydra_client,
+                    kratos_client,
+                    spring_auth_client,
+                    token_request.email,
+                    token_request.password,
                 )
             except KratosAuthenticationError:
                 self._respond_json(

@@ -4,6 +4,11 @@ spring:
     username: retail
     password: retail
 
+# Spring runs on the host in dev; Kratos's Admin API is reached via the
+# compose-published host port, not the in-container "kratos" hostname.
+kratos:
+  admin-url: http://127.0.0.1:4434
+
 dgs:
   graphql:
     graphiql:

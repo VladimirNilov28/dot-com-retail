@@ -4,6 +4,9 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
 
+kratos:
+  admin-url: ${KRATOS_ADMIN_URL}
+
 dgs:
   graphql:
     introspection:

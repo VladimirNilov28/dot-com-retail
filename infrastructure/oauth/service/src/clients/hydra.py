@@ -110,6 +110,22 @@ class HydraClient:
         response.raise_for_status()
         return response.json()
 
+    # --- Client-credentials (machine-to-machine, e.g. calling Spring's internal API) ---
+
+    def client_credentials_token(self, client_id: str, client_secret: str, scope: str) -> str:
+        response = requests.post(
+            f"{self._public_url}/oauth2/token",
+            data={
+                "grant_type": "client_credentials",
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "scope": scope,
+            },
+            timeout=10,
+        )
+        response.raise_for_status()
+        return response.json()["access_token"]
+
     # --- Headless authorization-code + PKCE (dev token issuance) ---
 
     @staticmethod

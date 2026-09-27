@@ -4,13 +4,16 @@ from urllib.parse import parse_qs, urlparse
 
 from clients.hydra import HydraClient
 from clients.kratos import KratosClient
+from clients.spring_auth import SpringAuthClient
 from config import Config
 from services import login_consent
 
 logger = logging.getLogger(__name__)
 
 
-def make_bridge_handler(config: Config, hydra_client: HydraClient, kratos_client: KratosClient):
+def make_bridge_handler(
+    config: Config, hydra_client: HydraClient, kratos_client: KratosClient, spring_auth_client: SpringAuthClient
+):
     class BridgeRequestHandler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):  # noqa: A002 - matches BaseHTTPRequestHandler signature
             logger.info("%s - %s", self.address_string(), fmt % args)
@@ -22,7 +25,12 @@ def make_bridge_handler(config: Config, hydra_client: HydraClient, kratos_client
             try:
                 if parsed.path == "/login":
                     redirect_to = login_consent.handle_login(
-                        config, hydra_client, kratos_client, query["login_challenge"], self.headers.get("Cookie")
+                        config,
+                        hydra_client,
+                        kratos_client,
+                        spring_auth_client,
+                        query["login_challenge"],
+                        self.headers.get("Cookie"),
                     )
                     self._redirect(redirect_to)
                 elif parsed.path == "/consent":

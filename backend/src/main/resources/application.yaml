@@ -9,6 +9,14 @@ spring:
   docker:
     compose:
       file: ../infrastructure/compose.yml
+      # Spring's own docker-compose auto-management only looks for a .env
+      # file next to compose.yml, never at the repo root where ours lives
+      # (unrelated to Compose CLI's own .env discovery). infrastructure/
+      # is meant to be started explicitly and exclusively via `make dev`
+      # (docker compose --env-file .env ...), so disable the redundant,
+      # differently-configured auto-management path instead of routing
+      # around it with a duplicate/symlinked .env.
+      enabled: false
   security:
     oauth2:
       resourceserver:

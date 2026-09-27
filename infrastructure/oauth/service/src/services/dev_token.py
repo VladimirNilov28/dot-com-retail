@@ -4,9 +4,10 @@ from base64 import urlsafe_b64encode
 
 from clients.hydra import HydraClient, parse_query_param
 from clients.kratos import KratosClient
+from clients.spring_auth import SpringAuthClient
 from config import Config
 from models import TokenResponse
-from services.login_consent import role_for_subject
+from services.login_consent import resolve_canonical_user
 
 
 def _generate_pkce_pair() -> tuple[str, str]:
@@ -20,6 +21,7 @@ def issue_dev_token(
     config: Config,
     hydra_client: HydraClient,
     kratos_client: KratosClient,
+    spring_auth_client: SpringAuthClient,
     email: str,
     password: str,
 ) -> TokenResponse:
@@ -29,7 +31,9 @@ def issue_dev_token(
     login/consent challenge exchange, exactly as services.login_consent does
     for the browser-driven flow."""
     kratos_session = kratos_client.authenticate_with_password(email, password)
-    subject = kratos_session["identity"]["id"]
+    kratos_identity_id = kratos_session["identity"]["id"]
+    spring_user = resolve_canonical_user(kratos_client, spring_auth_client, kratos_identity_id)
+    subject = str(spring_user["id"])
 
     code_verifier, code_challenge = _generate_pkce_pair()
     state = secrets.token_urlsafe(16)
@@ -45,10 +49,8 @@ def issue_dev_token(
     )
     login_challenge = parse_query_param(login_redirect, "login_challenge")
 
-    role = role_for_subject(kratos_client, subject)
-    login_context = {"role": role} if role else None
     accepted_login = hydra_client.accept_login_request(
-        login_challenge, subject, context=login_context
+        login_challenge, subject, context={"role": spring_user["role"]}
     )
 
     consent_redirect = hydra_client.follow_redirect(http_session, accepted_login["redirect_to"])

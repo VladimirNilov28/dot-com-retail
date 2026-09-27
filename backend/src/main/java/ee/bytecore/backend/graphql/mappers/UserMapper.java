@@ -1,6 +1,5 @@
 package ee.bytecore.backend.graphql.mappers;
 
-import com.netflix.dgs.codegen.generated.types.CreateUserInput;
 import com.netflix.dgs.codegen.generated.types.PaymentMethodType;
 import com.netflix.dgs.codegen.generated.types.Role;
 import ee.bytecore.backend.entities.user.User;

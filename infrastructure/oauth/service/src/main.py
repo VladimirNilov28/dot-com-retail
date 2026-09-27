@@ -7,6 +7,7 @@ from api.bridge_server import make_bridge_handler
 from api.internal_server import make_internal_handler
 from clients.hydra import HydraClient, HydraNotReadyError
 from clients.kratos import KratosClient, KratosNotReadyError
+from clients.spring_auth import SpringAuthClient, SpringNotReadyError
 from config import ConfigError, load_config
 from services import bootstrap
 from services.bootstrap import AccessControlSpecError
@@ -24,16 +25,24 @@ def main() -> int:
 
     hydra_client = HydraClient(config.hydra_admin_url, config.hydra_public_url)
     kratos_client = KratosClient(config.kratos_admin_url, config.kratos_public_url)
+    spring_auth_client = SpringAuthClient(
+        config.spring_internal_base_url,
+        lambda: hydra_client.client_credentials_token(
+            config.oauth_service_client_id,
+            config.oauth_service_client_secret,
+            "internal:provision-user",
+        ),
+    )
 
     try:
-        bootstrap.run(config, hydra_client, kratos_client)
-    except (HydraNotReadyError, KratosNotReadyError, AccessControlSpecError) as exc:
+        bootstrap.run(config, hydra_client, kratos_client, spring_auth_client)
+    except (HydraNotReadyError, KratosNotReadyError, SpringNotReadyError, AccessControlSpecError) as exc:
         logger.error("bootstrap failed: %s", exc)
         return 1
 
     internal_server = ThreadingHTTPServer(
         (config.internal_token_host, config.internal_token_port),
-        make_internal_handler(config, hydra_client, kratos_client),
+        make_internal_handler(config, hydra_client, kratos_client, spring_auth_client),
     )
     threading.Thread(target=internal_server.serve_forever, daemon=True).start()
     logger.info(
@@ -44,7 +53,7 @@ def main() -> int:
 
     bridge_server = ThreadingHTTPServer(
         (config.bridge_host, config.bridge_port),
-        make_bridge_handler(config, hydra_client, kratos_client),
+        make_bridge_handler(config, hydra_client, kratos_client, spring_auth_client),
     )
     logger.info("serving login/consent bridge on %s:%s", config.bridge_host, config.bridge_port)
     bridge_server.serve_forever()

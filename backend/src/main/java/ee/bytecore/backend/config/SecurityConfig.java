@@ -55,6 +55,13 @@ public class SecurityConfig {
     ) throws Exception {
 
         return http
+                // Stateless Bearer-token resource server — no cookies/session
+                // to forge, so CSRF protection (which targets cookie-based
+                // browser auth) doesn't apply and would otherwise 403 every
+                // POST (GraphQL queries/mutations, internal API) regardless
+                // of a valid JWT.
+                .csrf(csrf -> csrf.disable())
+
                 .oauth2ResourceServer(oauth2 ->
                         oauth2.jwt(jwt ->
                                 jwt.jwtAuthenticationConverter(
@@ -66,6 +73,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/graphiql/**").permitAll()
                         .requestMatchers("/graphql").authenticated()
+                        .requestMatchers("/internal/**").authenticated()
                         .anyRequest().denyAll()
                 )
 

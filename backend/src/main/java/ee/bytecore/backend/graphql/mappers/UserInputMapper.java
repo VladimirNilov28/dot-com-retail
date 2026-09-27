@@ -1,7 +1,6 @@
 package ee.bytecore.backend.graphql.mappers;
 
 import com.netflix.dgs.codegen.generated.types.CreatePaymentMethodInput;
-import com.netflix.dgs.codegen.generated.types.CreateUserInput;
 import com.netflix.dgs.codegen.generated.types.UpdateRoleInput;
 import ee.bytecore.backend.entities.user.User;
 import ee.bytecore.backend.entities.user.UserPaymentMethod;
@@ -12,18 +11,6 @@ import java.util.Arrays;
 
 public class UserInputMapper {
     // Mapping from graphQlType into entity
-    public static User fromCreateInput(CreateUserInput input) {
-        if (input == null) {
-            return null;
-        }
-        return User.create(
-                input.getUsername(),
-                input.getEmail(),
-                input.getDateOfBirth()
-        ); //TODO move user creating to user service
-
-    }
-
     public static UserPaymentMethod fromCreateInput(CreatePaymentMethodInput input, User user) {
         if (input == null) {
             return null;
