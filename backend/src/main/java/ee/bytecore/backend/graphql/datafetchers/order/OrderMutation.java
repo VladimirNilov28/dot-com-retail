@@ -1,0 +1,62 @@
+package ee.bytecore.backend.graphql.datafetchers.order;
+
+import org.springframework.security.access.prepost.PreAuthorize;
+
+import ee.bytecore.backend.enums.OrderStatus;
+import ee.bytecore.backend.graphql.mappers.OrderMapper;
+import ee.bytecore.backend.security.CurrentUserProvider;
+import ee.bytecore.backend.services.OrderService;
+import ee.bytecore.backend.services.OrderStatusPublisher;
+
+import com.netflix.dgs.codegen.generated.types.Order;
+import com.netflix.dgs.codegen.generated.types.UpdateOrderStatusInput;
+import com.netflix.graphql.dgs.DgsComponent;
+import com.netflix.graphql.dgs.DgsMutation;
+import com.netflix.graphql.dgs.DgsSubscription;
+import com.netflix.graphql.dgs.InputArgument;
+import org.reactivestreams.Publisher;
+
+@DgsComponent
+public class OrderMutation {
+
+    private final OrderService orderService;
+    private final OrderStatusPublisher orderStatusPublisher;
+    private final CurrentUserProvider currentUserProvider;
+
+    public OrderMutation(
+            OrderService orderService,
+            OrderStatusPublisher orderStatusPublisher,
+            CurrentUserProvider currentUserProvider) {
+        this.orderService = orderService;
+        this.orderStatusPublisher = orderStatusPublisher;
+        this.currentUserProvider = currentUserProvider;
+    }
+
+    @DgsMutation
+    public Order createOrder() {
+        Long userId = currentUserProvider.getCurrentUserId();
+        return OrderMapper.toGraphQlType(orderService.createOrder(userId));
+    }
+
+    @DgsMutation
+    @PreAuthorize("hasAnyRole('ORDER_MANAGER','ADMIN')")
+    public Order updateOrderStatus(@InputArgument String orderId, @InputArgument UpdateOrderStatusInput input) {
+        long id = parseId(orderId, "order");
+        OrderStatus status = OrderStatus.valueOf(input.getStatus().name());
+        return OrderMapper.toGraphQlType(orderService.updateStatus(id, status));
+    }
+
+    @DgsSubscription
+    public Publisher<Order> orderStatusChanged(@InputArgument String orderId) {
+        long id = parseId(orderId, "order");
+        return orderStatusPublisher.subscribeTo(id).map(OrderMapper::toGraphQlType);
+    }
+
+    private long parseId(String rawId, String entityName) {
+        try {
+            return Long.parseLong(rawId);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException(String.format("Invalid %s id: %s", entityName, rawId));
+        }
+    }
+}

@@ -3,11 +3,12 @@ package ee.bytecore.backend.integration;
 import java.util.List;
 import java.util.Map;
 
-import ee.bytecore.backend.exceptions.IdentitySyncException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+
+import ee.bytecore.backend.exceptions.IdentitySyncException;
 
 /**
  * Thin client for Kratos's Admin API. Spring is authoritative for
@@ -27,7 +28,8 @@ public class KratosClient {
 
     public void updateIdentityEmail(String currentEmail, String newEmail) {
         try {
-            List<Map<String, Object>> identities = restClient.get()
+            List<Map<String, Object>> identities = restClient
+                    .get()
                     .uri(uriBuilder -> uriBuilder
                             .path("/admin/identities")
                             .queryParam("credentials_identifier", currentEmail)
@@ -41,7 +43,8 @@ public class KratosClient {
 
             String identityId = String.valueOf(identities.get(0).get("id"));
 
-            restClient.patch()
+            restClient
+                    .patch()
                     .uri("/admin/identities/{id}", identityId)
                     .body(List.of(Map.of("op", "replace", "path", "/traits/email", "value", newEmail)))
                     .retrieve()

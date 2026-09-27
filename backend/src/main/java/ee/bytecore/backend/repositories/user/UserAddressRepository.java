@@ -8,4 +8,6 @@ import ee.bytecore.backend.entities.user.UserAddress;
 
 public interface UserAddressRepository extends JpaRepository<UserAddress, Long> {
     List<UserAddress> findAllByUserId(Long userId);
+
+    List<UserAddress> findAllByUserIdIn(List<Long> userIds);
 }

@@ -8,4 +8,6 @@ import ee.bytecore.backend.entities.product.ProductVariant;
 
 public interface ProductVariantRepository extends JpaRepository<ProductVariant, Long> {
     List<ProductVariant> findAllByProductId(Long productId);
+
+    List<ProductVariant> findAllByProductIdIn(List<Long> productIds);
 }

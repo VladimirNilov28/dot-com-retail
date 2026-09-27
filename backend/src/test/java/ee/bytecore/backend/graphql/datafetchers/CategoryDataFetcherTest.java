@@ -27,7 +27,15 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-@SpringBootTest(classes = {CategoryQuery.class, CategoryMutation.class, GraphQLConfig.class, LocalDateScalar.class, InstantScalar.class})
+@SpringBootTest(
+        classes = {
+            CategoryQuery.class,
+            CategoryMutation.class,
+            GraphQLConfig.class,
+            LocalDateScalar.class,
+            InstantScalar.class,
+            ee.bytecore.backend.services.CategoryService.class
+        })
 @EnableDgsMockMvcTest
 @AutoConfigureHttpGraphQlTester
 @Tag("graphql")
@@ -44,6 +52,7 @@ class CategoryDataFetcherTest {
     @BeforeEach
     void setUp() {
         category = Category.create("Shoes", "shoes", null);
+        category.setId(1L);
     }
 
     @Test

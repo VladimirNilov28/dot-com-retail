@@ -34,7 +34,25 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-@SpringBootTest(classes = {InventoryQuery.class, InventoryMutation.class, GraphQLConfig.class, LocalDateScalar.class, InstantScalar.class})
+@SpringBootTest(
+        classes = {
+            InventoryQuery.class,
+            InventoryMutation.class,
+            GraphQLConfig.class,
+            LocalDateScalar.class,
+            InstantScalar.class,
+            ee.bytecore.backend.services.WarehouseService.class,
+            ee.bytecore.backend.services.InventoryService.class,
+            // Query.product / Product.variants are owned by ProductQuery; imported here too
+            // since this test's own fixtures (product -> variants -> inventory) span both
+            // domains' schema fields in one query.
+            ee.bytecore.backend.graphql.datafetchers.product.ProductQuery.class,
+            ee.bytecore.backend.graphql.datafetchers.product.ProductMutation.class,
+            ee.bytecore.backend.services.ProductService.class,
+            ee.bytecore.backend.services.ProductVariantService.class,
+            ee.bytecore.backend.graphql.dataloaders.ProductVariantsByProductIdDataLoader.class,
+            ee.bytecore.backend.graphql.dataloaders.CategoriesByProductIdDataLoader.class
+        })
 @EnableDgsMockMvcTest
 @AutoConfigureHttpGraphQlTester
 @Tag("graphql")
@@ -52,6 +70,9 @@ class InventoryDataFetcherTest {
     @MockitoBean
     ProductRepository productRepository;
 
+    @MockitoBean
+    ee.bytecore.backend.repositories.category.CategoryRepository categoryRepository;
+
     private Warehouse warehouse;
     private Product product;
     private ProductVariant productVariant;
@@ -63,9 +84,13 @@ class InventoryDataFetcherTest {
     @BeforeEach
     void setUp() {
         warehouse = Warehouse.create("Main Warehouse", "Tallinn");
+        warehouse.setId(1L);
         product = Product.create("T-Shirt", "t-shirt", "A plain t-shirt");
+        product.setId(1L);
         productVariant = ProductVariant.create(product, "TSHIRT-M-BLACK", new BigDecimal("19.99"));
+        productVariant.setId(1L);
         inventory = Inventory.create(productVariant, warehouse, 10);
+        inventory.setId(1L);
     }
 
     @Test
@@ -201,7 +226,7 @@ class InventoryDataFetcherTest {
         Long productId = product.getId();
         Long variantId = productVariant.getId();
         when(productRepository.findById(productId)).thenReturn(Optional.of(product));
-        when(productVariantRepository.findAllByProductId(productId)).thenReturn(List.of(productVariant));
+        when(productVariantRepository.findAllByProductIdIn(List.of(productId))).thenReturn(List.of(productVariant));
         when(inventoryRepository.findAllByProductVariantId(variantId)).thenReturn(List.of(inventory));
 
         @Language("GraphQl")

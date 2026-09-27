@@ -1,7 +1,5 @@
 package ee.bytecore.backend.controller;
 
-import ee.bytecore.backend.exceptions.UserNotFoundException;
-import ee.bytecore.backend.services.UserService;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -9,6 +7,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import ee.bytecore.backend.exceptions.UserNotFoundException;
+import ee.bytecore.backend.services.UserService;
 
 @RestController
 @RequestMapping("/internal/users")
@@ -23,7 +24,8 @@ public class InternalAuthController {
     @GetMapping("/{id}")
     @PreAuthorize("hasAuthority('SCOPE_internal:provision-user')")
     public CanonicalUserResponse resolve(@PathVariable Long id) {
-        return userService.findById(id)
+        return userService
+                .findById(id)
                 .map(CanonicalUserResponse::from)
                 .orElseThrow(() -> new UserNotFoundException(String.format("User with id %s not found", id)));
     }

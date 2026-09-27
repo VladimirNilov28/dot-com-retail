@@ -3,14 +3,15 @@ package ee.bytecore.backend.services;
 import java.time.LocalDate;
 import java.util.Optional;
 
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import ee.bytecore.backend.entities.user.User;
 import ee.bytecore.backend.enums.UserRole;
 import ee.bytecore.backend.exceptions.UserAlreadyExistsException;
 import ee.bytecore.backend.exceptions.UserNotFoundException;
 import ee.bytecore.backend.integration.KratosClient;
 import ee.bytecore.backend.repositories.user.UserRepository;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class UserService {
@@ -57,7 +58,8 @@ public class UserService {
 
     @Transactional
     public User updateProfile(Long id, String username, String email) {
-        User user = userRepository.findById(id)
+        User user = userRepository
+                .findById(id)
                 .orElseThrow(() -> new UserNotFoundException(String.format("User with id %s not found", id)));
 
         if (!user.getEmail().equals(email)) {
@@ -81,7 +83,8 @@ public class UserService {
 
     @Transactional
     public User updateRole(Long id, UserRole role) {
-        User user = userRepository.findById(id)
+        User user = userRepository
+                .findById(id)
                 .orElseThrow(() -> new UserNotFoundException(String.format("User with id %s not found", id)));
         user.setRole(role);
         return user;

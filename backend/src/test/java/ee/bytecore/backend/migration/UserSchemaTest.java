@@ -64,6 +64,25 @@ public class UserSchemaTest {
 
     @Test
     @Transactional
+    void usernameShouldBeUniqueTest() {
+        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+
+        jdbc.update(
+                """
+    INSERT INTO users (role, username, email, date_of_birth)
+    VALUES ('USER', 'testuser', 'user1@test.com', '2000-01-01')
+    """);
+
+        Executable inputSameUsername = () -> jdbc.update(
+                """
+    INSERT INTO users (role, username, email, date_of_birth)
+    VALUES ('USER', 'testuser', 'user2@test.com', '2000-01-01')
+    """);
+        assertThrows(DuplicateKeyException.class, inputSameUsername);
+    }
+
+    @Test
+    @Transactional
     void quantityLessThanZeroShouldBeRejectedTest() {
         JdbcTemplate jdbc = new JdbcTemplate(dataSource);
 

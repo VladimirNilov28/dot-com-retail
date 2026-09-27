@@ -1,5 +1,6 @@
 package ee.bytecore.backend.graphql.datafetchers;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
@@ -33,7 +34,16 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-@SpringBootTest(classes = {WishlistQuery.class, WishlistMutation.class, GraphQLConfig.class, LocalDateScalar.class, InstantScalar.class})
+@SpringBootTest(
+        classes = {
+            WishlistQuery.class,
+            WishlistMutation.class,
+            GraphQLConfig.class,
+            LocalDateScalar.class,
+            InstantScalar.class,
+            ee.bytecore.backend.services.WishlistService.class,
+            ee.bytecore.backend.security.CurrentUserProvider.class
+        })
 @EnableDgsMockMvcTest
 @AutoConfigureHttpGraphQlTester
 @Tag("graphql")
@@ -59,14 +69,19 @@ class WishlistDataFetcherTest {
     @BeforeEach
     void setUp() {
         user = User.create("test-user", "test@example.com", LocalDate.of(1995, 6, 15));
+        user.setId(1L);
         wishlist = Wishlist.create(user);
+        wishlist.setId(1L);
         Product product = Product.create("T-Shirt", "t-shirt", "A plain t-shirt");
+        product.setId(1L);
         productVariant = ProductVariant.create(product, "TSHIRT-M-BLACK", new BigDecimal("19.99"));
+        productVariant.setId(1L);
         wishlistItem = WishlistItem.create(wishlist, productVariant);
+        wishlistItem.setId(1L);
     }
 
     @Test
-    @WithMockUser(username = "test-user")
+    @WithMockUser(username = "1")
     void shouldReturnMyWishlistTest() {
         when(wishlistRepository.findByUserId(user.getId())).thenReturn(Optional.of(wishlist));
 
@@ -93,11 +108,11 @@ class WishlistDataFetcherTest {
     }
 
     @Test
-    @WithMockUser(username = "test-user")
+    @WithMockUser(username = "1")
     void shouldAddWishlistItemTest() {
         when(wishlistRepository.findByUserId(user.getId())).thenReturn(Optional.of(wishlist));
         when(productVariantRepository.findById(productVariant.getId())).thenReturn(Optional.of(productVariant));
-        when(wishlistItemRepository.save(wishlistItem)).thenReturn(wishlistItem);
+        when(wishlistItemRepository.save(any(WishlistItem.class))).thenReturn(wishlistItem);
 
         @Language("GraphQl")
         var mutation =
@@ -121,7 +136,7 @@ class WishlistDataFetcherTest {
     }
 
     @Test
-    @WithMockUser(username = "test-user")
+    @WithMockUser(username = "1")
     void shouldRemoveWishlistItemTest() {
         Long itemId = wishlistItem.getId();
         when(wishlistItemRepository.findById(itemId)).thenReturn(Optional.of(wishlistItem));
@@ -144,7 +159,35 @@ class WishlistDataFetcherTest {
     }
 
     @Test
-    @WithMockUser(username = "test-user")
+    @WithMockUser(username = "1")
+    void shouldRejectRemoveWishlistItemForAnotherUsersItemTest() {
+        User otherUser = User.create("other-user", "other@example.com", LocalDate.of(1990, 1, 1));
+        otherUser.setId(2L);
+        Wishlist othersWishlist = Wishlist.create(otherUser);
+        othersWishlist.setId(2L);
+        WishlistItem othersItem = WishlistItem.create(othersWishlist, productVariant);
+        othersItem.setId(2L);
+        when(wishlistItemRepository.findById(2L)).thenReturn(Optional.of(othersItem));
+
+        @Language("GraphQl")
+        var mutation =
+                """
+            mutation($itemId: ID!) {
+              removeWishlistItem(wishlistItemId: $itemId)
+            }
+        """;
+
+        graphQlTester
+                .document(mutation)
+                .variable("itemId", 2L)
+                .execute()
+                .errors()
+                .satisfy(errors ->
+                        org.assertj.core.api.Assertions.assertThat(errors).isNotEmpty());
+    }
+
+    @Test
+    @WithMockUser(username = "1")
     void shouldReturnFalseWhenRemovingMissingWishlistItemTest() {
         Long itemId = 999L;
         when(wishlistItemRepository.findById(itemId)).thenReturn(Optional.empty());

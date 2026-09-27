@@ -36,7 +36,19 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-@SpringBootTest(classes = {UserQuery.class, UserMutation.class, GraphQLConfig.class, LocalDateScalar.class, InstantScalar.class})
+@SpringBootTest(
+        classes = {
+            UserQuery.class,
+            UserMutation.class,
+            GraphQLConfig.class,
+            LocalDateScalar.class,
+            InstantScalar.class,
+            ee.bytecore.backend.security.CurrentUserProvider.class,
+            ee.bytecore.backend.services.UserAddressService.class,
+            ee.bytecore.backend.services.UserPaymentMethodService.class,
+            ee.bytecore.backend.graphql.dataloaders.AddressesByUserIdDataLoader.class,
+            ee.bytecore.backend.graphql.dataloaders.PaymentMethodsByUserIdDataLoader.class
+        })
 @EnableDgsMockMvcTest
 @AutoConfigureHttpGraphQlTester
 @Tag("graphql")
@@ -82,6 +94,56 @@ class UserDataFetcherTest {
 
     @Test
     @WithMockUser
+    void shouldReturnGraphQlErrorForMalformedUserIdTest() {
+        @Language("GraphQl")
+        var query =
+                """
+            query($id: ID!) {
+              user(id: $id) {
+                username
+              }
+            }
+        """;
+
+        graphQlTester
+                .document(query)
+                .variable("id", "not-a-number")
+                .execute()
+                .errors()
+                .satisfy(errors -> assertThat(errors).isNotEmpty());
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void shouldPassHostileProviderStringThroughUnchangedTest() {
+        var captor = org.mockito.ArgumentCaptor.forClass(UserPaymentMethod.class);
+        when(userPaymentMethodRepository.save(captor.capture())).thenReturn(userPaymentMethod);
+        String hostileProvider = "mastercard'; DROP TABLE users; --<script>alert(1)</script>";
+
+        @Language("GraphQl")
+        var mutation =
+                """
+            mutation($userId: ID!, $provider: String!) {
+              addUserPaymentMethod(userId: $userId, input: { provider: $provider, type: CARD }) {
+                type
+              }
+            }
+        """;
+
+        graphQlTester
+                .document(mutation)
+                .variable("userId", user.getId())
+                .variable("provider", hostileProvider)
+                .execute()
+                .path("addUserPaymentMethod.type")
+                .entity(String.class)
+                .isEqualTo(userPaymentMethod.getType().name());
+
+        assertThat(captor.getValue().getProvider()).isEqualTo(hostileProvider);
+    }
+
+    @Test
+    @WithMockUser
     void shouldReturnUserTest() throws Exception {
         Long id = user.getId();
 
@@ -117,7 +179,7 @@ class UserDataFetcherTest {
     void shouldReturnAddressTest() throws Exception {
         Long id = user.getId();
 
-        when(userAddressRepository.findAllByUserId(id)).thenReturn(List.of(userAddress));
+        when(userAddressRepository.findAllByUserIdIn(List.of(id))).thenReturn(List.of(userAddress));
 
         @Language("GraphQl")
         var query =
@@ -172,7 +234,7 @@ class UserDataFetcherTest {
     void shouldReturnPaymentMethodTest() throws Exception {
         Long id = user.getId();
 
-        when(userPaymentMethodRepository.findAllByUserId(id)).thenReturn(List.of(userPaymentMethod));
+        when(userPaymentMethodRepository.findAllByUserIdIn(List.of(id))).thenReturn(List.of(userPaymentMethod));
 
         @Language("GraphQl")
         var query =
@@ -242,15 +304,12 @@ class UserDataFetcherTest {
             }
         """;
 
-        graphQlTester
-                .document(mutation)
-                .execute()
-                .errors()
-                .satisfy(errors -> assertThat(errors).isNotEmpty());
+        graphQlTester.document(mutation).execute().errors().satisfy(errors -> assertThat(errors)
+                .isNotEmpty());
     }
 
     @Test
-    @WithMockUser(username = "test-user")
+    @WithMockUser(username = "1")
     void shouldAddMyAddressTest() {
         when(userAddressRepository.save(any(UserAddress.class))).thenReturn(userAddress);
 
@@ -274,7 +333,7 @@ class UserDataFetcherTest {
     }
 
     @Test
-    @WithMockUser(username = "test-user")
+    @WithMockUser(username = "1")
     void shouldUpdateMyAddressTest() {
         Long addressId = userAddress.getId();
         when(userAddressRepository.findById(addressId)).thenReturn(Optional.of(userAddress));
@@ -300,7 +359,7 @@ class UserDataFetcherTest {
     }
 
     @Test
-    @WithMockUser(username = "test-user")
+    @WithMockUser(username = "1")
     void shouldDeleteMyAddressTest() {
         Long addressId = userAddress.getId();
         when(userAddressRepository.findById(addressId)).thenReturn(Optional.of(userAddress));
@@ -323,7 +382,7 @@ class UserDataFetcherTest {
     }
 
     @Test
-    @WithMockUser(username = "test-user")
+    @WithMockUser(username = "1")
     void shouldReturnFalseWhenDeletingMissingMyAddressTest() {
         Long addressId = 999L;
         when(userAddressRepository.findById(addressId)).thenReturn(Optional.empty());
@@ -346,7 +405,35 @@ class UserDataFetcherTest {
     }
 
     @Test
-    @WithMockUser(username = "test-user")
+    @WithMockUser(username = "1")
+    void shouldRejectUpdateMyAddressForAnotherUsersAddressTest() {
+        User otherUser = User.create("other-user", "other@example.com", LocalDate.of(1990, 1, 1));
+        otherUser.setId(2L);
+        UserAddress othersAddress = UserAddress.create(
+                otherUser, "Jane", "Doe", "Boston", "USA", "02101", "1 Other Street", null, "1-800-555-5555");
+        othersAddress.setId(2L);
+        when(userAddressRepository.findById(2L)).thenReturn(Optional.of(othersAddress));
+
+        @Language("GraphQl")
+        var mutation =
+                """
+            mutation($addressId: ID!) {
+              updateMyAddress(addressId: $addressId, input: { city: "Boston" }) {
+                city
+              }
+            }
+        """;
+
+        graphQlTester
+                .document(mutation)
+                .variable("addressId", 2L)
+                .execute()
+                .errors()
+                .satisfy(errors -> assertThat(errors).isNotEmpty());
+    }
+
+    @Test
+    @WithMockUser(username = "1")
     void shouldAddMyPaymentMethodTest() {
         when(userPaymentMethodRepository.save(any(UserPaymentMethod.class))).thenReturn(userPaymentMethod);
 
@@ -370,7 +457,7 @@ class UserDataFetcherTest {
     }
 
     @Test
-    @WithMockUser(username = "test-user")
+    @WithMockUser(username = "1")
     void shouldDeleteMyPaymentMethodTest() {
         Long paymentMethodId = userPaymentMethod.getId();
         when(userPaymentMethodRepository.findById(paymentMethodId)).thenReturn(Optional.of(userPaymentMethod));
@@ -392,58 +479,83 @@ class UserDataFetcherTest {
                 .isEqualTo(true);
     }
 
-//    @Test
-//    @WithMockUser(roles = "ADMIN")
-//    void shouldAddUserAddressTest() {
-//        Long userId = user.getId();
-//        when(userAddressRepository.save(any(UserAddress.class))).thenReturn(userAddress);
-//
-//        @Language("GraphQl")
-//        var mutation =
-//                """
-//            mutation($userId: ID!) {
-//              addUserAddress(userId: $userId, input: { firstName: "John", city: "New York" }) {
-//                firstName
-//              }
-//            }
-//        """;
-//
-//        graphQlTester
-//                .document(mutation)
-//                .variable("userId", userId)
-//                .execute()
-//                .path("addUserAddress.firstName")
-//                .entity(String.class)
-//                .isEqualTo(userAddress.getFirstName());
-//    }
+    @Test
+    @WithMockUser(username = "1")
+    void shouldRejectDeleteMyPaymentMethodForAnotherUsersPaymentMethodTest() {
+        User otherUser = User.create("other-user", "other@example.com", LocalDate.of(1990, 1, 1));
+        otherUser.setId(2L);
+        UserPaymentMethod othersPaymentMethod = UserPaymentMethod.create(otherUser, "visa", PaymentMethodType.CARD);
+        othersPaymentMethod.setId(2L);
+        when(userPaymentMethodRepository.findById(2L)).thenReturn(Optional.of(othersPaymentMethod));
 
-//    @Test
-//    @WithMockUser(roles = "ADMIN")
-//    void shouldUpdateUserAddressTest() {
-//        Long userId = user.getId();
-//        Long addressId = userAddress.getId();
-//        when(userAddressRepository.findById(addressId)).thenReturn(Optional.of(userAddress));
-//        when(userAddressRepository.save(userAddress)).thenReturn(userAddress);
-//
-//        @Language("GraphQl")
-//        var mutation =
-//                """
-//            mutation($userId: ID!, $addressId: ID!) {
-//              updateUserAddress(userId: $userId, addressId: $addressId, input: { city: "Boston" }) {
-//                city
-//              }
-//            }
-//        """;
-//
-//        graphQlTester
-//                .document(mutation)
-//                .variable("userId", userId)
-//                .variable("addressId", addressId)
-//                .execute()
-//                .path("updateUserAddress.city")
-//                .entity(String.class)
-//                .isEqualTo("Boston");
-//    }
+        @Language("GraphQl")
+        var mutation =
+                """
+            mutation($paymentMethodId: ID!) {
+              deleteMyPaymentMethod(paymentMethodId: $paymentMethodId)
+            }
+        """;
+
+        graphQlTester
+                .document(mutation)
+                .variable("paymentMethodId", 2L)
+                .execute()
+                .errors()
+                .satisfy(errors -> assertThat(errors).isNotEmpty());
+    }
+
+    //    @Test
+    //    @WithMockUser(roles = "ADMIN")
+    //    void shouldAddUserAddressTest() {
+    //        Long userId = user.getId();
+    //        when(userAddressRepository.save(any(UserAddress.class))).thenReturn(userAddress);
+    //
+    //        @Language("GraphQl")
+    //        var mutation =
+    //                """
+    //            mutation($userId: ID!) {
+    //              addUserAddress(userId: $userId, input: { firstName: "John", city: "New York" }) {
+    //                firstName
+    //              }
+    //            }
+    //        """;
+    //
+    //        graphQlTester
+    //                .document(mutation)
+    //                .variable("userId", userId)
+    //                .execute()
+    //                .path("addUserAddress.firstName")
+    //                .entity(String.class)
+    //                .isEqualTo(userAddress.getFirstName());
+    //    }
+
+    //    @Test
+    //    @WithMockUser(roles = "ADMIN")
+    //    void shouldUpdateUserAddressTest() {
+    //        Long userId = user.getId();
+    //        Long addressId = userAddress.getId();
+    //        when(userAddressRepository.findById(addressId)).thenReturn(Optional.of(userAddress));
+    //        when(userAddressRepository.save(userAddress)).thenReturn(userAddress);
+    //
+    //        @Language("GraphQl")
+    //        var mutation =
+    //                """
+    //            mutation($userId: ID!, $addressId: ID!) {
+    //              updateUserAddress(userId: $userId, addressId: $addressId, input: { city: "Boston" }) {
+    //                city
+    //              }
+    //            }
+    //        """;
+    //
+    //        graphQlTester
+    //                .document(mutation)
+    //                .variable("userId", userId)
+    //                .variable("addressId", addressId)
+    //                .execute()
+    //                .path("updateUserAddress.city")
+    //                .entity(String.class)
+    //                .isEqualTo("Boston");
+    //    }
 
     @Test
     @WithMockUser(roles = "ADMIN")
@@ -473,6 +585,7 @@ class UserDataFetcherTest {
         Long userId = user.getId();
         Long addressId = userAddress.getId();
         when(userAddressRepository.findById(addressId)).thenReturn(Optional.of(userAddress));
+        when(userAddressRepository.existsById(addressId)).thenReturn(true);
 
         @Language("GraphQl")
         var mutation =
@@ -549,6 +662,7 @@ class UserDataFetcherTest {
         Long userId = user.getId();
         Long paymentMethodId = userPaymentMethod.getId();
         when(userPaymentMethodRepository.findById(paymentMethodId)).thenReturn(Optional.of(userPaymentMethod));
+        when(userPaymentMethodRepository.existsById(paymentMethodId)).thenReturn(true);
 
         @Language("GraphQl")
         var mutation =

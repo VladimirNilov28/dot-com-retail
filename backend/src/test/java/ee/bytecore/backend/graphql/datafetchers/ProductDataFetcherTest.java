@@ -30,7 +30,18 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-@SpringBootTest(classes = {ProductQuery.class, ProductMutation.class, GraphQLConfig.class, LocalDateScalar.class, InstantScalar.class})
+@SpringBootTest(
+        classes = {
+            ProductQuery.class,
+            ProductMutation.class,
+            GraphQLConfig.class,
+            LocalDateScalar.class,
+            InstantScalar.class,
+            ee.bytecore.backend.services.ProductService.class,
+            ee.bytecore.backend.services.ProductVariantService.class,
+            ee.bytecore.backend.graphql.dataloaders.ProductVariantsByProductIdDataLoader.class,
+            ee.bytecore.backend.graphql.dataloaders.CategoriesByProductIdDataLoader.class
+        })
 @EnableDgsMockMvcTest
 @AutoConfigureHttpGraphQlTester
 @Tag("graphql")
@@ -42,6 +53,9 @@ class ProductDataFetcherTest {
     @MockitoBean
     ProductVariantRepository productVariantRepository;
 
+    @MockitoBean
+    ee.bytecore.backend.repositories.category.CategoryRepository categoryRepository;
+
     private Product product;
     private ProductVariant productVariant;
 
@@ -51,7 +65,9 @@ class ProductDataFetcherTest {
     @BeforeEach
     void setUp() {
         product = Product.create("T-Shirt", "t-shirt", "A plain t-shirt");
+        product.setId(1L);
         productVariant = ProductVariant.create(product, "TSHIRT-M-BLACK", new BigDecimal("19.99"));
+        productVariant.setId(1L);
     }
 
     @Test
@@ -186,7 +202,7 @@ class ProductDataFetcherTest {
     void shouldReturnProductVariantsTest() {
         Long id = product.getId();
         when(productRepository.findById(id)).thenReturn(Optional.of(product));
-        when(productVariantRepository.findAllByProductId(id)).thenReturn(List.of(productVariant));
+        when(productVariantRepository.findAllByProductIdIn(List.of(id))).thenReturn(List.of(productVariant));
 
         @Language("GraphQl")
         var query =
@@ -218,7 +234,7 @@ class ProductDataFetcherTest {
     void shouldReturnEmptyProductVariantsTest() {
         Long id = product.getId();
         when(productRepository.findById(id)).thenReturn(Optional.of(product));
-        when(productVariantRepository.findAllByProductId(id)).thenReturn(List.of());
+        when(productVariantRepository.findAllByProductIdIn(List.of(id))).thenReturn(List.of());
 
         @Language("GraphQl")
         var query =

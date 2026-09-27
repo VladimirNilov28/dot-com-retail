@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -18,12 +17,13 @@ import ee.bytecore.backend.exceptions.UserAlreadyExistsException;
 import ee.bytecore.backend.exceptions.UserNotFoundException;
 import ee.bytecore.backend.integration.KratosClient;
 import ee.bytecore.backend.repositories.user.UserRepository;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.junit.jupiter.api.extension.ExtendWith;
 
 @ExtendWith(MockitoExtension.class)
 class UserServiceTest {
@@ -103,7 +103,8 @@ class UserServiceTest {
         when(userRepository.existsByEmail("admin@bytecore.ee")).thenReturn(false);
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        User provisioned = userService.provision("admin", "admin@bytecore.ee", LocalDate.of(2000, 1, 1), UserRole.ADMIN);
+        User provisioned =
+                userService.provision("admin", "admin@bytecore.ee", LocalDate.of(2000, 1, 1), UserRole.ADMIN);
 
         assertThat(provisioned.getRole()).isEqualTo(UserRole.ADMIN);
     }
@@ -112,7 +113,8 @@ class UserServiceTest {
     void shouldUpdateRoleWhenProvisioningExistingUserWithDifferentRoleTest() {
         when(userRepository.findByUsername("admin")).thenReturn(Optional.of(user));
 
-        User provisioned = userService.provision("admin", "admin@bytecore.ee", LocalDate.of(2000, 1, 1), UserRole.ADMIN);
+        User provisioned =
+                userService.provision("admin", "admin@bytecore.ee", LocalDate.of(2000, 1, 1), UserRole.ADMIN);
 
         assertThat(provisioned.getRole()).isEqualTo(UserRole.ADMIN);
         verify(userRepository).save(user);
@@ -141,8 +143,7 @@ class UserServiceTest {
     void shouldThrowWhenDeletingMissingUserTest() {
         when(userRepository.existsById(999L)).thenReturn(false);
 
-        assertThatThrownBy(() -> userService.deleteById(999L))
-                .isInstanceOf(UserNotFoundException.class);
+        assertThatThrownBy(() -> userService.deleteById(999L)).isInstanceOf(UserNotFoundException.class);
 
         verify(userRepository, never()).deleteById(any());
     }

@@ -1,5 +1,7 @@
 package ee.bytecore.backend.config;
 
+import java.util.ArrayList;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -10,11 +12,6 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
-
-import java.lang.annotation.Target;
-import java.util.ArrayList;
-
-import static org.springframework.security.config.Customizer.withDefaults;
 
 @Configuration
 @EnableWebSecurity
@@ -37,9 +34,7 @@ public class SecurityConfig {
             String role = jwt.getClaimAsString("role");
 
             if (role != null) {
-                result.add(
-                        new SimpleGrantedAuthority("ROLE_" + role)
-                );
+                result.add(new SimpleGrantedAuthority("ROLE_" + role));
             }
 
             return result;
@@ -49,10 +44,8 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain filterChain(
-            HttpSecurity http,
-            JwtAuthenticationConverter jwtAuthenticationConverter
-    ) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http, JwtAuthenticationConverter jwtAuthenticationConverter)
+            throws Exception {
 
         return http
                 // Stateless Bearer-token resource server — no cookies/session
@@ -61,22 +54,16 @@ public class SecurityConfig {
                 // POST (GraphQL queries/mutations, internal API) regardless
                 // of a valid JWT.
                 .csrf(csrf -> csrf.disable())
-
-                .oauth2ResourceServer(oauth2 ->
-                        oauth2.jwt(jwt ->
-                                jwt.jwtAuthenticationConverter(
-                                        jwtAuthenticationConverter
-                                )
-                        )
-                )
-
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/graphiql/**").permitAll()
-                        .requestMatchers("/graphql").authenticated()
-                        .requestMatchers("/internal/**").authenticated()
-                        .anyRequest().denyAll()
-                )
-
+                .oauth2ResourceServer(
+                        oauth2 -> oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)))
+                .authorizeHttpRequests(auth -> auth.requestMatchers("/graphiql/**")
+                        .permitAll()
+                        .requestMatchers("/graphql")
+                        .authenticated()
+                        .requestMatchers("/internal/**")
+                        .authenticated()
+                        .anyRequest()
+                        .denyAll())
                 .build();
     }
 }

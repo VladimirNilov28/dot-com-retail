@@ -8,4 +8,6 @@ import ee.bytecore.backend.entities.user.UserPaymentMethod;
 
 public interface UserPaymentMethodRepository extends JpaRepository<UserPaymentMethod, Long> {
     List<UserPaymentMethod> findAllByUserId(Long userId);
+
+    List<UserPaymentMethod> findAllByUserIdIn(List<Long> userIds);
 }

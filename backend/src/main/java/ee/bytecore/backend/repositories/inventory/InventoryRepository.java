@@ -10,7 +10,11 @@ import ee.bytecore.backend.entities.inventory.Inventory;
 public interface InventoryRepository extends JpaRepository<Inventory, Long> {
     List<Inventory> findAllByWarehouseId(Long warehouseId);
 
+    List<Inventory> findAllByWarehouseIdIn(List<Long> warehouseIds);
+
     List<Inventory> findAllByProductVariantId(Long productVariantId);
+
+    List<Inventory> findAllByProductVariantIdIn(List<Long> productVariantIds);
 
     Optional<Inventory> findByProductVariantIdAndWarehouseId(Long productVariantId, Long warehouseId);
 }

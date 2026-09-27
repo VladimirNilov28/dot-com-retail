@@ -1,5 +1,6 @@
 package ee.bytecore.backend.controller;
 
+import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -7,12 +8,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.time.LocalDate;
 import java.util.Optional;
 
-import ee.bytecore.backend.config.SecurityConfig;
-import ee.bytecore.backend.entities.user.User;
-import ee.bytecore.backend.enums.UserRole;
-import ee.bytecore.backend.services.UserService;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -20,7 +15,13 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-import static org.mockito.Mockito.when;
+import ee.bytecore.backend.config.SecurityConfig;
+import ee.bytecore.backend.entities.user.User;
+import ee.bytecore.backend.enums.UserRole;
+import ee.bytecore.backend.services.UserService;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 @WebMvcTest(InternalAuthController.class)
 @Import(SecurityConfig.class)
@@ -44,8 +45,7 @@ class InternalAuthControllerSecurityTest {
 
     @Test
     void shouldRejectUnauthenticatedRequestTest() throws Exception {
-        mockMvc.perform(get("/internal/users/{id}", 1L))
-                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/internal/users/{id}", 1L)).andExpect(status().isUnauthorized());
     }
 
     @Test

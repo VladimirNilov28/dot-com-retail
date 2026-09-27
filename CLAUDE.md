@@ -97,16 +97,25 @@ Stop once the requested refactor scope is complete.
 
 Business logic is intentionally allowed to start inside a controller or a DGS data fetcher and get extracted into a service later, at the user's explicit request.
 
-Until then:
+**Current state**: every implemented domain (User, Category, Product, Cart, Wishlist, Inventory, Order) already has this extraction done — one `@Service` per aggregate (`UserService`, `CategoryService`, `ProductService`/`ProductVariantService`, `CartService`, `WishlistService`, `WarehouseService`/`InventoryService`, `OrderService`), one static `XMapper` per aggregate (entity → generated GraphQL type), and DataFetchers that only call the service and map the result. This is the established pattern — reuse it for new work in these domains rather than treating "no speculative architecture" as license to bypass the service layer that's already there. `Payment` is the one domain still unimplemented (`PaymentQuery`/`PaymentMutation` have no `createPayment`/`updatePaymentStatus` methods) — deliberately deferred pending a possible extraction into a separate service.
+
+For any domain that does **not** yet have this structure:
 
 - Controller/DataFetcher → Repository directly is fine and expected during early development.
-- Do not create `UserService`, `ProductService`, etc. merely because it is cleaner.
+- Do not create a new `XService` merely because it is cleaner.
 - Do not create DTOs, mapper layers, factories, interfaces, or helpers solely to make mocking easier.
 - Do not add patterns, layers, or abstractions for hypothetical future requirements.
 - Do not solve N+1, caching, pagination, validation, authorization, or other future concerns unless they are part of the requested behavior.
 - Do not turn a local implementation task into an architecture redesign.
 
-Existing project structure and explicit user intent outweigh generic best-practice advice.
+Existing project structure and explicit user intent outweigh generic best-practice advice. Within a domain that already has a service/mapper, extending it is following the existing pattern, not adding speculative architecture; introducing a *further* layer (Manager, Facade, Orchestrator, a second service for the same aggregate) still needs an explicit request.
+
+## Established security model
+
+- **Method authorization**: role-based `@PreAuthorize`, applied on the DataFetcher's `@DgsMutation`/`@DgsQuery` method (not the service), e.g. `@PreAuthorize("hasRole('ADMIN')")` (User admin ops), `@PreAuthorize("hasAnyRole('CATALOG_MANAGER','ADMIN')")` (Category/Product writes), `hasAnyRole('WAREHOUSE','ADMIN')` (Inventory writes), `hasAnyRole('ORDER_MANAGER','ADMIN')` (`updateOrderStatus`). This is a deliberate choice over a parallel `SCOPE_x:y` permission model — only one authorization mechanism is in use; do not introduce a second one for new domains without explicit request.
+- **Current-user resolution**: `ee.bytecore.backend.security.CurrentUserProvider#getCurrentUserId()` — resolves the JWT `sub` to a `Long`, returning `null` (not throwing) on a non-numeric subject. DataFetchers call this and pass the id into the service; do not re-implement `SecurityContextHolder` access inline in a new DataFetcher.
+- **Data/ownership authorization**: enforced in services, not DataFetchers, via `!Objects.equals(currentUserId, ownerId)` → throw `org.springframework.security.access.AccessDeniedException`. Use `Objects.equals`, not `.equals()` directly — both sides can legitimately be `null` in test fixtures and this must not NPE.
+- Testing method authorization requires the real `SecurityConfig` imported into the Spring slice (`@EnableMethodSecurity` must actually be active) plus a real JWT built via `Jwt.withTokenValue(...)` + `SecurityMockMvcRequestPostProcessors.authentication(jwtAuthenticationConverter.convert(jwt))` — `@PreAuthorize` is a silent no-op in a narrow `@SpringBootTest(classes = {...})` slice that doesn't import `SecurityConfig`, and bare `@WithMockUser` does not survive the real filter chain once `SecurityConfig` *is* imported. See `UserMutationAuthorizationTest`, `CatalogMutationAuthorizationTest`, `InventoryMutationAuthorizationTest`, `OrderMutationAuthorizationTest` for the pattern.
 
 ## GraphQL / Netflix DGS conventions
 
@@ -116,8 +125,10 @@ A root fetcher resolves:
 
 - `Query.user`
 - `Query.product`
-- `Mutation.createUser`
+- `Mutation.createOrder`
 - etc.
+
+(Not `Mutation.createUser` — that operation was deliberately removed from the schema; `UserDataFetcherTest.shouldNotExposeCreateUserMutationTest` asserts it no longer exists. User creation happens via the internal provisioning flow, not a public GraphQL mutation.)
 
 Nested fields that require custom loading use:
 
@@ -134,6 +145,8 @@ Rules:
 - Do not add `DataLoader` preemptively.
 - Introduce `DataLoader` only when an actual access pattern demonstrates an N+1 problem.
 - Test the GraphQL contract rather than the underlying database representation.
+
+**Current `@DgsDataLoader`s** (package `ee.bytecore.backend.graphql.dataloaders`, each a `MappedBatchLoader` backed by a real batch repository query like `findAllByXIdIn`): `variantsByProductId`, `categoriesByProductId`, `addressesByUserId`, `paymentMethodsByUserId`. These batch a genuine list-of-many-parents access pattern (e.g. `products { variants { ... } }`). Deliberately **not** converted to DataLoaders: `CartItem`/`WishlistItem`/`OrderItem.productVariant` and `Warehouse`/`ProductVariant.inventory` — these resolve within a single cart/wishlist/order/warehouse per request, not across many parents, and batching the item-level variant lookup cleanly would need a schema/DTO change (exposing the raw foreign-key id alongside the mapped GraphQL type) that wasn't requested. Add a `DataLoader` there only once an actual N+1 access pattern is demonstrated, per the rule above — do not add it speculatively to "finish the set."
 
 ## Test strategy by layer
 

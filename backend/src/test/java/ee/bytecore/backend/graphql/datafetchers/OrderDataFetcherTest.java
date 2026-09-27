@@ -19,41 +19,57 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import ee.bytecore.backend.entities.payment.Order;
-import ee.bytecore.backend.entities.payment.PaymentDetails;
 import ee.bytecore.backend.entities.user.User;
 import ee.bytecore.backend.enums.OrderStatus;
-import ee.bytecore.backend.enums.PaymentMethodType;
-import ee.bytecore.backend.enums.PaymentStatus;
-import ee.bytecore.backend.graphql.datafetchers.payment.PaymentMutation;
-import ee.bytecore.backend.graphql.datafetchers.payment.PaymentQuery;
+import ee.bytecore.backend.graphql.datafetchers.order.OrderMutation;
+import ee.bytecore.backend.graphql.datafetchers.order.OrderQuery;
 import ee.bytecore.backend.graphql.scalars.GraphQLConfig;
 import ee.bytecore.backend.graphql.scalars.InstantScalar;
 import ee.bytecore.backend.graphql.scalars.LocalDateScalar;
 import ee.bytecore.backend.repositories.payment.OrderRepository;
-import ee.bytecore.backend.repositories.payment.PaymentDetailsRepository;
 
 import com.netflix.graphql.dgs.test.EnableDgsMockMvcTest;
+import org.assertj.core.api.Assertions;
 import org.intellij.lang.annotations.Language;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import reactor.test.StepVerifier;
 
-@SpringBootTest(classes = {PaymentQuery.class, PaymentMutation.class, GraphQLConfig.class, LocalDateScalar.class, InstantScalar.class})
+@SpringBootTest(
+        classes = {
+            OrderQuery.class,
+            OrderMutation.class,
+            GraphQLConfig.class,
+            LocalDateScalar.class,
+            InstantScalar.class,
+            ee.bytecore.backend.services.OrderService.class,
+            ee.bytecore.backend.services.OrderStatusPublisher.class,
+            ee.bytecore.backend.services.CartService.class,
+            ee.bytecore.backend.security.CurrentUserProvider.class
+        })
 @EnableDgsMockMvcTest
 @AutoConfigureHttpGraphQlTester
 @Tag("graphql")
-class PaymentDataFetcherTest {
+class OrderDataFetcherTest {
 
     @MockitoBean
     OrderRepository orderRepository;
 
     @MockitoBean
-    PaymentDetailsRepository paymentDetailsRepository;
+    ee.bytecore.backend.repositories.payment.OrderItemRepository orderItemRepository;
+
+    @MockitoBean
+    ee.bytecore.backend.repositories.cart.CartRepository cartRepository;
+
+    @MockitoBean
+    ee.bytecore.backend.repositories.cart.CartItemRepository cartItemRepository;
+
+    @MockitoBean
+    ee.bytecore.backend.repositories.product.ProductVariantRepository productVariantRepository;
 
     private User user;
     private Order order;
-    private PaymentDetails paymentDetails;
 
     @Autowired
     private GraphQlTester graphQlTester;
@@ -64,12 +80,14 @@ class PaymentDataFetcherTest {
     @BeforeEach
     void setUp() {
         user = User.create("test-user", "test@example.com", LocalDate.of(1995, 6, 15));
+        user.setId(1L);
         order = Order.create(user, OrderStatus.PENDING, new BigDecimal("39.98"));
-        paymentDetails = PaymentDetails.create(order, new BigDecimal("39.98"), "mastercard", PaymentMethodType.CARD);
+        order.setId(1L);
+        order.setPublicId(UUID.randomUUID());
     }
 
     @Test
-    @WithMockUser
+    @WithMockUser(username = "1")
     void shouldReturnOrderByIdTest() {
         Long id = order.getId();
         when(orderRepository.findById(id)).thenReturn(Optional.of(order));
@@ -98,7 +116,7 @@ class PaymentDataFetcherTest {
     }
 
     @Test
-    @WithMockUser
+    @WithMockUser(username = "1")
     void shouldReturnOrderByPublicIdTest() {
         UUID publicId = order.getPublicId();
         when(orderRepository.findByPublicId(publicId)).thenReturn(Optional.of(order));
@@ -123,7 +141,31 @@ class PaymentDataFetcherTest {
     }
 
     @Test
-    @WithMockUser
+    @WithMockUser(username = "1")
+    void shouldRejectOrderQueryForAnotherUsersOrderTest() {
+        User otherUser = User.create("other-user", "other@example.com", LocalDate.of(1990, 1, 1));
+        otherUser.setId(2L);
+        Order othersOrder = Order.create(otherUser, OrderStatus.PENDING, new BigDecimal("10.00"));
+        othersOrder.setId(2L);
+        when(orderRepository.findById(2L)).thenReturn(Optional.of(othersOrder));
+
+        @Language("GraphQl")
+        var query =
+                """
+            query($id: ID!) {
+              order(id: $id) {
+                status
+              }
+            }
+        """;
+
+        graphQlTester.document(query).variable("id", 2L).execute().errors().satisfy(errors -> Assertions.assertThat(
+                        errors)
+                .isNotEmpty());
+    }
+
+    @Test
+    @WithMockUser(username = "1")
     void shouldReturnNullWhenOrderNotFoundByPublicIdTest() {
         UUID publicId = UUID.randomUUID();
         when(orderRepository.findByPublicId(publicId)).thenReturn(Optional.empty());
@@ -147,7 +189,7 @@ class PaymentDataFetcherTest {
     }
 
     @Test
-    @WithMockUser(username = "test-user")
+    @WithMockUser(username = "1")
     void shouldReturnMyOrdersTest() {
         when(orderRepository.findAllByUserId(user.getId())).thenReturn(List.of(order));
 
@@ -170,7 +212,7 @@ class PaymentDataFetcherTest {
     }
 
     @Test
-    @WithMockUser(username = "test-user")
+    @WithMockUser(username = "1")
     void shouldReturnEmptyMyOrdersTest() {
         when(orderRepository.findAllByUserId(user.getId())).thenReturn(List.of());
 
@@ -193,8 +235,11 @@ class PaymentDataFetcherTest {
     }
 
     @Test
-    @WithMockUser(username = "test-user")
+    @WithMockUser(username = "1")
     void shouldCreateOrderTest() {
+        ee.bytecore.backend.entities.cart.Cart cart = ee.bytecore.backend.entities.cart.Cart.create(user);
+        cart.setId(1L);
+        when(cartRepository.findByUserId(user.getId())).thenReturn(Optional.of(cart));
         when(orderRepository.save(org.mockito.ArgumentMatchers.any(Order.class)))
                 .thenReturn(order);
 
@@ -218,7 +263,7 @@ class PaymentDataFetcherTest {
     }
 
     @Test
-    @WithMockUser(username = "test-user")
+    @WithMockUser(username = "1")
     void shouldUpdateOrderStatusTest() {
         Long id = order.getId();
         when(orderRepository.findById(id)).thenReturn(Optional.of(order));
@@ -244,71 +289,11 @@ class PaymentDataFetcherTest {
     }
 
     @Test
-    @WithMockUser(username = "test-user")
-    void shouldCreatePaymentTest() {
-        Long orderId = order.getId();
-        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
-        when(paymentDetailsRepository.save(org.mockito.ArgumentMatchers.any(PaymentDetails.class)))
-                .thenReturn(paymentDetails);
-
-        @Language("GraphQl")
-        var mutation =
-                """
-            mutation($orderId: ID!) {
-              createPayment(input: { orderId: $orderId, provider: "mastercard", type: CARD }) {
-                provider
-                type
-                status
-              }
-            }
-        """;
-
-        graphQlTester
-                .document(mutation)
-                .variable("orderId", orderId)
-                .execute()
-                .path("createPayment.provider")
-                .entity(String.class)
-                .isEqualTo(paymentDetails.getProvider())
-                .path("createPayment.type")
-                .entity(String.class)
-                .isEqualTo(paymentDetails.getType().name())
-                .path("createPayment.status")
-                .entity(String.class)
-                .isEqualTo(PaymentStatus.PENDING.name());
-    }
-
-    @Test
-    @WithMockUser(username = "test-user")
-    void shouldUpdatePaymentStatusTest() {
-        Long id = paymentDetails.getId();
-        when(paymentDetailsRepository.findById(id)).thenReturn(Optional.of(paymentDetails));
-        when(paymentDetailsRepository.save(paymentDetails)).thenReturn(paymentDetails);
-
-        @Language("GraphQl")
-        var mutation =
-                """
-            mutation($id: ID!) {
-              updatePaymentStatus(paymentId: $id, input: { status: SUCCESS }) {
-                status
-              }
-            }
-        """;
-
-        graphQlTester
-                .document(mutation)
-                .variable("id", id)
-                .execute()
-                .path("updatePaymentStatus.status")
-                .entity(String.class)
-                .isEqualTo(PaymentStatus.SUCCESS.name());
-    }
-
-    @Test
-    @WithMockUser(username = "test-user")
+    @WithMockUser(username = "1")
     void shouldSubscribeToOrderStatusChangesTest() {
         Long id = order.getId();
         when(orderRepository.findById(id)).thenReturn(Optional.of(order));
+        when(orderRepository.save(order)).thenReturn(order);
 
         @Language("GraphQl")
         var subscription =
@@ -329,8 +314,59 @@ class PaymentDataFetcherTest {
                 .executeSubscription()
                 .toFlux("orderStatusChanged.status", String.class);
 
-        var firstStatus = flux.blockFirst(Duration.ofSeconds(5));
+        // The publisher is multicast/non-replaying, so the verifier must subscribe
+        // before the transition below runs, or it will miss the emitted value.
+        var verifier = StepVerifier.create(flux)
+                .expectNext(OrderStatus.SHIPPING.name())
+                .thenCancel()
+                .verifyLater();
 
-        Assertions.assertEquals(OrderStatus.PAID.name(), firstStatus);
+        @Language("GraphQl")
+        var mutation =
+                """
+            mutation($id: ID!) {
+              updateOrderStatus(orderId: $id, input: { status: SHIPPING }) {
+                status
+              }
+            }
+        """;
+
+        graphQlTester.document(mutation).variable("id", id).execute();
+
+        verifier.verify(Duration.ofSeconds(5));
+    }
+
+    @Test
+    @WithMockUser(username = "1")
+    void shouldNotExposeCreatePaymentMutationTest() {
+        @Language("GraphQl")
+        var mutation =
+                """
+            mutation {
+              createPayment(input: { orderId: "1", provider: "mastercard", type: CARD }) {
+                status
+              }
+            }
+        """;
+
+        graphQlTester.document(mutation).execute().errors().satisfy(errors -> Assertions.assertThat(errors)
+                .isNotEmpty());
+    }
+
+    @Test
+    @WithMockUser(username = "1")
+    void shouldNotExposeUpdatePaymentStatusMutationTest() {
+        @Language("GraphQl")
+        var mutation =
+                """
+            mutation {
+              updatePaymentStatus(paymentId: "1", input: { status: SUCCESS }) {
+                status
+              }
+            }
+        """;
+
+        graphQlTester.document(mutation).execute().errors().satisfy(errors -> Assertions.assertThat(errors)
+                .isNotEmpty());
     }
 }

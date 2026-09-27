@@ -12,7 +12,6 @@ TRUNCATE TABLE
     cart_items,
     carts,
     order_items,
-    payment_details,
     orders,
     inventory,
     warehouses,
@@ -296,22 +295,22 @@ INSERT INTO cart_items (cart_id, product_variant_id, quantity) VALUES
 (7, 46, 1), (7, 25, 1);
 
 -- =====================================================
--- Orders, order items, payments
+-- Orders, order items
 -- =====================================================
 
-INSERT INTO orders (id, user_id, cart_id, status, total_amount, created_at) VALUES
-(1, 3, NULL, 'COMPLETED', 1048.00, NOW() - INTERVAL '60 days'),
-(2, 4, NULL, 'COMPLETED', 1349.00, NOW() - INTERVAL '55 days'),
-(3, 6, NULL, 'COMPLETED', 2948.00, NOW() - INTERVAL '48 days'),
-(4, 7, NULL, 'CANCELLED', 149.00, NOW() - INTERVAL '40 days'),
-(5, 8, NULL, 'COMPLETED', 208.00, NOW() - INTERVAL '35 days'),
-(6, 9, NULL, 'SHIPPING', 999.00, NOW() - INTERVAL '10 days'),
-(7, 10, NULL, 'COMPLETED', 428.00, NOW() - INTERVAL '25 days'),
-(8, 11, NULL, 'PAID', 899.00, NOW() - INTERVAL '4 days'),
-(9, 12, NULL, 'COMPLETED', 1899.00, NOW() - INTERVAL '20 days'),
-(10, 13, NULL, 'PENDING', 178.00, NOW() - INTERVAL '1 days'),
-(11, 14, NULL, 'COMPLETED', 749.00, NOW() - INTERVAL '15 days'),
-(12, 15, NULL, 'COMPLETED', 269.00, NOW() - INTERVAL '8 days');
+INSERT INTO orders (id, user_id, status, total_amount, created_at) VALUES
+(1, 3, 'COMPLETED', 1048.00, NOW() - INTERVAL '60 days'),
+(2, 4, 'COMPLETED', 1349.00, NOW() - INTERVAL '55 days'),
+(3, 6, 'COMPLETED', 2948.00, NOW() - INTERVAL '48 days'),
+(4, 7, 'CANCELLED', 149.00, NOW() - INTERVAL '40 days'),
+(5, 8, 'COMPLETED', 208.00, NOW() - INTERVAL '35 days'),
+(6, 9, 'SHIPPING', 999.00, NOW() - INTERVAL '10 days'),
+(7, 10, 'COMPLETED', 428.00, NOW() - INTERVAL '25 days'),
+(8, 11, 'PAID', 899.00, NOW() - INTERVAL '4 days'),
+(9, 12, 'COMPLETED', 1899.00, NOW() - INTERVAL '20 days'),
+(10, 13, 'PENDING', 178.00, NOW() - INTERVAL '1 days'),
+(11, 14, 'COMPLETED', 749.00, NOW() - INTERVAL '15 days'),
+(12, 15, 'COMPLETED', 269.00, NOW() - INTERVAL '8 days');
 
 INSERT INTO order_items (order_id, product_variant_id, quantity, price_at_purchase) VALUES
 (1, 17, 1, 899.00), (1, 39, 1, 99.00), (1, 37, 1, 50.00),
@@ -326,20 +325,6 @@ INSERT INTO order_items (order_id, product_variant_id, quantity, price_at_purcha
 (10, 23, 1, 59.00), (10, 46, 1, 89.00), (10, 37, 1, 30.00),
 (11, 33, 1, 749.00),
 (12, 22, 1, 149.00), (12, 46, 1, 89.00), (12, 37, 1, 31.00);
-
-INSERT INTO payment_details (order_id, amount, provider, type, status, created_at) VALUES
-(1, 1048.00, 'Swedbank', 'BANK_TRANSFER', 'SUCCESS', NOW() - INTERVAL '60 days'),
-(2, 1349.00, 'Mastercard', 'CARD', 'SUCCESS', NOW() - INTERVAL '55 days'),
-(3, 2948.00, 'Visa', 'CARD', 'SUCCESS', NOW() - INTERVAL '48 days'),
-(4, 149.00, 'PayPal', 'DIGITAL_WALLET', 'FAILED', NOW() - INTERVAL '40 days'),
-(5, 208.00, 'Mastercard', 'CARD', 'SUCCESS', NOW() - INTERVAL '35 days'),
-(6, 999.00, 'LHV', 'BANK_TRANSFER', 'SUCCESS', NOW() - INTERVAL '10 days'),
-(7, 428.00, 'Visa', 'CARD', 'SUCCESS', NOW() - INTERVAL '25 days'),
-(8, 899.00, 'Apple Pay', 'DIGITAL_WALLET', 'PENDING', NOW() - INTERVAL '4 days'),
-(9, 1899.00, 'Mastercard', 'CARD', 'SUCCESS', NOW() - INTERVAL '20 days'),
-(10, 178.00, 'Coop Pank', 'BANK_TRANSFER', 'PENDING', NOW() - INTERVAL '1 days'),
-(11, 749.00, 'Visa', 'CARD', 'SUCCESS', NOW() - INTERVAL '15 days'),
-(12, 269.00, 'Visa', 'CARD', 'SUCCESS', NOW() - INTERVAL '8 days');
 
 -- =====================================================
 -- Sync sequences with explicitly inserted ids
@@ -359,4 +344,3 @@ SELECT setval(pg_get_serial_sequence('carts', 'id'), (SELECT MAX(id) FROM carts)
 SELECT setval(pg_get_serial_sequence('cart_items', 'id'), (SELECT MAX(id) FROM cart_items));
 SELECT setval(pg_get_serial_sequence('orders', 'id'), (SELECT MAX(id) FROM orders));
 SELECT setval(pg_get_serial_sequence('order_items', 'id'), (SELECT MAX(id) FROM order_items));
-SELECT setval(pg_get_serial_sequence('payment_details', 'id'), (SELECT MAX(id) FROM payment_details));

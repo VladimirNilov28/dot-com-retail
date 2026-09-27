@@ -1,5 +1,6 @@
 package ee.bytecore.backend.graphql.datafetchers;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
@@ -33,7 +34,16 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-@SpringBootTest(classes = {CartQuery.class, CartMutation.class, GraphQLConfig.class, LocalDateScalar.class, InstantScalar.class})
+@SpringBootTest(
+        classes = {
+            CartQuery.class,
+            CartMutation.class,
+            GraphQLConfig.class,
+            LocalDateScalar.class,
+            InstantScalar.class,
+            ee.bytecore.backend.services.CartService.class,
+            ee.bytecore.backend.security.CurrentUserProvider.class
+        })
 @EnableDgsMockMvcTest
 @AutoConfigureHttpGraphQlTester
 @Tag("graphql")
@@ -59,14 +69,19 @@ class CartDataFetcherTest {
     @BeforeEach
     void setUp() {
         user = User.create("test-user", "test@example.com", LocalDate.of(1995, 6, 15));
+        user.setId(1L);
         cart = Cart.create(user);
+        cart.setId(1L);
         Product product = Product.create("T-Shirt", "t-shirt", "A plain t-shirt");
+        product.setId(1L);
         productVariant = ProductVariant.create(product, "TSHIRT-M-BLACK", new BigDecimal("19.99"));
+        productVariant.setId(1L);
         cartItem = CartItem.create(cart, productVariant, 2);
+        cartItem.setId(1L);
     }
 
     @Test
-    @WithMockUser(username = "test-user")
+    @WithMockUser(username = "1")
     void shouldReturnMyCartTest() {
         when(cartRepository.findByUserId(user.getId())).thenReturn(Optional.of(cart));
 
@@ -91,11 +106,11 @@ class CartDataFetcherTest {
     }
 
     @Test
-    @WithMockUser(username = "test-user")
+    @WithMockUser(username = "1")
     void shouldAddCartItemTest() {
         when(cartRepository.findByUserId(user.getId())).thenReturn(Optional.of(cart));
         when(productVariantRepository.findById(productVariant.getId())).thenReturn(Optional.of(productVariant));
-        when(cartItemRepository.save(cartItem)).thenReturn(cartItem);
+        when(cartItemRepository.save(any(CartItem.class))).thenReturn(cartItem);
 
         @Language("GraphQl")
         var mutation =
@@ -117,7 +132,7 @@ class CartDataFetcherTest {
     }
 
     @Test
-    @WithMockUser(username = "test-user")
+    @WithMockUser(username = "1")
     void shouldUpdateCartItemTest() {
         Long itemId = cartItem.getId();
         when(cartItemRepository.findById(itemId)).thenReturn(Optional.of(cartItem));
@@ -143,7 +158,37 @@ class CartDataFetcherTest {
     }
 
     @Test
-    @WithMockUser(username = "test-user")
+    @WithMockUser(username = "1")
+    void shouldRejectUpdateCartItemForAnotherUsersItemTest() {
+        User otherUser = User.create("other-user", "other@example.com", LocalDate.of(1990, 1, 1));
+        otherUser.setId(2L);
+        Cart othersCart = Cart.create(otherUser);
+        othersCart.setId(2L);
+        CartItem othersItem = CartItem.create(othersCart, productVariant, 1);
+        othersItem.setId(2L);
+        when(cartItemRepository.findById(2L)).thenReturn(Optional.of(othersItem));
+
+        @Language("GraphQl")
+        var mutation =
+                """
+            mutation($itemId: ID!) {
+              updateCartItem(cartItemId: $itemId, input: { quantity: 5 }) {
+                quantity
+              }
+            }
+        """;
+
+        graphQlTester
+                .document(mutation)
+                .variable("itemId", 2L)
+                .execute()
+                .errors()
+                .satisfy(errors ->
+                        org.assertj.core.api.Assertions.assertThat(errors).isNotEmpty());
+    }
+
+    @Test
+    @WithMockUser(username = "1")
     void shouldRemoveCartItemTest() {
         Long itemId = cartItem.getId();
         when(cartItemRepository.findById(itemId)).thenReturn(Optional.of(cartItem));
@@ -166,7 +211,7 @@ class CartDataFetcherTest {
     }
 
     @Test
-    @WithMockUser(username = "test-user")
+    @WithMockUser(username = "1")
     void shouldReturnFalseWhenRemovingMissingCartItemTest() {
         Long itemId = 999L;
         when(cartItemRepository.findById(itemId)).thenReturn(Optional.empty());
@@ -189,7 +234,7 @@ class CartDataFetcherTest {
     }
 
     @Test
-    @WithMockUser(username = "test-user")
+    @WithMockUser(username = "1")
     void shouldClearCartTest() {
         when(cartRepository.findByUserId(user.getId())).thenReturn(Optional.of(cart));
 

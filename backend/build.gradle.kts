@@ -164,6 +164,7 @@ dependencies {
     testImplementation("org.assertj:assertj-core")
     testImplementation("org.springframework.boot:spring-boot-starter-graphql-test")
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
+    testImplementation("io.projectreactor:reactor-test")
 
     // ---------------------
     // Integration Testing

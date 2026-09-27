@@ -11,6 +11,17 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Optional;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
+
 import ee.bytecore.backend.config.SecurityConfig;
 import ee.bytecore.backend.entities.user.User;
 import ee.bytecore.backend.enums.UserRole;
@@ -23,19 +34,10 @@ import ee.bytecore.backend.repositories.user.UserAddressRepository;
 import ee.bytecore.backend.repositories.user.UserPaymentMethodRepository;
 import ee.bytecore.backend.repositories.user.UserRepository;
 import ee.bytecore.backend.services.UserService;
+
 import com.netflix.graphql.dgs.test.EnableDgsMockMvcTest;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.http.MediaType;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 /**
  * Exercises the real SecurityFilterChain + JwtAuthenticationConverter +
@@ -44,7 +46,20 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
  * MockMvc (not GraphQlTester) since this specifically verifies low-level
  * HTTP/security behavior, not the GraphQL contract itself.
  */
-@SpringBootTest(classes = {UserQuery.class, UserMutation.class, GraphQLConfig.class, LocalDateScalar.class, InstantScalar.class, SecurityConfig.class})
+@SpringBootTest(
+        classes = {
+            UserQuery.class,
+            UserMutation.class,
+            GraphQLConfig.class,
+            LocalDateScalar.class,
+            InstantScalar.class,
+            SecurityConfig.class,
+            ee.bytecore.backend.security.CurrentUserProvider.class,
+            ee.bytecore.backend.services.UserAddressService.class,
+            ee.bytecore.backend.services.UserPaymentMethodService.class,
+            ee.bytecore.backend.graphql.dataloaders.AddressesByUserIdDataLoader.class,
+            ee.bytecore.backend.graphql.dataloaders.PaymentMethodsByUserIdDataLoader.class
+        })
 @EnableDgsMockMvcTest
 @Tag("graphql")
 class MeQueryAuthenticationTest {
@@ -111,6 +126,60 @@ class MeQueryAuthenticationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"query\":\"{ me { id } }\"}"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void shouldRejectUserQueryWithoutJwt() throws Exception {
+        mockMvc.perform(post("/graphql")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"{ user(id: \\\"1\\\") { id } }\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void shouldMapAbsentRoleClaimToScopesOnlyTest() {
+        Jwt jwt = Jwt.withTokenValue("test-token")
+                .header("alg", "none")
+                .subject("1")
+                .claim("scope", "user:read")
+                .issuedAt(Instant.now())
+                .expiresAt(Instant.now().plusSeconds(60))
+                .build();
+
+        Authentication authentication = jwtAuthenticationConverter.convert(jwt);
+
+        assertThat(authentication.getAuthorities())
+                .extracting(Object::toString)
+                .contains("SCOPE_user:read")
+                .noneMatch(authority -> authority.startsWith("ROLE_"));
+    }
+
+    @Test
+    void shouldMapScpClaimToScopeAuthoritiesTest() {
+        Jwt jwt = Jwt.withTokenValue("test-token")
+                .header("alg", "none")
+                .subject("1")
+                .claim("scp", java.util.List.of("user:read", "product:read"))
+                .issuedAt(Instant.now())
+                .expiresAt(Instant.now().plusSeconds(60))
+                .build();
+
+        Authentication authentication = jwtAuthenticationConverter.convert(jwt);
+
+        assertThat(authentication.getAuthorities())
+                .extracting(Object::toString)
+                .contains("SCOPE_user:read", "SCOPE_product:read");
+    }
+
+    @Test
+    void shouldReturnGraphQlErrorRatherThanCrashForNonNumericSubjectTest() throws Exception {
+        mockMvc.perform(post("/graphql")
+                        .with(asAuthenticatedJwt("not-a-number", "USER", "user:read"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"{ me { id } }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.errors").exists());
     }
 
     private RequestPostProcessor asAuthenticatedJwt(String subject, String role, String scope) {

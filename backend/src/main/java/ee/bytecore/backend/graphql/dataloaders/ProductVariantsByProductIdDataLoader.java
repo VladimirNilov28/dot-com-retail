@@ -1,0 +1,42 @@
+package ee.bytecore.backend.graphql.dataloaders;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+import java.util.stream.Collectors;
+
+import ee.bytecore.backend.entities.product.ProductVariant;
+import ee.bytecore.backend.repositories.product.ProductVariantRepository;
+
+import com.netflix.graphql.dgs.DgsDataLoader;
+import org.dataloader.MappedBatchLoader;
+
+@DgsDataLoader(name = "variantsByProductId")
+public class ProductVariantsByProductIdDataLoader implements MappedBatchLoader<Long, List<ProductVariant>> {
+
+    private final ProductVariantRepository productVariantRepository;
+
+    public ProductVariantsByProductIdDataLoader(ProductVariantRepository productVariantRepository) {
+        this.productVariantRepository = productVariantRepository;
+    }
+
+    @Override
+    public CompletionStage<Map<Long, List<ProductVariant>>> load(Set<Long> productIds) {
+        return CompletableFuture.supplyAsync(() -> {
+            List<ProductVariant> all = productVariantRepository.findAllByProductIdIn(new ArrayList<>(productIds));
+            Map<Long, List<ProductVariant>> grouped = all.stream()
+                    .collect(Collectors.groupingBy(
+                            variant -> variant.getProduct().getId()));
+
+            Map<Long, List<ProductVariant>> result = new HashMap<>();
+            for (Long productId : productIds) {
+                result.put(productId, grouped.getOrDefault(productId, List.of()));
+            }
+            return result;
+        });
+    }
+}
