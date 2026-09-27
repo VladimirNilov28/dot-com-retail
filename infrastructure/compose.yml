@@ -180,6 +180,35 @@ services:
 
     restart: unless-stopped
 
+  # Single external GraphQL entry point. Fronts the Spring/DGS `retail`
+  # subgraph; Spring itself keeps running on the host (see README "Local
+  # development architecture"), so the router reaches it the same way
+  # oauth-service does, via host.docker.internal on the pinned dev subnet.
+  # The supergraph is a local, reproducible artifact (see
+  # infrastructure/hive/scripts/compose-supergraph.sh) — no Hive Cloud/
+  # registry account is used or required.
+  hive-router:
+    image: ghcr.io/graphql-hive/router:0.2.19
+    container_name: hive-router
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    ports:
+      - "4002:4000"
+
+    volumes:
+      - ./hive/router.config.yaml:/app/router.config.yaml:ro
+      - ./hive/supergraph.graphql:/app/supergraph.graphql:ro
+
+    # The router's distroless image ships only its own static binary (no
+    # shell, wget, or curl), so a container-exec-based healthcheck isn't
+    # possible here. Verify readiness from the host instead:
+    #   curl http://localhost:4002/health     (liveness)
+    #   curl http://localhost:4002/readiness  (supergraph loaded)
+
+    restart: unless-stopped
+
   # TODO:
   # Spring Boot service
 

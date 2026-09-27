@@ -3,6 +3,9 @@ spring:
     url: ${DB_URL}
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
+  graphql:
+    graphiql:
+      enabled: false
 
 kratos:
   admin-url: ${KRATOS_ADMIN_URL}

@@ -146,6 +146,71 @@ pnpm serve:ssr:frontend
 # Open http://localhost:4000/
 ```
 
+## GraphQL API access
+
+Hive Router (`infrastructure/hive/`, Compose service `hive-router`) is the
+single external GraphQL entry point — it fronts the Spring/DGS `retail`
+subgraph and is started as part of Docker infrastructure (`make dev` /
+`docker compose -f infrastructure/compose.yml --env-file .env up -d`).
+
+1. **GraphQL endpoint**: `http://localhost:4002/graphql`
+2. **GraphQL IDE**: open `http://localhost:4002` in a browser — Hive
+   Router's built-in IDE (Docs/schema explorer, autocomplete, queries,
+   mutations, subscriptions). This replaces Spring GraphiQL, which is
+   disabled.
+3. **Get a dev JWT**:
+   ```bash
+   curl -s -X POST http://127.0.0.1:4447/internal/token \
+     -H 'Content-Type: application/json' \
+     -d '{"email":"admin@bytecore.ee","password":"admin-dev-password"}'
+   ```
+4. In the IDE, open the headers panel and add:
+   ```json
+   { "Authorization": "Bearer <access_token>" }
+   ```
+5. Run queries/mutations/subscriptions as usual. The router forwards only
+   the `Authorization` header to Spring; Spring remains the sole JWT
+   validation and authorization authority — the router does not.
+6. **Health/readiness**: `curl http://localhost:4002/health` (liveness),
+   `curl http://localhost:4002/readiness` (supergraph loaded — will be
+   unhealthy if the local supergraph was never generated).
+
+### Regenerating the local supergraph
+
+The supergraph is a reproducible, locally-composed artifact — no Hive
+Cloud account or schema registry is used or required:
+
+```bash
+cd infrastructure/hive
+./scripts/compose-supergraph.sh        # requires Spring running on :8080
+                                        # and oauth-service running (:4447)
+docker compose -f ../compose.yml --env-file ../../.env restart hive-router
+```
+
+This fetches the `retail` subgraph's SDL (via `{ _service { sdl } }`),
+composes it with [Rover](https://www.apollographql.com/docs/rover/) into
+Federation v2's `supergraph.graphql`, and reloads the router. Regenerate it
+whenever the GraphQL schema changes.
+
+### Smoke-testing Hive Router
+
+```bash
+infrastructure/hive/scripts/smoke-test.sh
+```
+
+Checks: router reachable, introspection works, unauthenticated query is
+denied, authenticated query succeeds, a mutation reaches Spring, and a
+validation error propagates with its original message (not masked).
+
+### Troubleshooting Hive Router
+
+| Symptom | Likely cause |
+|---|---|
+| `readiness` returns non-200 | `supergraph.graphql` missing/stale — run `compose-supergraph.sh` |
+| Query returns `SUBREQUEST_HTTP_ERROR` / `Connect` | Spring isn't running on `:8080`, or the firewall rule from "One-time firewall setup" is missing (router reaches Spring via `host.docker.internal`, same path as `oauth-service`) |
+| `401`/`Unexpected error` on every operation | No `Authorization` header set in the IDE, or the dev JWT expired — fetch a new one |
+| IDE loads but Docs panel is empty | Router's local `supergraph.graphql` is out of date — regenerate it |
+
 ## Development Workflow
 
 ### Code style
@@ -183,31 +248,15 @@ The backend will fail to start if Docker isn't available (the `spring-boot-docke
 |---|---|
 | 4200 | Angular dev server |
 | 4000 | SSR Express server |
+| 4002 | Hive Router (GraphQL entry point + IDE) |
 | 5432 | PostgreSQL |
 | 9092 | Kafka (via Testcontainers) |
 
-### GraphiQL Docs/schema explorer shows "Error fetching schema"
+### GraphQL IDE
 
-`/graphql` requires a valid Bearer JWT (see [Configuration](#configuration)), and GraphiQL's schema/Docs
-explorer fetches the schema via a normal introspection query against that same protected endpoint. On
-first page load GraphiQL hasn't loaded any header you've entered yet, so that initial schema fetch runs
-without a token, gets `401`, and — unlike the query editor, which you re-run manually — never retries.
-
-To fix it in the running page:
-
-1. Get a dev token from the internal token endpoint (see `infrastructure/oauth/service/README.md`):
-   ```bash
-   curl -s -X POST http://127.0.0.1:4447/internal/token \
-     -H 'Content-Type: application/json' \
-     -d '{"email":"admin@bytecore.ee","password":"admin-dev-password"}'
-   ```
-2. Open the "Headers" tab in GraphiQL and add `{"Authorization": "Bearer <access_token>"}`.
-3. Click the refresh/reload icon in the Docs panel (or reload the page) to force it to re-fetch the
-   schema now that the header is set.
-
-This is a client-side timing quirk of the vendored GraphiQL bundle (`spring-graphql`'s `graphiql/index.html`),
-not a backend bug — `/graphql` behaves identically for introspection and regular queries, and intentionally
-stays behind authentication in both dev and prod.
+Spring/DGS GraphiQL is **disabled** (`dgs.graphql.graphiql.enabled: false` in
+`application-dev.yaml`). Use Hive Router's built-in GraphQL IDE instead —
+see "GraphQL API access" below.
 
 ### Testcontainers issues
 

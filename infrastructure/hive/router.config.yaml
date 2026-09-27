@@ -1,0 +1,43 @@
+# Hive Router configuration — local development.
+#
+# Spring/DGS `retail` is the only subgraph; its routing_url is baked into
+# supergraph.graphql by scripts/compose-supergraph.sh (host.docker.internal,
+# since Spring runs on the host, not in this Compose network).
+supergraph:
+  source: file
+  path: ./supergraph.graphql
+
+http:
+  host: 0.0.0.0
+  port: 4000
+
+# Forward only the Authorization header to the retail subgraph. Spring
+# Resource Server remains the sole JWT validation authority — the router
+# does not inspect, verify, or re-issue tokens.
+headers:
+  all:
+    request:
+      - propagate:
+          named: Authorization
+
+# Dev-only: lets the built-in GraphQL IDE load the schema and Docs explorer.
+introspection: true
+
+subscriptions:
+  enabled: true
+  websocket:
+    subgraphs:
+      retail:
+        path: /graphql
+
+# Router masks subgraph error messages by default (a safety default for
+# untrusted/third-party subgraphs). `retail` is our own Spring backend and
+# already returns a deliberate, client-safe validation/error taxonomy (see
+# GraphQlExceptionResolver) — preserve those messages instead of flattening
+# them to "Unexpected error".
+error_masking:
+  all:
+    enabled: true
+  subgraphs:
+    retail:
+      enabled: false
