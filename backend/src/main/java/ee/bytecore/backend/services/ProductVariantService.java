@@ -4,7 +4,9 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,6 +16,7 @@ import ee.bytecore.backend.repositories.product.ProductRepository;
 import ee.bytecore.backend.repositories.product.ProductVariantRepository;
 
 import jakarta.persistence.EntityNotFoundException;
+import jakarta.validation.ConstraintViolationException;
 
 @Service
 public class ProductVariantService {
@@ -42,6 +45,8 @@ public class ProductVariantService {
             Map<String, Object> attributes,
             String barcode,
             Integer weightGrams) {
+        validatePrice(price);
+
         Product product = productRepository
                 .findById(productId)
                 .orElseThrow(
@@ -52,7 +57,7 @@ public class ProductVariantService {
         if (barcode != null) variant.setBarcode(barcode);
         if (weightGrams != null) variant.setWeightGrams(weightGrams);
 
-        return productVariantRepository.save(variant);
+        return save(variant);
     }
 
     @Transactional
@@ -70,13 +75,16 @@ public class ProductVariantService {
                         () -> new EntityNotFoundException(String.format("ProductVariant with id %s not found", id)));
 
         if (sku != null) existing.setSku(sku);
-        if (price != null) existing.setPrice(price);
+        if (price != null) {
+            validatePrice(price);
+            existing.setPrice(price);
+        }
         if (attributes != null) existing.setAttributes(attributes);
         if (barcode != null) existing.setBarcode(barcode);
         if (weightGrams != null) existing.setWeightGrams(weightGrams);
         if (isActive != null) existing.setIsActive(isActive);
 
-        return productVariantRepository.save(existing);
+        return save(existing);
     }
 
     public boolean deleteById(Long id) {
@@ -85,5 +93,24 @@ public class ProductVariantService {
         }
         productVariantRepository.deleteById(id);
         return true;
+    }
+
+    private void validatePrice(BigDecimal price) {
+        if (price != null && price.signum() < 0) {
+            throw new IllegalArgumentException("Price must not be negative");
+        }
+    }
+
+    private ProductVariant save(ProductVariant variant) {
+        try {
+            return productVariantRepository.save(variant);
+        } catch (ConstraintViolationException e) {
+            String violations = e.getConstraintViolations().stream()
+                    .map(v -> String.format("%s: %s", v.getPropertyPath(), v.getMessage()))
+                    .collect(Collectors.joining("; "));
+            throw new IllegalArgumentException(String.format("Invalid product variant: %s", violations));
+        } catch (DataIntegrityViolationException e) {
+            throw new IllegalArgumentException(String.format("Product variant with SKU '%s' already exists", variant.getSku()));
+        }
     }
 }

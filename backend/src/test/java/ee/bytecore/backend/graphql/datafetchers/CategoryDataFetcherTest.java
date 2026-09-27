@@ -1,5 +1,6 @@
 package ee.bytecore.backend.graphql.datafetchers;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
@@ -32,6 +33,7 @@ import org.junit.jupiter.api.Test;
             CategoryQuery.class,
             CategoryMutation.class,
             GraphQLConfig.class,
+            ee.bytecore.backend.graphql.GraphQlExceptionResolver.class,
             LocalDateScalar.class,
             InstantScalar.class,
             ee.bytecore.backend.services.CategoryService.class
@@ -206,6 +208,53 @@ class CategoryDataFetcherTest {
                 .path("createCategory.slug")
                 .entity(String.class)
                 .isEqualTo(category.getSlug());
+    }
+
+    @Test
+    @WithMockUser
+    void shouldRejectCreateCategoryWithNonExistentParentIdTest() {
+        when(categoryRepository.findById(999L)).thenReturn(Optional.empty());
+        when(categoryRepository.save(any(Category.class))).thenReturn(category);
+
+        @Language("GraphQl")
+        var mutation =
+                """
+            mutation {
+              createCategory(input: { name: "Sneakers", slug: "sneakers", parentId: "999" }) {
+                id
+              }
+            }
+        """;
+
+        graphQlTester
+                .document(mutation)
+                .execute()
+                .errors()
+                .satisfy(errors -> assertThat(errors)
+                        .as("a parentId that doesn't reference an existing category must be rejected")
+                        .isNotEmpty());
+    }
+
+    @Test
+    @WithMockUser
+    void shouldRejectCreateCategoryWithBlankNameTest() {
+        when(categoryRepository.save(any(Category.class))).thenReturn(category);
+
+        @Language("GraphQl")
+        var mutation =
+                """
+            mutation {
+              createCategory(input: { name: "", slug: "blank-name" }) {
+                id
+              }
+            }
+        """;
+
+        graphQlTester
+                .document(mutation)
+                .execute()
+                .errors()
+                .satisfy(errors -> assertThat(errors).as("a blank name must be rejected").isNotEmpty());
     }
 
     @Test

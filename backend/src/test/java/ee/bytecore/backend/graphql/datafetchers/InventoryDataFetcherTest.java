@@ -1,5 +1,6 @@
 package ee.bytecore.backend.graphql.datafetchers;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
@@ -39,6 +40,7 @@ import org.junit.jupiter.api.Test;
             InventoryQuery.class,
             InventoryMutation.class,
             GraphQLConfig.class,
+            ee.bytecore.backend.graphql.GraphQlExceptionResolver.class,
             LocalDateScalar.class,
             InstantScalar.class,
             ee.bytecore.backend.services.WarehouseService.class,
@@ -375,6 +377,36 @@ class InventoryDataFetcherTest {
                 .path("setInventory.quantity")
                 .entity(Integer.class)
                 .isEqualTo(10);
+    }
+
+    @Test
+    @WithMockUser
+    void shouldRejectSetInventoryWithNegativeQuantityTest() {
+        when(productVariantRepository.findById(productVariant.getId())).thenReturn(Optional.of(productVariant));
+        when(warehouseRepository.findById(warehouse.getId())).thenReturn(Optional.of(warehouse));
+        when(inventoryRepository.findByProductVariantIdAndWarehouseId(productVariant.getId(), warehouse.getId()))
+                .thenReturn(Optional.empty());
+        when(inventoryRepository.save(any(Inventory.class))).thenReturn(inventory);
+
+        @Language("GraphQl")
+        var mutation =
+                """
+            mutation($variantId: ID!, $warehouseId: ID!) {
+              setInventory(input: { productVariantId: $variantId, warehouseId: $warehouseId, quantity: -5 }) {
+                quantity
+              }
+            }
+        """;
+
+        graphQlTester
+                .document(mutation)
+                .variable("variantId", productVariant.getId())
+                .variable("warehouseId", warehouse.getId())
+                .execute()
+                .errors()
+                .satisfy(errors -> assertThat(errors)
+                        .as("a negative inventory quantity must be rejected")
+                        .isNotEmpty());
     }
 
     @Test

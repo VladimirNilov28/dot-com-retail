@@ -4,7 +4,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,6 +16,7 @@ import ee.bytecore.backend.repositories.category.CategoryRepository;
 import ee.bytecore.backend.repositories.product.ProductRepository;
 
 import jakarta.persistence.EntityNotFoundException;
+import jakarta.validation.ConstraintViolationException;
 
 @Service
 public class ProductService {
@@ -41,7 +44,7 @@ public class ProductService {
     public Product create(String name, String slug, String description, List<Long> categoryIds) {
         Product product = Product.create(name, slug, description);
         product.setCategories(resolveCategories(categoryIds));
-        return productRepository.save(product);
+        return save(product);
     }
 
     @Transactional
@@ -55,7 +58,7 @@ public class ProductService {
         if (description != null) existing.setDescription(description);
         if (categoryIds != null) existing.setCategories(resolveCategories(categoryIds));
 
-        return productRepository.save(existing);
+        return save(existing);
     }
 
     public boolean deleteById(Long id) {
@@ -70,6 +73,26 @@ public class ProductService {
         if (categoryIds == null || categoryIds.isEmpty()) {
             return new HashSet<>();
         }
-        return new HashSet<>(categoryRepository.findAllById(categoryIds));
+        List<Category> found = categoryRepository.findAllById(categoryIds);
+        if (found.size() != categoryIds.size()) {
+            Set<Long> foundIds = found.stream().map(Category::getId).collect(Collectors.toSet());
+            List<Long> missing =
+                    categoryIds.stream().filter(id -> !foundIds.contains(id)).toList();
+            throw new IllegalArgumentException(String.format("Category with id %s not found", missing));
+        }
+        return new HashSet<>(found);
+    }
+
+    private Product save(Product product) {
+        try {
+            return productRepository.save(product);
+        } catch (ConstraintViolationException e) {
+            String violations = e.getConstraintViolations().stream()
+                    .map(v -> String.format("%s: %s", v.getPropertyPath(), v.getMessage()))
+                    .collect(Collectors.joining("; "));
+            throw new IllegalArgumentException(String.format("Invalid product: %s", violations));
+        } catch (DataIntegrityViolationException e) {
+            throw new IllegalArgumentException(String.format("Product with slug '%s' already exists", product.getSlug()));
+        }
     }
 }

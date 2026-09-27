@@ -18,7 +18,11 @@ import org.springframework.graphql.test.tester.GraphQlTester;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
+import ee.bytecore.backend.entities.cart.Cart;
+import ee.bytecore.backend.entities.cart.CartItem;
 import ee.bytecore.backend.entities.payment.Order;
+import ee.bytecore.backend.entities.product.Product;
+import ee.bytecore.backend.entities.product.ProductVariant;
 import ee.bytecore.backend.entities.user.User;
 import ee.bytecore.backend.enums.OrderStatus;
 import ee.bytecore.backend.graphql.datafetchers.order.OrderMutation;
@@ -41,6 +45,7 @@ import reactor.test.StepVerifier;
             OrderQuery.class,
             OrderMutation.class,
             GraphQLConfig.class,
+            ee.bytecore.backend.graphql.GraphQlExceptionResolver.class,
             LocalDateScalar.class,
             InstantScalar.class,
             ee.bytecore.backend.services.OrderService.class,
@@ -237,8 +242,13 @@ class OrderDataFetcherTest {
     @Test
     @WithMockUser(username = "1")
     void shouldCreateOrderTest() {
-        ee.bytecore.backend.entities.cart.Cart cart = ee.bytecore.backend.entities.cart.Cart.create(user);
+        Cart cart = Cart.create(user);
         cart.setId(1L);
+        Product product = Product.create("T-Shirt", "t-shirt", "A plain t-shirt");
+        product.setId(1L);
+        ProductVariant variant = ProductVariant.create(product, "TSHIRT-M-BLACK", new BigDecimal("19.99"));
+        variant.setId(1L);
+        cart.getItems().add(CartItem.create(cart, variant, 2));
         when(cartRepository.findByUserId(user.getId())).thenReturn(Optional.of(cart));
         when(orderRepository.save(org.mockito.ArgumentMatchers.any(Order.class)))
                 .thenReturn(order);
@@ -260,6 +270,34 @@ class OrderDataFetcherTest {
                 .path("createOrder.status")
                 .entity(String.class)
                 .isEqualTo(order.getStatus().name());
+    }
+
+    @Test
+    @WithMockUser(username = "1")
+    void shouldRejectCreateOrderWithEmptyCartTest() {
+        Cart cart = Cart.create(user);
+        cart.setId(1L);
+        when(cartRepository.findByUserId(user.getId())).thenReturn(Optional.of(cart));
+        when(orderRepository.save(org.mockito.ArgumentMatchers.any(Order.class)))
+                .thenReturn(order);
+
+        @Language("GraphQl")
+        var mutation =
+                """
+            mutation {
+              createOrder {
+                status
+              }
+            }
+        """;
+
+        graphQlTester
+                .document(mutation)
+                .execute()
+                .errors()
+                .satisfy(errors -> Assertions.assertThat(errors)
+                        .as("creating an order from an empty cart must be rejected")
+                        .isNotEmpty());
     }
 
     @Test

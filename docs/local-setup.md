@@ -186,6 +186,29 @@ The backend will fail to start if Docker isn't available (the `spring-boot-docke
 | 5432 | PostgreSQL |
 | 9092 | Kafka (via Testcontainers) |
 
+### GraphiQL Docs/schema explorer shows "Error fetching schema"
+
+`/graphql` requires a valid Bearer JWT (see [Configuration](#configuration)), and GraphiQL's schema/Docs
+explorer fetches the schema via a normal introspection query against that same protected endpoint. On
+first page load GraphiQL hasn't loaded any header you've entered yet, so that initial schema fetch runs
+without a token, gets `401`, and — unlike the query editor, which you re-run manually — never retries.
+
+To fix it in the running page:
+
+1. Get a dev token from the internal token endpoint (see `infrastructure/oauth/service/README.md`):
+   ```bash
+   curl -s -X POST http://127.0.0.1:4447/internal/token \
+     -H 'Content-Type: application/json' \
+     -d '{"email":"admin@bytecore.ee","password":"admin-dev-password"}'
+   ```
+2. Open the "Headers" tab in GraphiQL and add `{"Authorization": "Bearer <access_token>"}`.
+3. Click the refresh/reload icon in the Docs panel (or reload the page) to force it to re-fetch the
+   schema now that the header is set.
+
+This is a client-side timing quirk of the vendored GraphiQL bundle (`spring-graphql`'s `graphiql/index.html`),
+not a backend bug — `/graphql` behaves identically for introspection and regular queries, and intentionally
+stays behind authentication in both dev and prod.
+
 ### Testcontainers issues
 
 If integration tests fail with connection errors, ensure Docker is running and your user has permission to access the Docker socket. On Linux:

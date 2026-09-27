@@ -1,5 +1,6 @@
 package ee.bytecore.backend.graphql.datafetchers;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
@@ -39,6 +40,7 @@ import org.junit.jupiter.api.Test;
             CartQuery.class,
             CartMutation.class,
             GraphQLConfig.class,
+            ee.bytecore.backend.graphql.GraphQlExceptionResolver.class,
             LocalDateScalar.class,
             InstantScalar.class,
             ee.bytecore.backend.services.CartService.class,
@@ -129,6 +131,85 @@ class CartDataFetcherTest {
                 .path("addCartItem.quantity")
                 .entity(Integer.class)
                 .isEqualTo(2);
+    }
+
+    @Test
+    @WithMockUser(username = "1")
+    void shouldRejectAddCartItemWithNegativeQuantityTest() {
+        when(cartRepository.findByUserId(user.getId())).thenReturn(Optional.of(cart));
+        when(productVariantRepository.findById(productVariant.getId())).thenReturn(Optional.of(productVariant));
+        when(cartItemRepository.save(any(CartItem.class))).thenReturn(cartItem);
+
+        @Language("GraphQl")
+        var mutation =
+                """
+            mutation($variantId: ID!) {
+              addCartItem(input: { productVariantId: $variantId, quantity: -1 }) {
+                quantity
+              }
+            }
+        """;
+
+        graphQlTester
+                .document(mutation)
+                .variable("variantId", productVariant.getId())
+                .execute()
+                .errors()
+                .satisfy(errors -> assertThat(errors)
+                        .as("a negative quantity must be rejected")
+                        .isNotEmpty());
+    }
+
+    @Test
+    @WithMockUser(username = "1")
+    void shouldRejectAddCartItemWithZeroQuantityTest() {
+        when(cartRepository.findByUserId(user.getId())).thenReturn(Optional.of(cart));
+        when(productVariantRepository.findById(productVariant.getId())).thenReturn(Optional.of(productVariant));
+        when(cartItemRepository.save(any(CartItem.class))).thenReturn(cartItem);
+
+        @Language("GraphQl")
+        var mutation =
+                """
+            mutation($variantId: ID!) {
+              addCartItem(input: { productVariantId: $variantId, quantity: 0 }) {
+                quantity
+              }
+            }
+        """;
+
+        graphQlTester
+                .document(mutation)
+                .variable("variantId", productVariant.getId())
+                .execute()
+                .errors()
+                .satisfy(errors -> assertThat(errors).as("a zero quantity must be rejected").isNotEmpty());
+    }
+
+    @Test
+    @WithMockUser(username = "1")
+    void shouldRejectUpdateCartItemQuantityToNegativeTest() {
+        Long itemId = cartItem.getId();
+        when(cartItemRepository.findById(itemId)).thenReturn(Optional.of(cartItem));
+        when(cartItemRepository.save(cartItem)).thenReturn(cartItem);
+
+        @Language("GraphQl")
+        var mutation =
+                """
+            mutation($itemId: ID!) {
+              updateCartItem(cartItemId: $itemId, input: { quantity: -3 }) {
+                quantity
+              }
+            }
+        """;
+
+        graphQlTester
+                .document(mutation)
+                .variable("itemId", itemId)
+                .execute()
+                .errors()
+                .satisfy(errors -> assertThat(errors)
+                        .as("a negative quantity must be rejected")
+                        .isNotEmpty());
     }
 
     @Test

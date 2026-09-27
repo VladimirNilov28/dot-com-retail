@@ -97,6 +97,39 @@ class UserServiceTest {
     }
 
     @Test
+    void shouldThrowWhenCreatingUserWithBlankUsernameTest() {
+        assertThatThrownBy(() -> userService.create("", "blank-username@example.com", LocalDate.of(1995, 6, 15)))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldThrowWhenCreatingUserWithWhitespaceOnlyUsernameTest() {
+        assertThatThrownBy(() -> userService.create("   ", "whitespace-username@example.com", LocalDate.of(1995, 6, 15)))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldThrowWhenCreatingUserWithBlankEmailTest() {
+        assertThatThrownBy(() -> userService.create("blank-email-user", "", LocalDate.of(1995, 6, 15)))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldThrowWhenCreatingUserWithMalformedEmailTest() {
+        assertThatThrownBy(
+                        () -> userService.create("malformed-email-user", "not-an-email", LocalDate.of(1995, 6, 15)))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
     void shouldProvisionNewUserWithGivenRoleTest() {
         when(userRepository.findByUsername("admin")).thenReturn(Optional.empty());
         when(userRepository.existsByUsername("admin")).thenReturn(false);

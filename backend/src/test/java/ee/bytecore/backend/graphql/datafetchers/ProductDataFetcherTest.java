@@ -1,5 +1,6 @@
 package ee.bytecore.backend.graphql.datafetchers;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
@@ -35,6 +36,7 @@ import org.junit.jupiter.api.Test;
             ProductQuery.class,
             ProductMutation.class,
             GraphQLConfig.class,
+            ee.bytecore.backend.graphql.GraphQlExceptionResolver.class,
             LocalDateScalar.class,
             InstantScalar.class,
             ee.bytecore.backend.services.ProductService.class,
@@ -283,6 +285,31 @@ class ProductDataFetcherTest {
 
     @Test
     @WithMockUser
+    void shouldRejectCreateProductWithNonExistentCategoryIdTest() {
+        when(categoryRepository.findAllById(List.of(999L))).thenReturn(List.of());
+        when(productRepository.save(any(Product.class))).thenReturn(product);
+
+        @Language("GraphQl")
+        var mutation =
+                """
+            mutation {
+              createProduct(input: { name: "T-Shirt", slug: "t-shirt", categoryIds: ["999"] }) {
+                name
+              }
+            }
+        """;
+
+        graphQlTester
+                .document(mutation)
+                .execute()
+                .errors()
+                .satisfy(errors -> assertThat(errors)
+                        .as("a categoryId that doesn't reference an existing category must be rejected")
+                        .isNotEmpty());
+    }
+
+    @Test
+    @WithMockUser
     void shouldUpdateProductTest() {
         Long id = product.getId();
         when(productRepository.findById(id)).thenReturn(Optional.of(product));
@@ -377,6 +404,32 @@ class ProductDataFetcherTest {
                 .path("createProductVariant.sku")
                 .entity(String.class)
                 .isEqualTo(productVariant.getSku());
+    }
+
+    @Test
+    @WithMockUser
+    void shouldRejectCreateProductVariantWithNegativePriceTest() {
+        when(productRepository.findById(product.getId())).thenReturn(Optional.of(product));
+        when(productVariantRepository.save(any(ProductVariant.class))).thenReturn(productVariant);
+
+        @Language("GraphQl")
+        var mutation =
+                """
+            mutation($productId: ID!) {
+              createProductVariant(input: { productId: $productId, sku: "BAD-SKU", price: "-5.00" }) {
+                sku
+              }
+            }
+        """;
+
+        graphQlTester
+                .document(mutation)
+                .variable("productId", product.getId())
+                .execute()
+                .errors()
+                .satisfy(errors -> assertThat(errors)
+                        .as("a negative price must be rejected")
+                        .isNotEmpty());
     }
 
     @Test

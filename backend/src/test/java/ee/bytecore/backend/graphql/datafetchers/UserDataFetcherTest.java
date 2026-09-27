@@ -41,6 +41,7 @@ import org.junit.jupiter.api.Test;
             UserQuery.class,
             UserMutation.class,
             GraphQLConfig.class,
+            ee.bytecore.backend.graphql.GraphQlExceptionResolver.class,
             LocalDateScalar.class,
             InstantScalar.class,
             ee.bytecore.backend.security.CurrentUserProvider.class,
@@ -111,6 +112,57 @@ class UserDataFetcherTest {
                 .execute()
                 .errors()
                 .satisfy(errors -> assertThat(errors).isNotEmpty());
+    }
+
+    @Test
+    @WithMockUser
+    void shouldNotLeakExceptionClassNameForMalformedUserIdTest() {
+        @Language("GraphQl")
+        var query =
+                """
+            query($id: ID!) {
+              user(id: $id) {
+                username
+              }
+            }
+        """;
+
+        graphQlTester
+                .document(query)
+                .variable("id", "not-a-number")
+                .execute()
+                .errors()
+                .satisfy(errors -> assertThat(errors).allSatisfy(error -> assertThat(error.getMessage())
+                        .as("error message must not leak the raw Java exception")
+                        .doesNotContain("java.lang")
+                        .doesNotContain("Exception")));
+    }
+
+    @Test
+    @WithMockUser
+    void shouldReturnControlledErrorForNonExistentUserIdTest() {
+        when(userService.findById(999999L)).thenReturn(Optional.empty());
+
+        @Language("GraphQl")
+        var query =
+                """
+            query($id: ID!) {
+              user(id: $id) {
+                username
+              }
+            }
+        """;
+
+        graphQlTester
+                .document(query)
+                .variable("id", "999999")
+                .execute()
+                .errors()
+                .satisfy(errors -> assertThat(errors).allSatisfy(error -> assertThat(error.getMessage())
+                        .as("a missing user must produce a controlled domain error, not the raw"
+                                + " graphql-java non-null-bubbling engine message")
+                        .doesNotContain("graphql specification requires")
+                        .doesNotContain("non null type")));
     }
 
     @Test

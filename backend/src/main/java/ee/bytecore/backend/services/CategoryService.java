@@ -2,12 +2,16 @@ package ee.bytecore.backend.services;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import ee.bytecore.backend.entities.category.Category;
 import ee.bytecore.backend.repositories.category.CategoryRepository;
+
+import jakarta.validation.ConstraintViolationException;
 
 @Service
 public class CategoryService {
@@ -31,8 +35,9 @@ public class CategoryService {
     }
 
     public Category create(String name, String slug, Long parentId) {
+        validateName(name);
         Category parent = resolveParent(parentId);
-        return categoryRepository.save(Category.create(name, slug, parent));
+        return save(Category.create(name, slug, parent));
     }
 
     @Transactional
@@ -42,11 +47,14 @@ public class CategoryService {
                 .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException(
                         String.format("Category with id %s not found", id)));
 
-        if (name != null) existing.setName(name);
+        if (name != null) {
+            validateName(name);
+            existing.setName(name);
+        }
         if (slug != null) existing.setSlug(slug);
         if (parentId != null) existing.setParent(resolveParent(parentId));
 
-        return categoryRepository.save(existing);
+        return save(existing);
     }
 
     public boolean deleteById(Long id) {
@@ -57,7 +65,33 @@ public class CategoryService {
         return true;
     }
 
+    private void validateName(String name) {
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("Category name must not be blank");
+        }
+    }
+
     private Category resolveParent(Long parentId) {
-        return parentId == null ? null : categoryRepository.findById(parentId).orElse(null);
+        if (parentId == null) {
+            return null;
+        }
+        return categoryRepository
+                .findById(parentId)
+                .orElseThrow(() ->
+                        new IllegalArgumentException(String.format("Parent category with id %s not found", parentId)));
+    }
+
+    private Category save(Category category) {
+        try {
+            return categoryRepository.save(category);
+        } catch (ConstraintViolationException e) {
+            String violations = e.getConstraintViolations().stream()
+                    .map(v -> String.format("%s: %s", v.getPropertyPath(), v.getMessage()))
+                    .collect(Collectors.joining("; "));
+            throw new IllegalArgumentException(String.format("Invalid category: %s", violations));
+        } catch (DataIntegrityViolationException e) {
+            throw new IllegalArgumentException(
+                    String.format("Category with slug '%s' already exists", category.getSlug()));
+        }
     }
 }

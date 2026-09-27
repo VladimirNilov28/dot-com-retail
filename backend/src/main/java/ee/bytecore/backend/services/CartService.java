@@ -2,6 +2,7 @@ package ee.bytecore.backend.services;
 
 import java.util.Objects;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +39,7 @@ public class CartService {
     }
 
     public CartItem addItem(Long userId, Long productVariantId, Integer quantity) {
+        validateQuantity(quantity);
         Cart cart = getMyCart(userId);
         ProductVariant variant = productVariantRepository
                 .findById(productVariantId)
@@ -45,14 +47,15 @@ public class CartService {
                         String.format("ProductVariant with id %s not found", productVariantId)));
 
         CartItem item = CartItem.create(cart, variant, quantity);
-        return cartItemRepository.save(item);
+        return save(item);
     }
 
     @Transactional
     public CartItem updateItemQuantity(Long userId, Long cartItemId, Integer quantity) {
+        validateQuantity(quantity);
         CartItem item = findOwned(userId, cartItemId);
         item.setQuantity(quantity);
-        return cartItemRepository.save(item);
+        return save(item);
     }
 
     public boolean removeItem(Long userId, Long cartItemId) {
@@ -79,6 +82,20 @@ public class CartService {
                         () -> new EntityNotFoundException(String.format("CartItem with id %s not found", cartItemId)));
         requireOwnership(userId, item);
         return item;
+    }
+
+    private void validateQuantity(Integer quantity) {
+        if (quantity == null || quantity <= 0) {
+            throw new IllegalArgumentException("Quantity must be positive");
+        }
+    }
+
+    private CartItem save(CartItem item) {
+        try {
+            return cartItemRepository.save(item);
+        } catch (DataIntegrityViolationException e) {
+            throw new IllegalArgumentException("This product variant is already in the cart");
+        }
     }
 
     private void requireOwnership(Long userId, CartItem item) {

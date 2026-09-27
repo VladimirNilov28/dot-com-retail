@@ -2,6 +2,7 @@ package ee.bytecore.backend.services;
 
 import java.time.LocalDate;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,6 +17,8 @@ import ee.bytecore.backend.repositories.user.UserRepository;
 @Service
 public class UserService {
 
+    private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
+
     private final UserRepository userRepository;
     private final KratosClient kratosClient;
 
@@ -29,6 +32,15 @@ public class UserService {
     }
 
     public User create(String username, String email, LocalDate dateOfBirth) {
+        if (username == null || username.isBlank()) {
+            throw new IllegalArgumentException("Username must not be blank");
+        }
+        if (email == null || email.isBlank()) {
+            throw new IllegalArgumentException("Email must not be blank");
+        }
+        if (!EMAIL_PATTERN.matcher(email).matches()) {
+            throw new IllegalArgumentException(String.format("Email is not valid: %s", email));
+        }
         if (userRepository.existsByUsername(username)) {
             throw new UserAlreadyExistsException(String.format("User with username %s already exists", username));
         }

@@ -2,12 +2,15 @@ package ee.bytecore.backend.services;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 
 import ee.bytecore.backend.entities.user.UserPaymentMethod;
 import ee.bytecore.backend.repositories.user.UserPaymentMethodRepository;
+
+import jakarta.validation.ConstraintViolationException;
 
 @Service
 public class UserPaymentMethodService {
@@ -23,7 +26,14 @@ public class UserPaymentMethodService {
     }
 
     public UserPaymentMethod create(UserPaymentMethod paymentMethod) {
-        return userPaymentMethodRepository.save(paymentMethod);
+        try {
+            return userPaymentMethodRepository.save(paymentMethod);
+        } catch (ConstraintViolationException e) {
+            String violations = e.getConstraintViolations().stream()
+                    .map(v -> String.format("%s: %s", v.getPropertyPath(), v.getMessage()))
+                    .collect(Collectors.joining("; "));
+            throw new IllegalArgumentException(String.format("Invalid payment method: %s", violations));
+        }
     }
 
     public boolean deleteOwned(Long userId, Long paymentMethodId) {

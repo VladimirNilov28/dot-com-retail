@@ -40,6 +40,9 @@ public class InventoryService {
 
     @Transactional
     public Inventory setInventory(Long productVariantId, Long warehouseId, Integer quantity) {
+        if (quantity == null || quantity < 0) {
+            throw new IllegalArgumentException("Quantity must not be negative");
+        }
         return inventoryRepository
                 .findByProductVariantIdAndWarehouseId(productVariantId, warehouseId)
                 .map(existing -> {

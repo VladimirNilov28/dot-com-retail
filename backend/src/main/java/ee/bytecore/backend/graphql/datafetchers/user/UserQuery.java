@@ -3,6 +3,7 @@ package ee.bytecore.backend.graphql.datafetchers.user;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
+import ee.bytecore.backend.exceptions.UserNotFoundException;
 import ee.bytecore.backend.graphql.mappers.UserMapper;
 import ee.bytecore.backend.security.CurrentUserProvider;
 import ee.bytecore.backend.services.UserAddressService;
@@ -49,10 +50,19 @@ public class UserQuery {
 
     @DgsQuery
     public User user(@InputArgument String id) {
+        long userId = parseId(id);
         return userService
-                .findById(Long.valueOf(id))
+                .findById(userId)
                 .map(UserMapper::toGraphQlType)
-                .orElse(null);
+                .orElseThrow(() -> new UserNotFoundException(String.format("User with id %s not found", userId)));
+    }
+
+    private long parseId(String rawId) {
+        try {
+            return Long.parseLong(rawId);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException(String.format("Invalid user id: %s", rawId));
+        }
     }
 
     @DgsData(parentType = "User")
@@ -81,5 +91,3 @@ public class UserQuery {
                         methods.stream().map(UserMapper::toGraphQlType).toList());
     }
 }
-
-// TODO replace return null with custom exceptions

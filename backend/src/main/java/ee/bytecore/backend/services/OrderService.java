@@ -59,6 +59,9 @@ public class OrderService {
     public Order createOrder(Long userId) {
         Cart cart = cartService.getMyCart(userId);
         List<CartItem> cartItems = cart.getItems();
+        if (cartItems.isEmpty()) {
+            throw new IllegalArgumentException("Cannot create an order from an empty cart");
+        }
 
         BigDecimal totalAmount = BigDecimal.ZERO;
         for (CartItem cartItem : cartItems) {

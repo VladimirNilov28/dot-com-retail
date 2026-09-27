@@ -2,6 +2,7 @@ package ee.bytecore.backend.services;
 
 import java.util.Objects;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 
@@ -45,7 +46,11 @@ public class WishlistService {
                         String.format("ProductVariant with id %s not found", productVariantId)));
 
         WishlistItem item = WishlistItem.create(wishlist, variant);
-        return wishlistItemRepository.save(item);
+        try {
+            return wishlistItemRepository.save(item);
+        } catch (DataIntegrityViolationException e) {
+            throw new IllegalArgumentException("This product variant is already in the wishlist");
+        }
     }
 
     public boolean removeItem(Long userId, Long wishlistItemId) {
