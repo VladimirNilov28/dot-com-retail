@@ -8,7 +8,8 @@ CYAN   = \033[0;36m
 RESET  = \033[0m
 
 .PHONY: dev dev-clean debug debug-clean test test-unit test-graphql test-integration test-e2e \
-	coverage format format-check build status logs down clean help restart config doctor firewall-check
+	coverage format format-check build status logs down clean help restart config doctor firewall-check \
+	seed-test-data
 
 help:
 	@echo "$(CYAN)Available commands:$(RESET)"
@@ -33,6 +34,7 @@ help:
 	@echo "  $(GREEN)make config$(RESET)          🔎 print the effective (resolved) docker compose config"
 	@echo "  $(GREEN)make doctor$(RESET)          🩺 diagnose the local dev infrastructure (env, network, firewall, ports)"
 	@echo "  $(GREEN)make firewall-check$(RESET)  🔥 verify (without changing) the host firewall rule oauth-service needs"
+	@echo "  $(GREEN)make seed-test-data$(RESET)  🌱 wipe and repopulate the dev database with test data"
 
 dev:
 	@test -f .env || { echo "$(YELLOW)✗ .env not found — run: cp .env.example .env$(RESET)"; exit 1; }
@@ -132,3 +134,7 @@ firewall-check:
 	@sudo -n iptables -C ufw-user-input -p tcp -s $(DEV_SUBNET) --dport 8080 -j ACCEPT 2>/dev/null \
 		&& echo "$(GREEN)✓ rule present$(RESET)" \
 		|| echo "$(YELLOW)✗ rule missing or sudo needs a password — run: sudo ufw allow from $(DEV_SUBNET) to any port 8080 proto tcp comment 'bytecore-dev: oauth-service -> Spring'$(RESET)"
+
+seed-test-data:
+	@echo "$(CYAN)🌱 seeding dev database with test data...$(RESET)"
+	@$(GRADLE) testData -PdbName=retail -PdbUser=retail -PdbPassword=retail
