@@ -3,6 +3,8 @@ package ee.bytecore.backend.graphql.datafetchers.product;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import ee.bytecore.backend.graphql.mappers.CategoryMapper;
 import ee.bytecore.backend.graphql.mappers.ProductMapper;
 import ee.bytecore.backend.services.ProductService;
@@ -25,6 +27,7 @@ public class ProductQuery {
     }
 
     @DgsQuery
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).PRODUCT_READ)")
     public Product product(@InputArgument String id, @InputArgument String slug) {
         if (slug != null) {
             return productService
@@ -42,6 +45,7 @@ public class ProductQuery {
     }
 
     @DgsQuery
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).PRODUCT_READ)")
     public List<Product> products() {
         return productService.findAll().stream()
                 .map(ProductMapper::toGraphQlType)

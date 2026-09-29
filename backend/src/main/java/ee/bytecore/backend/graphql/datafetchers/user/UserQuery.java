@@ -3,6 +3,8 @@ package ee.bytecore.backend.graphql.datafetchers.user;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import ee.bytecore.backend.exceptions.UserNotFoundException;
 import ee.bytecore.backend.graphql.mappers.UserMapper;
 import ee.bytecore.backend.security.CurrentUserProvider;
@@ -35,6 +37,7 @@ public class UserQuery {
     }
 
     @DgsQuery
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).USER_READ)")
     public User me() {
         // Not resolved via a @CurrentSecurityContext parameter: DGS's
         // @DgsQuery methods don't get Spring MVC's HandlerMethodArgumentResolver
@@ -49,6 +52,8 @@ public class UserQuery {
     }
 
     @DgsQuery
+    @PreAuthorize(
+            "hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).USER_READ) && hasAnyRole('ADMIN','SUPPORT')")
     public User user(@InputArgument String id) {
         long userId = parseId(id);
         return userService

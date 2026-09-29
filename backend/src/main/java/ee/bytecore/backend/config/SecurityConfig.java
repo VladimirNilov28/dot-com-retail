@@ -43,8 +43,9 @@ public class SecurityConfig {
         requestFactory.setReadTimeout(DISCOVERY_TIMEOUT);
         var restTemplate = new RestTemplate(requestFactory);
 
-        Supplier<JwtDecoder> decoderSupplier = SingletonSupplier
-                .of(() -> NimbusJwtDecoder.withIssuerLocation(issuerUri).restOperations(restTemplate).build());
+        Supplier<JwtDecoder> decoderSupplier = SingletonSupplier.of(() -> NimbusJwtDecoder.withIssuerLocation(issuerUri)
+                .restOperations(restTemplate)
+                .build());
 
         return new SupplierJwtDecoder(decoderSupplier);
     }

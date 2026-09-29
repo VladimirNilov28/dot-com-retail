@@ -1,23 +1,20 @@
 package ee.bytecore.backend.graphql.datafetchers;
 
+import static ee.bytecore.backend.graphql.datafetchers.support.JwtTestSupport.asAuthenticatedJwt;
 import static org.mockito.Mockito.when;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import java.time.Instant;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import ee.bytecore.backend.config.SecurityConfig;
 import ee.bytecore.backend.entities.category.Category;
@@ -41,12 +38,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * Proves createCategory/deleteCategory/deleteProduct actually enforce
- * @PreAuthorize("hasAnyRole('CATALOG_MANAGER','ADMIN')") against the real
- * SecurityFilterChain + JwtAuthenticationConverter (not @WithMockUser, which
- * doesn't survive the real OAuth2 resource server filter chain imported
- * here — see MeQueryAuthenticationTest/UserMutationAuthorizationTest for the
- * same pattern established in the User domain).
+ * Proves createCategory/deleteCategory/deleteProduct enforce
+ * {@code hasAuthority('SCOPE_category:write'|'SCOPE_product:write') && hasAnyRole('CATALOG_MANAGER','ADMIN')}
+ * (scope AND role — ADMIN does not bypass a missing scope), and that
+ * category/product read queries enforce the corresponding read scope, all
+ * against the real SecurityFilterChain + JwtAuthenticationConverter (not
+ * @WithMockUser, which doesn't survive the real OAuth2 resource server filter
+ * chain imported here — see MeQueryAuthenticationTest/UserMutationAuthorizationTest
+ * for the same pattern established in the User domain).
  */
 @SpringBootTest(
         classes = {
@@ -99,7 +98,7 @@ class CatalogMutationAuthorizationTest {
     @Test
     void shouldRejectDeleteCategoryForNonCatalogManagerTest() throws Exception {
         mockMvc.perform(post("/graphql")
-                        .with(asAuthenticatedJwt("2", "USER"))
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "USER"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .accept(MediaType.APPLICATION_JSON)
                         .content("{\"query\":\"mutation { deleteCategory(categoryId: \\\"1\\\") }\"}"))
@@ -112,7 +111,7 @@ class CatalogMutationAuthorizationTest {
         when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
 
         mockMvc.perform(post("/graphql")
-                        .with(asAuthenticatedJwt("2", "CATALOG_MANAGER"))
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "CATALOG_MANAGER", "category:write"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .accept(MediaType.APPLICATION_JSON)
                         .content("{\"query\":\"mutation { deleteCategory(categoryId: \\\"1\\\") }\"}"))
@@ -121,9 +120,67 @@ class CatalogMutationAuthorizationTest {
     }
 
     @Test
+    void shouldRejectDeleteCategoryForCatalogManagerMissingScopeTest() throws Exception {
+        mockMvc.perform(post("/graphql")
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "CATALOG_MANAGER"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"mutation { deleteCategory(categoryId: \\\"1\\\") }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.errors").isNotEmpty());
+    }
+
+    @Test
+    void shouldRejectDeleteCategoryForAdminMissingScopeTest() throws Exception {
+        // Regression: ADMIN must NOT bypass a missing category:write scope.
+        mockMvc.perform(post("/graphql")
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"mutation { deleteCategory(categoryId: \\\"1\\\") }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.errors").isNotEmpty());
+    }
+
+    @Test
+    void shouldAllowDeleteCategoryForAdminWithScopeTest() throws Exception {
+        when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
+
+        mockMvc.perform(post("/graphql")
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "ADMIN", "category:write"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"mutation { deleteCategory(categoryId: \\\"1\\\") }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.deleteCategory").value(true));
+    }
+
+    @Test
+    void shouldRejectCategoriesQueryMissingReadScopeTest() throws Exception {
+        mockMvc.perform(post("/graphql")
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "USER"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"{ categories { id } }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.errors").isNotEmpty());
+    }
+
+    @Test
+    void shouldAllowCategoriesQueryWithReadScopeTest() throws Exception {
+        mockMvc.perform(post("/graphql")
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "USER", "category:read"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"{ categories { id } }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.categories").isArray());
+    }
+
+    @Test
     void shouldRejectDeleteProductForNonCatalogManagerTest() throws Exception {
         mockMvc.perform(post("/graphql")
-                        .with(asAuthenticatedJwt("2", "USER"))
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "USER"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .accept(MediaType.APPLICATION_JSON)
                         .content("{\"query\":\"mutation { deleteProduct(productId: \\\"1\\\") }\"}"))
@@ -136,7 +193,7 @@ class CatalogMutationAuthorizationTest {
         when(productRepository.findById(1L)).thenReturn(Optional.of(product));
 
         mockMvc.perform(post("/graphql")
-                        .with(asAuthenticatedJwt("2", "CATALOG_MANAGER"))
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "CATALOG_MANAGER", "product:write"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .accept(MediaType.APPLICATION_JSON)
                         .content("{\"query\":\"mutation { deleteProduct(productId: \\\"1\\\") }\"}"))
@@ -144,14 +201,61 @@ class CatalogMutationAuthorizationTest {
                 .andExpect(jsonPath("$.data.deleteProduct").value(true));
     }
 
-    private RequestPostProcessor asAuthenticatedJwt(String subject, String role) {
-        Jwt jwt = Jwt.withTokenValue("test-token")
-                .header("alg", "none")
-                .subject(subject)
-                .claim("role", role)
-                .issuedAt(Instant.now())
-                .expiresAt(Instant.now().plusSeconds(60))
-                .build();
-        return authentication(jwtAuthenticationConverter.convert(jwt));
+    @Test
+    void shouldRejectDeleteProductForCatalogManagerMissingScopeTest() throws Exception {
+        mockMvc.perform(post("/graphql")
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "CATALOG_MANAGER"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"mutation { deleteProduct(productId: \\\"1\\\") }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.errors").isNotEmpty());
+    }
+
+    @Test
+    void shouldRejectDeleteProductForAdminMissingScopeTest() throws Exception {
+        // Regression: ADMIN must NOT bypass a missing product:write scope.
+        mockMvc.perform(post("/graphql")
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"mutation { deleteProduct(productId: \\\"1\\\") }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.errors").isNotEmpty());
+    }
+
+    @Test
+    void shouldAllowDeleteProductForAdminWithScopeTest() throws Exception {
+        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+
+        mockMvc.perform(post("/graphql")
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "ADMIN", "product:write"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"mutation { deleteProduct(productId: \\\"1\\\") }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.deleteProduct").value(true));
+    }
+
+    @Test
+    void shouldRejectProductsQueryMissingReadScopeTest() throws Exception {
+        mockMvc.perform(post("/graphql")
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "USER"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"{ products { id } }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.errors").isNotEmpty());
+    }
+
+    @Test
+    void shouldAllowProductsQueryWithReadScopeTest() throws Exception {
+        mockMvc.perform(post("/graphql")
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "USER", "product:read"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"{ products { id } }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.products").isArray());
     }
 }

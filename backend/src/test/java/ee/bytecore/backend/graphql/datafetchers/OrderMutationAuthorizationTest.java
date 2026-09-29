@@ -1,25 +1,22 @@
 package ee.bytecore.backend.graphql.datafetchers;
 
+import static ee.bytecore.backend.graphql.datafetchers.support.JwtTestSupport.asAuthenticatedJwt;
 import static org.mockito.Mockito.when;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import ee.bytecore.backend.config.SecurityConfig;
 import ee.bytecore.backend.entities.payment.Order;
@@ -45,8 +42,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * Proves updateOrderStatus enforces @PreAuthorize("hasAnyRole('ORDER_MANAGER','ADMIN')")
- * against the real SecurityFilterChain (same pattern as CatalogMutationAuthorizationTest).
+ * Proves createOrder/myOrders/order enforce order:read/order:write, and
+ * updateOrderStatus enforces
+ * {@code hasAuthority('SCOPE_order:manage-status') && hasAnyRole('ORDER_MANAGER','ADMIN')}
+ * (scope AND role — ADMIN does not bypass a missing scope) against the real
+ * SecurityFilterChain (same pattern as CatalogMutationAuthorizationTest).
  */
 @SpringBootTest(
         classes = {
@@ -102,7 +102,7 @@ class OrderMutationAuthorizationTest {
     void shouldRejectUpdateOrderStatusForNonOrderManagerTest() throws Exception {
         mockMvc.perform(
                         post("/graphql")
-                                .with(asAuthenticatedJwt("2", "USER"))
+                                .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "USER"))
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .accept(MediaType.APPLICATION_JSON)
                                 .content(
@@ -118,7 +118,8 @@ class OrderMutationAuthorizationTest {
 
         mockMvc.perform(
                         post("/graphql")
-                                .with(asAuthenticatedJwt("2", "ORDER_MANAGER"))
+                                .with(asAuthenticatedJwt(
+                                        jwtAuthenticationConverter, "2", "ORDER_MANAGER", "order:manage-status"))
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .accept(MediaType.APPLICATION_JSON)
                                 .content(
@@ -127,14 +128,80 @@ class OrderMutationAuthorizationTest {
                 .andExpect(jsonPath("$.data.updateOrderStatus.status").value("PAID"));
     }
 
-    private RequestPostProcessor asAuthenticatedJwt(String subject, String role) {
-        Jwt jwt = Jwt.withTokenValue("test-token")
-                .header("alg", "none")
-                .subject(subject)
-                .claim("role", role)
-                .issuedAt(Instant.now())
-                .expiresAt(Instant.now().plusSeconds(60))
-                .build();
-        return authentication(jwtAuthenticationConverter.convert(jwt));
+    @Test
+    void shouldRejectUpdateOrderStatusForOrderManagerMissingScopeTest() throws Exception {
+        mockMvc.perform(
+                        post("/graphql")
+                                .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "ORDER_MANAGER"))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .accept(MediaType.APPLICATION_JSON)
+                                .content(
+                                        "{\"query\":\"mutation { updateOrderStatus(orderId: \\\"1\\\", input: { status: PAID }) { status } }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.errors").isNotEmpty());
+    }
+
+    @Test
+    void shouldRejectUpdateOrderStatusForAdminMissingScopeTest() throws Exception {
+        // Regression: ADMIN must NOT bypass a missing order:manage-status scope.
+        mockMvc.perform(
+                        post("/graphql")
+                                .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "ADMIN"))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .accept(MediaType.APPLICATION_JSON)
+                                .content(
+                                        "{\"query\":\"mutation { updateOrderStatus(orderId: \\\"1\\\", input: { status: PAID }) { status } }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.errors").isNotEmpty());
+    }
+
+    @Test
+    void shouldAllowUpdateOrderStatusForAdminWithScopeTest() throws Exception {
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(order)).thenReturn(order);
+
+        mockMvc.perform(
+                        post("/graphql")
+                                .with(asAuthenticatedJwt(
+                                        jwtAuthenticationConverter, "2", "ADMIN", "order:manage-status"))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .accept(MediaType.APPLICATION_JSON)
+                                .content(
+                                        "{\"query\":\"mutation { updateOrderStatus(orderId: \\\"1\\\", input: { status: PAID }) { status } }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.updateOrderStatus.status").value("PAID"));
+    }
+
+    @Test
+    void shouldRejectCreateOrderMissingWriteScopeTest() throws Exception {
+        mockMvc.perform(post("/graphql")
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "1", "USER"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"mutation { createOrder { id } }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.errors").isNotEmpty());
+    }
+
+    @Test
+    void shouldRejectMyOrdersMissingReadScopeTest() throws Exception {
+        mockMvc.perform(post("/graphql")
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "1", "USER"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"{ myOrders { id } }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.errors").isNotEmpty());
+    }
+
+    @Test
+    void shouldAllowMyOrdersWithReadScopeTest() throws Exception {
+        mockMvc.perform(post("/graphql")
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "1", "USER", "order:read"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"{ myOrders { id } }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.myOrders").isArray());
     }
 }

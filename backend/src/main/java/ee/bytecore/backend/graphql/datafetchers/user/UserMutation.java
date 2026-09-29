@@ -45,7 +45,7 @@ public class UserMutation {
     // User
 
     @DgsMutation
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).USER_WRITE) && hasRole('ADMIN')")
     public Boolean deleteUser(@InputArgument String userId) {
         long id = parseId(userId, "user");
 
@@ -54,7 +54,8 @@ public class UserMutation {
     }
 
     @DgsMutation
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize(
+            "hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).USER_MANAGE_ROLE) && hasRole('ADMIN')")
     public User updateUserRole(@InputArgument String userId, @InputArgument UpdateRoleInput input) {
         long id = parseId(userId, "user");
 
@@ -67,6 +68,7 @@ public class UserMutation {
     // User address
 
     @DgsMutation
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).USER_WRITE)")
     public UserAddress addMyAddress(@InputArgument CreateAddressInput input) {
         long userId = currentUser();
         ee.bytecore.backend.entities.user.User user = userRepository
@@ -79,6 +81,7 @@ public class UserMutation {
     }
 
     @DgsMutation
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).USER_WRITE)")
     public UserAddress updateMyAddress(@InputArgument String addressId, @InputArgument UpdateAddressInput input) {
         long userId = currentUser();
         long id = parseId(addressId, "address");
@@ -90,6 +93,7 @@ public class UserMutation {
     }
 
     @DgsMutation
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).USER_WRITE)")
     public Boolean deleteMyAddress(@InputArgument String addressId) {
         long userId = currentUser();
         long id = parseId(addressId, "address");
@@ -98,7 +102,7 @@ public class UserMutation {
     }
 
     @DgsMutation
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).USER_WRITE) && hasRole('ADMIN')")
     public Boolean deleteUserAddress(@InputArgument String userId, @InputArgument String addressId) {
         long uId = parseId(userId, "user");
         long id = parseId(addressId, "address");
@@ -109,6 +113,7 @@ public class UserMutation {
     // Payment method
 
     @DgsMutation
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).USER_WRITE)")
     public UserPaymentMethod addMyPaymentMethod(@InputArgument CreatePaymentMethodInput input) {
         long userId = currentUser();
         ee.bytecore.backend.entities.user.User user = userRepository
@@ -121,6 +126,7 @@ public class UserMutation {
     }
 
     @DgsMutation
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).USER_WRITE)")
     public Boolean deleteMyPaymentMethod(@InputArgument String paymentMethodId) {
         long userId = currentUser();
         long id = parseId(paymentMethodId, "paymentMethod");
@@ -129,7 +135,7 @@ public class UserMutation {
     }
 
     @DgsMutation
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).USER_WRITE) && hasRole('ADMIN')")
     public UserPaymentMethod addUserPaymentMethod(
             @InputArgument String userId, @InputArgument CreatePaymentMethodInput input) {
         long id = parseId(userId, "user");
@@ -146,7 +152,7 @@ public class UserMutation {
     }
 
     @DgsMutation
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).USER_WRITE) && hasRole('ADMIN')")
     public Boolean deleteUserPaymentMethod(@InputArgument String userId, @InputArgument String paymentMethodId) {
         long uId = parseId(userId, "user");
         long id = parseId(paymentMethodId, "paymentMethod");

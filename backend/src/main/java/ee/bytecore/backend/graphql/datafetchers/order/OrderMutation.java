@@ -33,13 +33,15 @@ public class OrderMutation {
     }
 
     @DgsMutation
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).ORDER_WRITE)")
     public Order createOrder() {
         Long userId = currentUserProvider.getCurrentUserId();
         return OrderMapper.toGraphQlType(orderService.createOrder(userId));
     }
 
     @DgsMutation
-    @PreAuthorize("hasAnyRole('ORDER_MANAGER','ADMIN')")
+    @PreAuthorize(
+            "hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).ORDER_MANAGE_STATUS) && hasAnyRole('ORDER_MANAGER','ADMIN')")
     public Order updateOrderStatus(@InputArgument String orderId, @InputArgument UpdateOrderStatusInput input) {
         long id = parseId(orderId, "order");
         OrderStatus status = OrderStatus.valueOf(input.getStatus().name());
@@ -47,6 +49,7 @@ public class OrderMutation {
     }
 
     @DgsSubscription
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).ORDER_READ)")
     public Publisher<Order> orderStatusChanged(@InputArgument String orderId) {
         long id = parseId(orderId, "order");
         return orderStatusPublisher.subscribeTo(id).map(OrderMapper::toGraphQlType);

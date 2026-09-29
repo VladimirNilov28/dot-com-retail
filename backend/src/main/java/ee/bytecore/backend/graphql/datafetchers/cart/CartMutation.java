@@ -1,5 +1,7 @@
 package ee.bytecore.backend.graphql.datafetchers.cart;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import ee.bytecore.backend.graphql.mappers.CartMapper;
 import ee.bytecore.backend.security.CurrentUserProvider;
 import ee.bytecore.backend.services.CartService;
@@ -23,6 +25,7 @@ public class CartMutation {
     }
 
     @DgsMutation
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).CART_WRITE)")
     public CartItem addCartItem(@InputArgument AddCartItemInput input) {
         Long userId = currentUserProvider.getCurrentUserId();
         return CartMapper.toGraphQlType(
@@ -30,6 +33,7 @@ public class CartMutation {
     }
 
     @DgsMutation
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).CART_WRITE)")
     public CartItem updateCartItem(@InputArgument String cartItemId, @InputArgument UpdateCartItemInput input) {
         Long userId = currentUserProvider.getCurrentUserId();
         return CartMapper.toGraphQlType(
@@ -37,12 +41,14 @@ public class CartMutation {
     }
 
     @DgsMutation
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).CART_WRITE)")
     public Boolean removeCartItem(@InputArgument String cartItemId) {
         Long userId = currentUserProvider.getCurrentUserId();
         return cartService.removeItem(userId, Long.valueOf(cartItemId));
     }
 
     @DgsMutation
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).CART_WRITE)")
     public Boolean clearCart() {
         Long userId = currentUserProvider.getCurrentUserId();
         return cartService.clear(userId);

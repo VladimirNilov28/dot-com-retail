@@ -1,5 +1,7 @@
 package ee.bytecore.backend.graphql.datafetchers.wishlist;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import ee.bytecore.backend.graphql.mappers.WishlistMapper;
 import ee.bytecore.backend.security.CurrentUserProvider;
 import ee.bytecore.backend.services.WishlistService;
@@ -20,6 +22,7 @@ public class WishlistQuery {
     }
 
     @DgsQuery
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).WISHLIST_READ)")
     public Wishlist myWishlist() {
         Long userId = currentUserProvider.getCurrentUserId();
         return WishlistMapper.toGraphQlType(wishlistService.getMyWishlist(userId));

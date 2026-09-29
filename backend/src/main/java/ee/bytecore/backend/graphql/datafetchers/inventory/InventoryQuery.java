@@ -2,6 +2,8 @@ package ee.bytecore.backend.graphql.datafetchers.inventory;
 
 import java.util.List;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import ee.bytecore.backend.graphql.mappers.InventoryMapper;
 import ee.bytecore.backend.services.InventoryService;
 import ee.bytecore.backend.services.WarehouseService;
@@ -23,6 +25,7 @@ public class InventoryQuery {
     }
 
     @DgsQuery
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).WAREHOUSE_READ)")
     public Warehouse warehouse(@InputArgument String id) {
         return warehouseService
                 .findById(Long.valueOf(id))
@@ -31,6 +34,7 @@ public class InventoryQuery {
     }
 
     @DgsQuery
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).WAREHOUSE_READ)")
     public List<Warehouse> warehouses() {
         return warehouseService.findAll().stream()
                 .map(InventoryMapper::toGraphQlType)
@@ -38,6 +42,7 @@ public class InventoryQuery {
     }
 
     @DgsData(parentType = "Warehouse")
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).WAREHOUSE_READ)")
     public List<Inventory> inventory(DgsDataFetchingEnvironment dfe) {
         Warehouse warehouse = dfe.getSource();
         if (warehouse == null) {
@@ -49,6 +54,7 @@ public class InventoryQuery {
     }
 
     @DgsData(parentType = "ProductVariant", field = "inventory")
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).WAREHOUSE_READ)")
     public List<Inventory> productVariantInventory(DgsDataFetchingEnvironment dfe) {
         ProductVariant variant = dfe.getSource();
         if (variant == null) {

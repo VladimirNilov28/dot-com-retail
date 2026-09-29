@@ -1,25 +1,22 @@
 package ee.bytecore.backend.graphql.datafetchers;
 
+import static ee.bytecore.backend.graphql.datafetchers.support.JwtTestSupport.asAuthenticatedJwt;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import ee.bytecore.backend.config.SecurityConfig;
 import ee.bytecore.backend.entities.user.User;
@@ -101,7 +98,7 @@ class UserMutationAuthorizationTest {
     @Test
     void shouldRejectDeleteUserForNonAdminTest() throws Exception {
         mockMvc.perform(post("/graphql")
-                        .with(asAuthenticatedJwt("2", "USER", "user:read"))
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "USER", "user:read"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .accept(MediaType.APPLICATION_JSON)
                         .content("{\"query\":\"mutation { deleteUser(userId: \\\"1\\\") }\"}"))
@@ -115,7 +112,7 @@ class UserMutationAuthorizationTest {
 
         mockMvc.perform(
                         post("/graphql")
-                                .with(asAuthenticatedJwt("2", "USER", "user:read"))
+                                .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "USER", "user:read"))
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .accept(MediaType.APPLICATION_JSON)
                                 .content(
@@ -130,7 +127,7 @@ class UserMutationAuthorizationTest {
 
         mockMvc.perform(
                         post("/graphql")
-                                .with(asAuthenticatedJwt("2", "USER", "user:read"))
+                                .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "USER", "user:read"))
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .accept(MediaType.APPLICATION_JSON)
                                 .content(
@@ -148,7 +145,7 @@ class UserMutationAuthorizationTest {
 
         mockMvc.perform(
                         post("/graphql")
-                                .with(asAuthenticatedJwt("2", "USER", "user:read"))
+                                .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "USER", "user:read"))
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .accept(MediaType.APPLICATION_JSON)
                                 .content(
@@ -163,7 +160,7 @@ class UserMutationAuthorizationTest {
 
         mockMvc.perform(
                         post("/graphql")
-                                .with(asAuthenticatedJwt("2", "USER", "user:read"))
+                                .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "USER", "user:read"))
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .accept(MediaType.APPLICATION_JSON)
                                 .content(
@@ -172,19 +169,189 @@ class UserMutationAuthorizationTest {
                 .andExpect(jsonPath("$.errors").isNotEmpty());
     }
 
-    private RequestPostProcessor asAuthenticatedJwt(String subject, String role, String scope) {
-        Jwt jwt = realHydraShapedJwt(subject, role, scope);
-        return authentication(jwtAuthenticationConverter.convert(jwt));
+    @Test
+    void shouldRejectDeleteUserForAdminMissingScopeTest() throws Exception {
+        // Regression: ADMIN must NOT bypass a missing user:write scope.
+        mockMvc.perform(post("/graphql")
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"mutation { deleteUser(userId: \\\"1\\\") }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.errors").isNotEmpty());
     }
 
-    private Jwt realHydraShapedJwt(String subject, String role, String scope) {
-        return Jwt.withTokenValue("test-token")
-                .header("alg", "none")
-                .subject(subject)
-                .claim("role", role)
-                .claim("scope", scope)
-                .issuedAt(Instant.now())
-                .expiresAt(Instant.now().plusSeconds(60))
-                .build();
+    @Test
+    void shouldAllowDeleteUserForAdminWithScopeTest() throws Exception {
+        mockMvc.perform(post("/graphql")
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "ADMIN", "user:write"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"mutation { deleteUser(userId: \\\"1\\\") }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.deleteUser").value(true));
+    }
+
+    @Test
+    void shouldRejectUpdateUserRoleForAdminMissingScopeTest() throws Exception {
+        // Regression: ADMIN must NOT bypass a missing user:manage-role scope.
+        when(userService.updateRole(1L, UserRole.ADMIN)).thenReturn(user);
+
+        mockMvc.perform(
+                        post("/graphql")
+                                .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "ADMIN"))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .accept(MediaType.APPLICATION_JSON)
+                                .content(
+                                        "{\"query\":\"mutation { updateUserRole(userId: \\\"1\\\", input: { role: ADMIN }) { role } }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.errors").isNotEmpty());
+    }
+
+    @Test
+    void shouldAllowUpdateUserRoleForAdminWithScopeTest() throws Exception {
+        when(userService.updateRole(1L, UserRole.ADMIN)).thenReturn(user);
+
+        mockMvc.perform(
+                        post("/graphql")
+                                .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "ADMIN", "user:manage-role"))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .accept(MediaType.APPLICATION_JSON)
+                                .content(
+                                        "{\"query\":\"mutation { updateUserRole(userId: \\\"1\\\", input: { role: ADMIN }) { role } }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.errors").doesNotExist());
+    }
+
+    @Test
+    void shouldRejectDeleteUserAddressForAdminMissingScopeTest() throws Exception {
+        // Regression: ADMIN must NOT bypass a missing user:write scope.
+        mockMvc.perform(
+                        post("/graphql")
+                                .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "ADMIN"))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .accept(MediaType.APPLICATION_JSON)
+                                .content(
+                                        "{\"query\":\"mutation { deleteUserAddress(userId: \\\"1\\\", addressId: \\\"1\\\") }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.errors").isNotEmpty());
+    }
+
+    @Test
+    void shouldRejectAddUserPaymentMethodForAdminMissingScopeTest() throws Exception {
+        // Regression: ADMIN must NOT bypass a missing user:write scope.
+        mockMvc.perform(
+                        post("/graphql")
+                                .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "ADMIN"))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .accept(MediaType.APPLICATION_JSON)
+                                .content(
+                                        "{\"query\":\"mutation { addUserPaymentMethod(userId: \\\"1\\\", input: { provider: \\\"mastercard\\\", type: CARD }) { type } }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.errors").isNotEmpty());
+    }
+
+    @Test
+    void shouldRejectDeleteUserPaymentMethodForAdminMissingScopeTest() throws Exception {
+        // Regression: ADMIN must NOT bypass a missing user:write scope.
+        mockMvc.perform(
+                        post("/graphql")
+                                .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "ADMIN"))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .accept(MediaType.APPLICATION_JSON)
+                                .content(
+                                        "{\"query\":\"mutation { deleteUserPaymentMethod(userId: \\\"1\\\", paymentMethodId: \\\"1\\\") }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.errors").isNotEmpty());
+    }
+
+    @Test
+    void shouldRejectAddMyAddressMissingWriteScopeTest() throws Exception {
+        mockMvc.perform(
+                        post("/graphql")
+                                .with(asAuthenticatedJwt(jwtAuthenticationConverter, "1", "USER"))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .accept(MediaType.APPLICATION_JSON)
+                                .content(
+                                        "{\"query\":\"mutation { addMyAddress(input: { firstName: \\\"A\\\", lastName: \\\"B\\\", addressLine1: \\\"Main St\\\", city: \\\"Tallinn\\\", postalCode: \\\"10111\\\", country: \\\"EE\\\" }) { id } }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.errors").isNotEmpty());
+    }
+
+    @Test
+    void shouldRejectMeMissingReadScopeTest() throws Exception {
+        mockMvc.perform(post("/graphql")
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "1", "USER"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"{ me { id } }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.errors").isNotEmpty());
+    }
+
+    @Test
+    void shouldAllowMeWithReadScopeTest() throws Exception {
+        User self = User.create("self", "self@example.com", LocalDate.of(1995, 6, 15));
+        self.setId(1L);
+        when(userService.findById(1L)).thenReturn(Optional.of(self));
+
+        mockMvc.perform(post("/graphql")
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "1", "USER", "user:read"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"{ me { id } }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.me.id").value("1"));
+    }
+
+    @Test
+    void shouldRejectUserQueryForRegularUserTest() throws Exception {
+        // Closes the IDOR: user:read scope alone must not let a regular USER
+        // look up an arbitrary other user's profile.
+        mockMvc.perform(post("/graphql")
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "USER", "user:read"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"{ user(id: \\\"1\\\") { id } }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.errors").isNotEmpty());
+    }
+
+    @Test
+    void shouldRejectUserQueryForAdminMissingScopeTest() throws Exception {
+        // Regression: ADMIN must NOT bypass a missing user:read scope.
+        mockMvc.perform(post("/graphql")
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"{ user(id: \\\"1\\\") { id } }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.errors").isNotEmpty());
+    }
+
+    @Test
+    void shouldAllowUserQueryForAdminWithScopeTest() throws Exception {
+        when(userService.findById(1L)).thenReturn(Optional.of(user));
+
+        mockMvc.perform(post("/graphql")
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "ADMIN", "user:read"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"{ user(id: \\\"1\\\") { id } }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.user.id").value("1"));
+    }
+
+    @Test
+    void shouldAllowUserQueryForSupportWithScopeTest() throws Exception {
+        when(userService.findById(1L)).thenReturn(Optional.of(user));
+
+        mockMvc.perform(post("/graphql")
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "SUPPORT", "user:read"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"{ user(id: \\\"1\\\") { id } }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.user.id").value("1"));
     }
 }

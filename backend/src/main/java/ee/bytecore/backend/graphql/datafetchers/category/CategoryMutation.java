@@ -22,14 +22,16 @@ public class CategoryMutation {
     }
 
     @DgsMutation
-    @PreAuthorize("hasAnyRole('CATALOG_MANAGER','ADMIN')")
+    @PreAuthorize(
+            "hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).CATEGORY_WRITE) && hasAnyRole('CATALOG_MANAGER','ADMIN')")
     public Category createCategory(@InputArgument CreateCategoryInput input) {
         Long parentId = input.getParentId() != null ? Long.valueOf(input.getParentId()) : null;
         return CategoryMapper.toGraphQlType(categoryService.create(input.getName(), input.getSlug(), parentId));
     }
 
     @DgsMutation
-    @PreAuthorize("hasAnyRole('CATALOG_MANAGER','ADMIN')")
+    @PreAuthorize(
+            "hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).CATEGORY_WRITE) && hasAnyRole('CATALOG_MANAGER','ADMIN')")
     public Category updateCategory(@InputArgument String categoryId, @InputArgument UpdateCategoryInput input) {
         long id = parseId(categoryId, "category");
         Long parentId = input.getParentId() != null ? Long.valueOf(input.getParentId()) : null;
@@ -37,7 +39,8 @@ public class CategoryMutation {
     }
 
     @DgsMutation
-    @PreAuthorize("hasAnyRole('CATALOG_MANAGER','ADMIN')")
+    @PreAuthorize(
+            "hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).CATEGORY_WRITE) && hasAnyRole('CATALOG_MANAGER','ADMIN')")
     public Boolean deleteCategory(@InputArgument String categoryId) {
         long id = parseId(categoryId, "category");
         return categoryService.deleteById(id);

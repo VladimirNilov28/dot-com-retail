@@ -1,5 +1,7 @@
 package ee.bytecore.backend.graphql.datafetchers.cart;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import ee.bytecore.backend.graphql.mappers.CartMapper;
 import ee.bytecore.backend.security.CurrentUserProvider;
 import ee.bytecore.backend.services.CartService;
@@ -20,6 +22,7 @@ public class CartQuery {
     }
 
     @DgsQuery
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).CART_READ)")
     public Cart myCart() {
         Long userId = currentUserProvider.getCurrentUserId();
         return CartMapper.toGraphQlType(cartService.getMyCart(userId));

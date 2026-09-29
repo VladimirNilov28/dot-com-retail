@@ -27,26 +27,30 @@ public class InventoryMutation {
     }
 
     @DgsMutation
-    @PreAuthorize("hasAnyRole('WAREHOUSE','ADMIN')")
+    @PreAuthorize(
+            "hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).WAREHOUSE_WRITE) && hasAnyRole('WAREHOUSE','ADMIN')")
     public Warehouse createWarehouse(@InputArgument CreateWarehouseInput input) {
         return InventoryMapper.toGraphQlType(warehouseService.create(input.getName(), input.getLocation()));
     }
 
     @DgsMutation
-    @PreAuthorize("hasAnyRole('WAREHOUSE','ADMIN')")
+    @PreAuthorize(
+            "hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).WAREHOUSE_WRITE) && hasAnyRole('WAREHOUSE','ADMIN')")
     public Warehouse updateWarehouse(@InputArgument String warehouseId, @InputArgument UpdateWarehouseInput input) {
         long id = parseId(warehouseId, "warehouse");
         return InventoryMapper.toGraphQlType(warehouseService.update(id, input.getName(), input.getLocation()));
     }
 
     @DgsMutation
-    @PreAuthorize("hasAnyRole('WAREHOUSE','ADMIN')")
+    @PreAuthorize(
+            "hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).WAREHOUSE_WRITE) && hasAnyRole('WAREHOUSE','ADMIN')")
     public Boolean deleteWarehouse(@InputArgument String warehouseId) {
         return warehouseService.deleteById(parseId(warehouseId, "warehouse"));
     }
 
     @DgsMutation
-    @PreAuthorize("hasAnyRole('WAREHOUSE','ADMIN')")
+    @PreAuthorize(
+            "hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).WAREHOUSE_WRITE) && hasAnyRole('WAREHOUSE','ADMIN')")
     public Inventory setInventory(@InputArgument SetInventoryInput input) {
         return InventoryMapper.toGraphQlType(inventoryService.setInventory(
                 Long.valueOf(input.getProductVariantId()), Long.valueOf(input.getWarehouseId()), input.getQuantity()));

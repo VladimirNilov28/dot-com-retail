@@ -2,6 +2,8 @@ package ee.bytecore.backend.graphql.datafetchers.category;
 
 import java.util.List;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import ee.bytecore.backend.graphql.mappers.CategoryMapper;
 import ee.bytecore.backend.services.CategoryService;
 
@@ -20,6 +22,7 @@ public class CategoryQuery {
     }
 
     @DgsQuery
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).CATEGORY_READ)")
     public Category category(@InputArgument String id, @InputArgument String slug) {
         if (slug != null) {
             return categoryService
@@ -37,6 +40,7 @@ public class CategoryQuery {
     }
 
     @DgsQuery
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).CATEGORY_READ)")
     public List<Category> categories() {
         return categoryService.findAll().stream()
                 .map(CategoryMapper::toGraphQlType)

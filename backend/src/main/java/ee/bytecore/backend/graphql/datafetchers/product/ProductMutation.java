@@ -30,14 +30,16 @@ public class ProductMutation {
     }
 
     @DgsMutation
-    @PreAuthorize("hasAnyRole('CATALOG_MANAGER','ADMIN')")
+    @PreAuthorize(
+            "hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).PRODUCT_WRITE) && hasAnyRole('CATALOG_MANAGER','ADMIN')")
     public Product createProduct(@InputArgument CreateProductInput input) {
         return ProductMapper.toGraphQlType(productService.create(
                 input.getName(), input.getSlug(), input.getDescription(), toLongIds(input.getCategoryIds())));
     }
 
     @DgsMutation
-    @PreAuthorize("hasAnyRole('CATALOG_MANAGER','ADMIN')")
+    @PreAuthorize(
+            "hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).PRODUCT_WRITE) && hasAnyRole('CATALOG_MANAGER','ADMIN')")
     public Product updateProduct(@InputArgument String productId, @InputArgument UpdateProductInput input) {
         long id = parseId(productId, "product");
         return ProductMapper.toGraphQlType(productService.update(
@@ -45,13 +47,15 @@ public class ProductMutation {
     }
 
     @DgsMutation
-    @PreAuthorize("hasAnyRole('CATALOG_MANAGER','ADMIN')")
+    @PreAuthorize(
+            "hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).PRODUCT_WRITE) && hasAnyRole('CATALOG_MANAGER','ADMIN')")
     public Boolean deleteProduct(@InputArgument String productId) {
         return productService.deleteById(parseId(productId, "product"));
     }
 
     @DgsMutation
-    @PreAuthorize("hasAnyRole('CATALOG_MANAGER','ADMIN')")
+    @PreAuthorize(
+            "hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).PRODUCT_WRITE) && hasAnyRole('CATALOG_MANAGER','ADMIN')")
     public ProductVariant createProductVariant(@InputArgument CreateProductVariantInput input) {
         long productId = parseId(input.getProductId(), "product");
         return ProductMapper.toGraphQlType(productVariantService.create(
@@ -64,7 +68,8 @@ public class ProductMutation {
     }
 
     @DgsMutation
-    @PreAuthorize("hasAnyRole('CATALOG_MANAGER','ADMIN')")
+    @PreAuthorize(
+            "hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).PRODUCT_WRITE) && hasAnyRole('CATALOG_MANAGER','ADMIN')")
     public ProductVariant updateProductVariant(
             @InputArgument String variantId, @InputArgument UpdateProductVariantInput input) {
         long id = parseId(variantId, "productVariant");
@@ -79,7 +84,8 @@ public class ProductMutation {
     }
 
     @DgsMutation
-    @PreAuthorize("hasAnyRole('CATALOG_MANAGER','ADMIN')")
+    @PreAuthorize(
+            "hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).PRODUCT_WRITE) && hasAnyRole('CATALOG_MANAGER','ADMIN')")
     public Boolean deleteProductVariant(@InputArgument String variantId) {
         return productVariantService.deleteById(parseId(variantId, "productVariant"));
     }

@@ -1,5 +1,7 @@
 package ee.bytecore.backend.graphql.datafetchers.wishlist;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import ee.bytecore.backend.graphql.mappers.WishlistMapper;
 import ee.bytecore.backend.security.CurrentUserProvider;
 import ee.bytecore.backend.services.WishlistService;
@@ -22,12 +24,14 @@ public class WishlistMutation {
     }
 
     @DgsMutation
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).WISHLIST_WRITE)")
     public WishlistItem addWishlistItem(@InputArgument AddWishlistItemInput input) {
         Long userId = currentUserProvider.getCurrentUserId();
         return WishlistMapper.toGraphQlType(wishlistService.addItem(userId, Long.valueOf(input.getProductVariantId())));
     }
 
     @DgsMutation
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).WISHLIST_WRITE)")
     public Boolean removeWishlistItem(@InputArgument String wishlistItemId) {
         Long userId = currentUserProvider.getCurrentUserId();
         return wishlistService.removeItem(userId, Long.valueOf(wishlistItemId));

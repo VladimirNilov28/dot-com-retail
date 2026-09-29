@@ -3,6 +3,7 @@ package ee.bytecore.backend.graphql.datafetchers.order;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import ee.bytecore.backend.graphql.mappers.OrderMapper;
@@ -25,6 +26,7 @@ public class OrderQuery {
     }
 
     @DgsQuery
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).ORDER_READ)")
     public Order order(@InputArgument String id, @InputArgument UUID publicId) {
         ee.bytecore.backend.entities.payment.Order order = publicId != null
                 ? orderService.findByPublicId(publicId).orElse(null)
@@ -38,6 +40,7 @@ public class OrderQuery {
     }
 
     @DgsQuery
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).ORDER_READ)")
     public List<Order> myOrders() {
         Long userId = currentUserProvider.getCurrentUserId();
         return orderService.findMyOrders(userId).stream()
@@ -46,6 +49,7 @@ public class OrderQuery {
     }
 
     @DgsData(parentType = "Order")
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).ORDER_READ)")
     public List<OrderItem> items(DgsDataFetchingEnvironment dfe) {
         Order order = dfe.getSource();
         if (order == null) {

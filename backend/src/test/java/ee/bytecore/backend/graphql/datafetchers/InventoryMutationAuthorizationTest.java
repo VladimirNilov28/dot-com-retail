@@ -1,24 +1,21 @@
 package ee.bytecore.backend.graphql.datafetchers;
 
+import static ee.bytecore.backend.graphql.datafetchers.support.JwtTestSupport.asAuthenticatedJwt;
 import static org.mockito.Mockito.when;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import ee.bytecore.backend.config.SecurityConfig;
 import ee.bytecore.backend.entities.inventory.Warehouse;
@@ -107,7 +104,7 @@ class InventoryMutationAuthorizationTest {
     @Test
     void shouldRejectDeleteWarehouseForNonWarehouseStaffTest() throws Exception {
         mockMvc.perform(post("/graphql")
-                        .with(asAuthenticatedJwt("2", "USER"))
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "USER"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .accept(MediaType.APPLICATION_JSON)
                         .content("{\"query\":\"mutation { deleteWarehouse(warehouseId: \\\"1\\\") }\"}"))
@@ -120,7 +117,43 @@ class InventoryMutationAuthorizationTest {
         when(warehouseRepository.findById(1L)).thenReturn(Optional.of(warehouse));
 
         mockMvc.perform(post("/graphql")
-                        .with(asAuthenticatedJwt("2", "WAREHOUSE"))
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "WAREHOUSE", "warehouse:write"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"mutation { deleteWarehouse(warehouseId: \\\"1\\\") }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.deleteWarehouse").value(true));
+    }
+
+    @Test
+    void shouldRejectDeleteWarehouseForWarehouseStaffMissingScopeTest() throws Exception {
+        mockMvc.perform(post("/graphql")
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "WAREHOUSE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"mutation { deleteWarehouse(warehouseId: \\\"1\\\") }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.errors").isNotEmpty());
+    }
+
+    @Test
+    void shouldRejectDeleteWarehouseForAdminMissingScopeTest() throws Exception {
+        // Regression: ADMIN must NOT bypass a missing warehouse:write scope.
+        mockMvc.perform(post("/graphql")
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"mutation { deleteWarehouse(warehouseId: \\\"1\\\") }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.errors").isNotEmpty());
+    }
+
+    @Test
+    void shouldAllowDeleteWarehouseForAdminWithScopeTest() throws Exception {
+        when(warehouseRepository.findById(1L)).thenReturn(Optional.of(warehouse));
+
+        mockMvc.perform(post("/graphql")
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "ADMIN", "warehouse:write"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .accept(MediaType.APPLICATION_JSON)
                         .content("{\"query\":\"mutation { deleteWarehouse(warehouseId: \\\"1\\\") }\"}"))
@@ -132,7 +165,7 @@ class InventoryMutationAuthorizationTest {
     void shouldRejectSetInventoryForNonWarehouseStaffTest() throws Exception {
         mockMvc.perform(
                         post("/graphql")
-                                .with(asAuthenticatedJwt("2", "USER"))
+                                .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "USER"))
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .accept(MediaType.APPLICATION_JSON)
                                 .content(
@@ -141,14 +174,38 @@ class InventoryMutationAuthorizationTest {
                 .andExpect(jsonPath("$.errors").isNotEmpty());
     }
 
-    private RequestPostProcessor asAuthenticatedJwt(String subject, String role) {
-        Jwt jwt = Jwt.withTokenValue("test-token")
-                .header("alg", "none")
-                .subject(subject)
-                .claim("role", role)
-                .issuedAt(Instant.now())
-                .expiresAt(Instant.now().plusSeconds(60))
-                .build();
-        return authentication(jwtAuthenticationConverter.convert(jwt));
+    @Test
+    void shouldRejectSetInventoryForWarehouseStaffMissingScopeTest() throws Exception {
+        mockMvc.perform(
+                        post("/graphql")
+                                .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "WAREHOUSE"))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .accept(MediaType.APPLICATION_JSON)
+                                .content(
+                                        "{\"query\":\"mutation { setInventory(input: { productVariantId: \\\"1\\\", warehouseId: \\\"1\\\", quantity: 5 }) { quantity } }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.errors").isNotEmpty());
+    }
+
+    @Test
+    void shouldRejectWarehousesQueryMissingReadScopeTest() throws Exception {
+        mockMvc.perform(post("/graphql")
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "USER"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"{ warehouses { id } }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.errors").isNotEmpty());
+    }
+
+    @Test
+    void shouldAllowWarehousesQueryWithReadScopeTest() throws Exception {
+        mockMvc.perform(post("/graphql")
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "USER", "warehouse:read"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"{ warehouses { id } }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.warehouses").isArray());
     }
 }
