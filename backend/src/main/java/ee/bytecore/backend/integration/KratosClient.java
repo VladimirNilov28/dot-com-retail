@@ -26,6 +26,31 @@ public class KratosClient {
         this.restClient = RestClient.builder().baseUrl(kratosAdminUrl).build();
     }
 
+    /**
+     * Creates a new Kratos identity for a self-registered user, linking it
+     * back to the canonical Spring {@code User.id} via
+     * {@code metadata_admin.spring_user_id} — the same convention the
+     * dev/admin bootstrap (oauth-service) already uses. The password is
+     * forwarded to Kratos's credential storage only; it is never persisted
+     * or logged by Spring.
+     */
+    public void createIdentity(String email, String password, Long springUserId) {
+        try {
+            restClient
+                    .post()
+                    .uri("/admin/identities")
+                    .body(Map.of(
+                            "schema_id", "default",
+                            "traits", Map.of("email", email),
+                            "credentials", Map.of("password", Map.of("config", Map.of("password", password))),
+                            "metadata_admin", Map.of("spring_user_id", springUserId)))
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (RestClientException e) {
+            throw new IdentitySyncException("Failed to create Kratos identity for " + email + ": " + e.getMessage(), e);
+        }
+    }
+
     public void updateIdentityEmail(String currentEmail, String newEmail) {
         try {
             List<Map<String, Object>> identities = restClient

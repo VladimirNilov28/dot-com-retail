@@ -244,4 +244,115 @@ class UserServiceTest {
 
         assertThat(user.getEmail()).isEqualTo("test@example.com");
     }
+
+    @Test
+    void shouldRegisterCustomerWithUserRoleTest() {
+        when(userRepository.existsByUsername("new-customer")).thenReturn(false);
+        when(userRepository.existsByEmail("new-customer@example.com")).thenReturn(false);
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
+            User saved = invocation.getArgument(0);
+            saved.setId(7L);
+            return saved;
+        });
+
+        User registered = userService.registerCustomer(
+                "new-customer", "new-customer@example.com", "s3cret-test-pw", LocalDate.of(1998, 3, 20));
+
+        assertThat(registered.getRole()).isEqualTo(UserRole.USER);
+        assertThat(registered.getUsername()).isEqualTo("new-customer");
+        verify(kratosClient).createIdentity("new-customer@example.com", "s3cret-test-pw", 7L);
+    }
+
+    @Test
+    void shouldThrowConflictWhenRegisteringDuplicateUsernameTest() {
+        when(userRepository.existsByUsername("new-customer")).thenReturn(true);
+
+        assertThatThrownBy(() -> userService.registerCustomer(
+                        "new-customer", "new-customer@example.com", "s3cret-test-pw", LocalDate.of(1998, 3, 20)))
+                .isInstanceOf(UserAlreadyExistsException.class);
+
+        verify(userRepository, never()).save(any());
+        verify(kratosClient, never()).createIdentity(any(), any(), any());
+    }
+
+    @Test
+    void shouldThrowConflictWhenRegisteringDuplicateEmailTest() {
+        when(userRepository.existsByUsername("new-customer")).thenReturn(false);
+        when(userRepository.existsByEmail("new-customer@example.com")).thenReturn(true);
+
+        assertThatThrownBy(() -> userService.registerCustomer(
+                        "new-customer", "new-customer@example.com", "s3cret-test-pw", LocalDate.of(1998, 3, 20)))
+                .isInstanceOf(UserAlreadyExistsException.class);
+
+        verify(userRepository, never()).save(any());
+        verify(kratosClient, never()).createIdentity(any(), any(), any());
+    }
+
+    @Test
+    void shouldThrowWhenRegisteringWithBlankPasswordTest() {
+        assertThatThrownBy(() -> userService.registerCustomer(
+                        "new-customer", "new-customer@example.com", "   ", LocalDate.of(1998, 3, 20)))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(userRepository, never()).save(any());
+        verify(kratosClient, never()).createIdentity(any(), any(), any());
+    }
+
+    @Test
+    void shouldThrowWhenRegisteringWithNullDateOfBirthTest() {
+        assertThatThrownBy(() -> userService.registerCustomer(
+                        "new-customer", "new-customer@example.com", "s3cret-test-pw", null))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldThrowWhenRegisteringWithOverlongUsernameTest() {
+        String tooLong = "a".repeat(256);
+
+        assertThatThrownBy(() -> userService.registerCustomer(
+                        tooLong, "new-customer@example.com", "s3cret-test-pw", LocalDate.of(1998, 3, 20)))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldCompensateByDeletingSpringUserWhenKratosIdentityCreationFailsTest() {
+        when(userRepository.existsByUsername("new-customer")).thenReturn(false);
+        when(userRepository.existsByEmail("new-customer@example.com")).thenReturn(false);
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
+            User saved = invocation.getArgument(0);
+            saved.setId(7L);
+            return saved;
+        });
+        org.mockito.Mockito.doThrow(new IdentitySyncException("Kratos unreachable"))
+                .when(kratosClient)
+                .createIdentity("new-customer@example.com", "s3cret-test-pw", 7L);
+
+        assertThatThrownBy(() -> userService.registerCustomer(
+                        "new-customer", "new-customer@example.com", "s3cret-test-pw", LocalDate.of(1998, 3, 20)))
+                .isInstanceOf(IdentitySyncException.class);
+
+        verify(userRepository).deleteById(7L);
+    }
+
+    @Test
+    void shouldTranslateRaceConditionDuringRegistrationToConflictTest() {
+        when(userRepository.existsByUsername("new-customer")).thenReturn(false);
+        when(userRepository.existsByEmail("new-customer@example.com")).thenReturn(false);
+        when(userRepository.save(any(User.class)))
+                .thenThrow(new org.springframework.dao.DataIntegrityViolationException("duplicate key"));
+
+        assertThatThrownBy(() -> userService.registerCustomer(
+                        "new-customer", "new-customer@example.com", "s3cret-test-pw", LocalDate.of(1998, 3, 20)))
+                .isInstanceOf(UserAlreadyExistsException.class)
+                .satisfies(error -> assertThat(error.getMessage())
+                        .as("must not leak the raw SQL/constraint exception to the client")
+                        .doesNotContain("DataIntegrityViolationException")
+                        .doesNotContain("duplicate key"));
+
+        verify(kratosClient, never()).createIdentity(any(), any(), any());
+    }
 }

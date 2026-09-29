@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import ee.bytecore.backend.entities.user.User;
 import ee.bytecore.backend.enums.UserRole;
+import ee.bytecore.backend.exceptions.IdentitySyncException;
 import ee.bytecore.backend.exceptions.UserAlreadyExistsException;
 import ee.bytecore.backend.exceptions.UserNotFoundException;
 import ee.bytecore.backend.integration.KratosClient;
@@ -19,6 +20,8 @@ import ee.bytecore.backend.repositories.user.UserRepository;
 public class UserService {
 
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
+    private static final int MAX_USERNAME_LENGTH = 255;
+    private static final int MAX_EMAIL_LENGTH = 255;
 
     private final UserRepository userRepository;
     private final KratosClient kratosClient;
@@ -36,8 +39,15 @@ public class UserService {
         if (username == null || username.isBlank()) {
             throw new IllegalArgumentException("Username must not be blank");
         }
+        if (username.length() > MAX_USERNAME_LENGTH) {
+            throw new IllegalArgumentException(
+                    String.format("Username must not exceed %d characters", MAX_USERNAME_LENGTH));
+        }
         if (email == null || email.isBlank()) {
             throw new IllegalArgumentException("Email must not be blank");
+        }
+        if (email.length() > MAX_EMAIL_LENGTH) {
+            throw new IllegalArgumentException(String.format("Email must not exceed %d characters", MAX_EMAIL_LENGTH));
         }
         if (!EMAIL_PATTERN.matcher(email).matches()) {
             throw new IllegalArgumentException(String.format("Email is not valid: %s", email));
@@ -49,7 +59,48 @@ public class UserService {
             throw new UserAlreadyExistsException(String.format("User with email %s already exists", email));
         }
         User user = User.create(username, email, dateOfBirth);
-        return userRepository.save(user);
+        try {
+            return userRepository.save(user);
+        } catch (DataIntegrityViolationException e) {
+            // Two racing registrations/creations can both pass the
+            // exists-by checks above; the DB UNIQUE constraint is the final
+            // arbiter, so translate its failure into the same clean
+            // conflict the pre-check would have produced.
+            throw new UserAlreadyExistsException(
+                    String.format("User with username %s or email %s already exists", username, email));
+        }
+    }
+
+    /**
+     * Public self-registration entry point. Unlike {@link #provision}, this
+     * always creates a brand-new customer (never upserts) and always forces
+     * role USER — the caller has no way to influence the role. Registers a
+     * matching Kratos identity, linked back via
+     * metadata_admin.spring_user_id; if that fails, the just-created Spring
+     * user is deleted so no broken/unusable canonical account is left
+     * behind.
+     */
+    @Transactional
+    public User registerCustomer(String username, String email, String password, LocalDate dateOfBirth) {
+        if (password == null || password.isBlank()) {
+            throw new IllegalArgumentException("Password must not be blank");
+        }
+        if (dateOfBirth == null) {
+            throw new IllegalArgumentException("Date of birth is required");
+        }
+
+        User created = create(username, email, dateOfBirth);
+
+        try {
+            kratosClient.createIdentity(email, password, created.getId());
+        } catch (IdentitySyncException e) {
+            // Compensate: an unusable canonical user (no way to
+            // authenticate) is worse than no user at all.
+            userRepository.deleteById(created.getId());
+            throw e;
+        }
+
+        return created;
     }
 
     @Transactional

@@ -7,6 +7,7 @@ import java.util.function.Supplier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -89,6 +90,12 @@ public class SecurityConfig {
                 .oauth2ResourceServer(
                         oauth2 -> oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)))
                 .authorizeHttpRequests(auth -> auth.requestMatchers("/graphiql/**")
+                        .permitAll()
+                        // The one intentionally public entry point: normal
+                        // end-user self-registration. Scoped to this exact
+                        // path/method only — every other REST and GraphQL
+                        // operation below remains authenticated.
+                        .requestMatchers(HttpMethod.POST, "/auth/register")
                         .permitAll()
                         .requestMatchers("/graphql")
                         .authenticated()

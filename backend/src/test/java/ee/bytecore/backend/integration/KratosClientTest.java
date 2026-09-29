@@ -1,11 +1,14 @@
 package ee.bytecore.backend.integration;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.atomic.AtomicReference;
 
 import ee.bytecore.backend.exceptions.IdentitySyncException;
 
@@ -68,6 +71,47 @@ class KratosClientTest {
 
         assertThatThrownBy(() -> kratosClient.updateIdentityEmail("old@example.com", "new@example.com"))
                 .isInstanceOf(IdentitySyncException.class);
+    }
+
+    @Test
+    void shouldCreateIdentityLinkedToSpringUserTest() throws IOException {
+        AtomicReference<String> capturedBody = new AtomicReference<>();
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/admin/identities", exchange -> {
+            if ("POST".equals(exchange.getRequestMethod())) {
+                capturedBody.set(readBody(exchange));
+                respond(exchange, 201, "{\"id\":\"identity-1\"}");
+            } else {
+                respond(exchange, 200, "");
+            }
+        });
+        server.start();
+        KratosClient kratosClient = new KratosClient(baseUrl());
+
+        kratosClient.createIdentity("new@example.com", "s3cret-test-pw", 42L);
+
+        String body = capturedBody.get();
+        assertThat(body).contains("\"schema_id\":\"default\"");
+        assertThat(body).contains("\"email\":\"new@example.com\"");
+        assertThat(body).contains("\"password\":\"s3cret-test-pw\"");
+        assertThat(body).contains("\"spring_user_id\":42");
+    }
+
+    @Test
+    void shouldWrapHttpFailureAsIdentitySyncExceptionWhenCreatingIdentityTest() throws IOException {
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/admin/identities", exchange -> respond(exchange, 500, ""));
+        server.start();
+        KratosClient kratosClient = new KratosClient(baseUrl());
+
+        assertThatThrownBy(() -> kratosClient.createIdentity("new@example.com", "s3cret-test-pw", 42L))
+                .isInstanceOf(IdentitySyncException.class);
+    }
+
+    private String readBody(HttpExchange exchange) throws IOException {
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        exchange.getRequestBody().transferTo(buffer);
+        return buffer.toString(StandardCharsets.UTF_8);
     }
 
     private String baseUrl() {
