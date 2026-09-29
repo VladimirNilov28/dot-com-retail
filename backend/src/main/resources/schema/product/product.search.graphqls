@@ -1,0 +1,93 @@
+"""
+Catalog discovery (search/filters/sort/suggestions). PostgreSQL-backed MVP:
+
+- Search matches Product.name, Product.description, and ProductVariant.sku
+  (ILIKE + pg_trgm indexes) — no external search engine.
+- categoryId filters by DIRECT category membership only; parent/child
+  category hierarchy is not expanded to descendants in this MVP.
+- minPrice/maxPrice/attributes/inStock are variant-level filters and must
+  all be satisfied by the SAME ProductVariant to match a product.
+- Sorting: RELEVANCE (simple deterministic name/description/sku ranking,
+  only meaningful with a non-blank query), PRICE_ASC/PRICE_DESC (using the
+  minimum price among a product's filter-matching variants). Rating sort is
+  intentionally not offered — no rating/review data exists in the model yet.
+- Facets are computed over the population that already matches the search
+  query and filters (no per-facet self-exclusion).
+"""
+input ProductSearchInput {
+  query: String
+  filters: ProductFilterInput
+  sort: ProductSort = RELEVANCE
+  page: Int = 0
+  size: Int = 20
+}
+
+input ProductFilterInput {
+  categoryId: ID
+  minPrice: BigDecimal
+  maxPrice: BigDecimal
+  attributes: [ProductAttributeFilterInput!]
+  inStock: Boolean
+}
+
+input ProductAttributeFilterInput {
+  name: String!
+  value: String!
+}
+
+enum ProductSort {
+  RELEVANCE
+  PRICE_ASC
+  PRICE_DESC
+}
+
+type ProductSearchResult {
+  items: [Product!]!
+  pageInfo: SearchPageInfo!
+  facets: ProductFacets!
+}
+
+type SearchPageInfo {
+  page: Int!
+  size: Int!
+  totalItems: Int!
+  totalPages: Int!
+}
+
+type ProductFacets {
+  categories: [CategoryFacet!]!
+  attributes: [ProductAttributeFacet!]!
+  price: PriceFacet!
+}
+
+type CategoryFacet {
+  id: ID!
+  name: String!
+  count: Int!
+}
+
+type ProductAttributeFacet {
+  name: String!
+  values: [AttributeValueFacet!]!
+}
+
+type AttributeValueFacet {
+  value: String!
+  count: Int!
+}
+
+type PriceFacet {
+  min: BigDecimal
+  max: BigDecimal
+}
+
+type ProductSuggestion {
+  productId: ID!
+  name: String!
+  slug: String!
+}
+
+extend type Query {
+  searchProducts(input: ProductSearchInput!): ProductSearchResult!
+  productSearchSuggestions(query: String!, limit: Int): [ProductSuggestion!]!
+}
