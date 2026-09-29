@@ -12,4 +12,4 @@ USER 1000
 EXPOSE 4433 4434
 
 ENTRYPOINT ["kratos"]
-CMD ["serve", "--dev", "--config", "/etc/kratos/kratos.yml"]
+CMD ["serve", "--dev", "--watch-courier", "--config", "/etc/kratos/kratos.yml"]

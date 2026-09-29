@@ -13,6 +13,16 @@ spring:
     # though the resolver + publisher are fully implemented.
     websocket:
       path: /graphql
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: backend-payment-results
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
   docker:
     compose:
       file: ../infrastructure/compose.yml

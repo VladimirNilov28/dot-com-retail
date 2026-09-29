@@ -85,6 +85,9 @@ class OrderDataFetcherTest {
     @MockitoBean
     ee.bytecore.backend.repositories.user.UserRepository userRepository;
 
+    @MockitoBean
+    ee.bytecore.backend.integration.payment.PaymentEventPublisher paymentEventPublisher;
+
     private User user;
     private Order order;
 

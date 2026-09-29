@@ -6,6 +6,8 @@ spring:
   graphql:
     graphiql:
       enabled: false
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
 
 kratos:
   admin-url: ${KRATOS_ADMIN_URL}

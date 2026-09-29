@@ -113,9 +113,11 @@ class KratosClient:
     def authenticate_with_password(self, email: str, password: str) -> dict:
         """Drives Kratos's own native (non-browser) self-service login flow.
         Kratos performs the actual password check; this only relays the flow.
-        Returns the Kratos session dict (with session["identity"]["id"] as the
-        Hydra login `subject`). Raises KratosAuthenticationError on invalid
-        credentials, as reported by Kratos."""
+        Returns the full native-login response body — {"session_token": ...,
+        "session": {...}} — since callers need both: session["identity"]["id"]
+        as the Hydra login `subject`, and session_token to later revoke this
+        specific session via logout(). Raises KratosAuthenticationError on
+        invalid credentials, as reported by Kratos."""
         init_response = requests.get(
             f"{self._public_url}/self-service/login/api",
             headers={"Accept": "application/json"},
@@ -138,7 +140,24 @@ class KratosClient:
         if submit_response.status_code >= 400:
             raise KratosAuthenticationError("Kratos rejected the submitted email/password")
 
-        return submit_response.json()["session"]
+        return submit_response.json()
+
+    # --- Logout ---
+
+    def logout(self, session_token: str) -> None:
+        """Revokes a Kratos session obtained via a native (non-browser) login
+        (see authenticate_with_password), using Kratos's own native logout
+        endpoint (DELETE /self-service/logout/api — Kratos's
+        PerformNativeLogout operation; not POST). This ends that specific
+        Kratos session — it does not touch Hydra; revoking the paired Hydra
+        refresh token is a separate step (see HydraClient.revoke_token)."""
+        response = requests.delete(
+            f"{self._public_url}/self-service/logout/api",
+            json={"session_token": session_token},
+            headers={"Accept": "application/json"},
+            timeout=10,
+        )
+        response.raise_for_status()
 
     @staticmethod
     def _origin(url: str) -> str:

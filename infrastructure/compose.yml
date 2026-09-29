@@ -17,6 +17,9 @@ services:
       KRATOS_DB_USER: ${KRATOS_DB_USER:?KRATOS_DB_USER is required}
       KRATOS_DB_PASSWORD: ${KRATOS_DB_PASSWORD:?KRATOS_DB_PASSWORD is required}
 
+      PAYMENT_DB_USER: ${PAYMENT_DB_USER:?PAYMENT_DB_USER is required}
+      PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:?PAYMENT_DB_PASSWORD is required}
+
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d retail"]
       interval: 5s
@@ -108,6 +111,8 @@ services:
     depends_on:
       kratos-migrate:
         condition: service_completed_successfully
+      mailpit:
+        condition: service_healthy
 
     ports:
       - "4433:4433"
@@ -124,6 +129,29 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
+
+    restart: unless-stopped
+
+  # Dev-only mail catcher: Kratos's courier (see kratos.yml) delivers
+  # recovery emails here via SMTP instead of a real provider. Its web UI
+  # (http://localhost:8025) lets you read the recovery email/code without
+  # a real mailbox. Not used by Spring, and never wired into production —
+  # see the "[Infra] Configure production SMTP provider for Kratos
+  # Courier" issue for the prod replacement.
+  mailpit:
+    image: axllent/mailpit:v1.22
+    container_name: mailpit
+
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8025/readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
 
     restart: unless-stopped
 
@@ -215,8 +243,77 @@ services:
   # TODO:
   # Angular service
 
-  # TODO:
-  # Kafka service
+  # Single-node KRaft broker (no Zookeeper) for backend<->Payment Service
+  # asynchronous communication. Two listeners, same reasoning as Postgres:
+  # Spring runs on the host (not in this compose file), so it needs
+  # localhost:9092; every other container reaches it via kafka:29092.
+  kafka:
+    image: apache/kafka:3.9.1 # 3.9.0 has a real KRaft bug (KAFKA-18281) - do not downgrade.
+    container_name: kafka
+
+    ports:
+      - "9092:9092"
+
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      CLUSTER_ID: ${KAFKA_CLUSTER_ID:?KAFKA_CLUSTER_ID is required}
+
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+    volumes:
+      - kafka_volume:/var/lib/kafka/data
+
+    restart: unless-stopped
+
+  # Go Payment Service (backend/.../integration/payment <-> Kafka <->
+  # payment-service): consumes payment.requested, charges via the fake
+  # provider, publishes payment.succeeded/payment.failed. Owns its own
+  # Postgres database (see postgres/init/03-create-payment-service.sh) -
+  # never touches the `retail` database directly.
+  payment-service:
+    build:
+      context: ../payment-service
+    container_name: payment-service
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+    ports:
+      - "8081:8081"
+
+    environment:
+      PAYMENT_DB_URL: ${PAYMENT_DB_URL:?PAYMENT_DB_URL is required}
+      KAFKA_BROKERS: kafka:29092
+      KAFKA_CONSUMER_GROUP: payment-service
+      HTTP_PORT: "8081"
+      OUTBOX_POLL_INTERVAL_MS: "1000"
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+    restart: unless-stopped
 
   # TODO:
   # Redis service
@@ -233,3 +330,4 @@ networks:
 
 volumes:
   postgres_volume:
+  kafka_volume:

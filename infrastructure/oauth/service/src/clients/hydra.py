@@ -126,6 +126,23 @@ class HydraClient:
         response.raise_for_status()
         return response.json()["access_token"]
 
+    # --- Token revocation (RFC 7009) ---
+
+    def revoke_token(self, client_id: str, token: str, client_secret: Optional[str] = None) -> None:
+        """Revokes a refresh or access token via Hydra's public /oauth2/revoke
+        endpoint. "A token may only be revoked by the client the token was
+        generated for" (Hydra docs) — client_secret is omitted for public
+        clients (token_endpoint_auth_method: none, e.g. bytecore-web), same
+        as exchange_code_for_token. Per RFC 7009, Hydra returns 200 even for
+        an already-invalid/unknown token — raise_for_status only surfaces
+        genuine client-authentication/request errors."""
+        data = {"client_id": client_id, "token": token}
+        if client_secret is not None:
+            data["client_secret"] = client_secret
+
+        response = requests.post(f"{self._public_url}/oauth2/revoke", data=data, timeout=10)
+        response.raise_for_status()
+
     # --- Headless authorization-code + PKCE (dev token issuance) ---
 
     @staticmethod

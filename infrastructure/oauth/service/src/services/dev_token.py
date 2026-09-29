@@ -30,7 +30,9 @@ def issue_dev_token(
     issues/signs the token — this function only orchestrates the existing
     login/consent challenge exchange, exactly as services.login_consent does
     for the browser-driven flow."""
-    kratos_session = kratos_client.authenticate_with_password(email, password)
+    kratos_login = kratos_client.authenticate_with_password(email, password)
+    kratos_session = kratos_login["session"]
+    kratos_session_token = kratos_login.get("session_token")
     kratos_identity_id = kratos_session["identity"]["id"]
     spring_user = resolve_canonical_user(kratos_client, spring_auth_client, kratos_identity_id)
     subject = str(spring_user["id"])
@@ -81,6 +83,8 @@ def issue_dev_token(
         token_type=token.get("token_type", "bearer"),
         expires_in=token.get("expires_in"),
         scope=token.get("scope"),
+        refresh_token=token.get("refresh_token"),
+        kratos_session_token=kratos_session_token,
     )
 
 

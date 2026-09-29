@@ -1,6 +1,6 @@
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from typing import Union
 
@@ -14,6 +14,15 @@ logger = logging.getLogger(__name__)
 
 SCOPE_NAME_PATTERN = re.compile(r"^[a-z][a-z-]*:[a-z][a-z-]*$")
 ADMIN_WILDCARD = "*"
+
+# Reserved OAuth2/OIDC protocol scopes — not application resource scopes, so
+# they intentionally don't follow SCOPE_NAME_PATTERN (`<resource>:<action>`)
+# and are never part of the roles[].scopes catalogue or the ADMIN wildcard
+# expansion. "offline_access" is what Fosite/Hydra look for to decide
+# whether to issue a refresh token for the authorization_code grant; it's
+# opted into per-client via `clients[].additional_scopes`, not the shared
+# `scopes:` catalogue.
+RESERVED_SCOPES = frozenset({"offline_access"})
 
 # Fields the bootstrap owns and reconciles on the Hydra client. Any other
 # field Hydra returns (timestamps, internal metadata, etc.) is ignored so
@@ -54,6 +63,11 @@ class ClientSpec:
     token_endpoint_auth_method: str
     redirect_uris: list[str]
     scopes: Union[list[str], None] = None  # None = every declared scope (legacy default)
+    # Reserved OAuth2/OIDC protocol scopes (see RESERVED_SCOPES) granted to
+    # this client in addition to `scopes` — always appended, regardless of
+    # whether `scopes` is an explicit list or the "every declared scope"
+    # default.
+    additional_scopes: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -161,6 +175,14 @@ def _parse_clients(raw_clients, path: str, scope_names: set[str]) -> list[Client
                 )
             scopes = list(raw_scopes)
 
+        raw_additional_scopes = entry.get("additional_scopes", [])
+        unknown_reserved = [s for s in raw_additional_scopes if s not in RESERVED_SCOPES]
+        if unknown_reserved:
+            raise AccessControlSpecError(
+                f"{path}: client {entry.get('client_id')!r} references unknown reserved scope(s) "
+                f"{unknown_reserved} (expected one of {sorted(RESERVED_SCOPES)})"
+            )
+
         clients.append(
             ClientSpec(
                 client_id=entry["client_id"],
@@ -170,6 +192,7 @@ def _parse_clients(raw_clients, path: str, scope_names: set[str]) -> list[Client
                 token_endpoint_auth_method=entry.get("token_endpoint_auth_method", "none"),
                 redirect_uris=list(entry.get("redirect_uris", [])),
                 scopes=scopes,
+                additional_scopes=list(raw_additional_scopes),
             )
         )
 
@@ -180,7 +203,8 @@ def _parse_clients(raw_clients, path: str, scope_names: set[str]) -> list[Client
 
 
 def _build_desired_client_payload(client: ClientSpec, spec: AccessControlSpec) -> dict:
-    scopes = client.scopes if client.scopes is not None else [scope.name for scope in spec.scopes]
+    scopes = set(client.scopes if client.scopes is not None else [scope.name for scope in spec.scopes])
+    scopes |= set(client.additional_scopes)
     return {
         "client_id": client.client_id,
         "client_name": client.client_name,

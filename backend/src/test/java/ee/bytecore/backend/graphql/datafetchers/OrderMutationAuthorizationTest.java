@@ -100,6 +100,9 @@ class OrderMutationAuthorizationTest {
     UserRepository userRepository;
 
     @MockitoBean
+    ee.bytecore.backend.integration.payment.PaymentEventPublisher paymentEventPublisher;
+
+    @MockitoBean
     JwtDecoder jwtDecoder;
 
     private Order order;

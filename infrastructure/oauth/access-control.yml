@@ -164,6 +164,14 @@ clients:
     # scope is derived by the bootstrap service as the space-joined, sorted
     # list of every scope declared above — this value is not read directly.
     scope: __ALL_DECLARED_SCOPES__
+    # Reserved OAuth2/OIDC protocol scope, not a business resource scope —
+    # granted on top of every declared scope above. Hydra/Fosite look for
+    # "offline_access" in the granted scope to decide whether to issue a
+    # refresh token for the authorization_code grant (see
+    # ory/fosite config_default.go GetRefreshTokenScopes). Without this,
+    # `refresh_token` in grant_types above has no effect.
+    additional_scopes:
+      - offline_access
 
   - client_id: oauth-service-internal
     client_name: oauth-service (machine, client_credentials)

@@ -21,6 +21,10 @@ type Order {
   items: [OrderItem!]!
   status: OrderStatus!
   totalAmount: BigDecimal!
+  # Only set when status is CANCELLED; distinguishes an automatic
+  # payment-failure cancellation from a manual admin cancellation. Null
+  # otherwise.
+  cancellationReason: String
   createdAt: Instant!
   updatedAt: Instant!
 }

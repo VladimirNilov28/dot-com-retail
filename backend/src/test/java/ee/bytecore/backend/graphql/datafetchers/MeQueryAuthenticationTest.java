@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.jwt.BadJwtException;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
@@ -133,6 +134,24 @@ class MeQueryAuthenticationTest {
         mockMvc.perform(post("/graphql")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"query\":\"{ user(id: \\\"1\\\") { id } }\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void shouldRejectOpaqueRefreshTokenPresentedAsBearerAccessTokenTest() throws Exception {
+        // Hydra's refresh tokens are opaque strings, never JWTs, unlike
+        // Hydra's self-contained JWT access tokens (strategies.access_token:
+        // jwt). NimbusJwtDecoder fails to parse a non-JWT Bearer value with
+        // BadJwtException -- the same as a real refresh token would -- and
+        // the resource server filter turns that into 401, proving a refresh
+        // token can never be substituted for an access token here.
+        String opaqueRefreshToken = "ory_rt_9f8c2b3a-opaque-refresh-token-value";
+        when(jwtDecoder.decode(opaqueRefreshToken)).thenThrow(new BadJwtException("Malformed token"));
+
+        mockMvc.perform(post("/graphql")
+                        .header("Authorization", "Bearer " + opaqueRefreshToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"{ me { id } }\"}"))
                 .andExpect(status().isUnauthorized());
     }
 

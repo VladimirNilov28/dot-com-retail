@@ -58,6 +58,44 @@ class ParseClientsTest(unittest.TestCase):
                 SCOPE_NAMES,
             )
 
+    def test_client_without_additional_scopes_field_defaults_to_empty(self):
+        clients = _parse_clients(
+            [{"client_id": "bytecore-web", "grant_types": ["authorization_code"]}],
+            "access-control.yml",
+            SCOPE_NAMES,
+        )
+
+        self.assertEqual(clients[0].additional_scopes, [])
+
+    def test_client_with_reserved_additional_scope(self):
+        clients = _parse_clients(
+            [
+                {
+                    "client_id": "bytecore-web",
+                    "grant_types": ["authorization_code", "refresh_token"],
+                    "additional_scopes": ["offline_access"],
+                }
+            ],
+            "access-control.yml",
+            SCOPE_NAMES,
+        )
+
+        self.assertEqual(clients[0].additional_scopes, ["offline_access"])
+
+    def test_client_with_unknown_reserved_scope_raises(self):
+        with self.assertRaises(AccessControlSpecError):
+            _parse_clients(
+                [
+                    {
+                        "client_id": "bytecore-web",
+                        "grant_types": ["authorization_code"],
+                        "additional_scopes": ["not-a-real-reserved-scope"],
+                    }
+                ],
+                "access-control.yml",
+                SCOPE_NAMES,
+            )
+
 
 class BuildDesiredClientPayloadTest(unittest.TestCase):
     def test_client_without_explicit_scopes_gets_every_declared_scope(self):
@@ -103,6 +141,29 @@ class BuildDesiredClientPayloadTest(unittest.TestCase):
         payload = _build_desired_client_payload(client, FakeSpec())
 
         self.assertEqual(payload["scope"], "internal:provision-user")
+
+    def test_additional_scopes_are_merged_in_on_top_of_declared_scopes(self):
+        client = ClientSpec(
+            client_id="bytecore-web",
+            client_name="Bytecore Web",
+            grant_types=["authorization_code", "refresh_token"],
+            response_types=["code"],
+            token_endpoint_auth_method="none",
+            redirect_uris=["http://localhost/callback"],
+            scopes=None,
+            additional_scopes=["offline_access"],
+        )
+
+        class FakeScope:
+            def __init__(self, name):
+                self.name = name
+
+        class FakeSpec:
+            scopes = [FakeScope(n) for n in SCOPE_NAMES]
+
+        payload = _build_desired_client_payload(client, FakeSpec())
+
+        self.assertEqual(set(payload["scope"].split()), SCOPE_NAMES | {"offline_access"})
 
 
 class ReconcileHydraClientsTest(unittest.TestCase):

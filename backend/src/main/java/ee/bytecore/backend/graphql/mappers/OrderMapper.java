@@ -15,6 +15,7 @@ public class OrderMapper {
                 .user(UserMapper.toGraphQlType(entity.getUser()))
                 .status(mapStatus(entity.getStatus()))
                 .totalAmount(entity.getTotalAmount())
+                .cancellationReason(entity.getCancellationReason())
                 .createdAt(entity.getCreatedAt())
                 .updatedAt(entity.getUpdatedAt())
                 .build();

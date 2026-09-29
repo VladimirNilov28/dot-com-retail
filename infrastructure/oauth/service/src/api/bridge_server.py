@@ -6,7 +6,9 @@ from clients.hydra import HydraClient
 from clients.kratos import KratosClient
 from clients.spring_auth import SpringAuthClient
 from config import Config
+from models import ErrorResponse, InvalidRequestError, LogoutRequest
 from services import login_consent
+from services.logout import perform_logout
 
 logger = logging.getLogger(__name__)
 
@@ -48,15 +50,48 @@ def make_bridge_handler(
                 logger.error("request failed: %s", exc)
                 self._respond(502, str(exc).encode())
 
+        def do_POST(self):
+            parsed = urlparse(self.path)
+            if parsed.path != "/logout":
+                self._respond(404, b"not found")
+                return
+
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+                body = self.rfile.read(length)
+                logout_request = LogoutRequest.from_json_bytes(body)
+            except InvalidRequestError as exc:
+                self._respond_json(400, ErrorResponse(error="invalid_request", error_description=str(exc)))
+                return
+
+            try:
+                perform_logout(
+                    config,
+                    hydra_client,
+                    kratos_client,
+                    logout_request.refresh_token,
+                    logout_request.kratos_session_token,
+                )
+            except Exception as exc:  # noqa: BLE001 - top-level request error boundary
+                logger.error("logout failed: %s", exc)
+                self._respond_json(502, ErrorResponse(error="upstream_error", error_description=str(exc)))
+                return
+
+            self._respond(204, b"")
+
         def _redirect(self, location: str):
             self.send_response(302)
             self.send_header("Location", location)
             self.end_headers()
+
+        def _respond_json(self, status: int, body):
+            self._respond(status, body.to_json_bytes())
 
         def _respond(self, status: int, body: bytes):
             self.send_response(status)
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+
 
     return BridgeRequestHandler

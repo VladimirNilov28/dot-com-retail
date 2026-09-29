@@ -1,6 +1,7 @@
 package ee.bytecore.backend.services;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +19,8 @@ import ee.bytecore.backend.entities.inventory.Inventory;
 import ee.bytecore.backend.entities.payment.Order;
 import ee.bytecore.backend.entities.payment.OrderItem;
 import ee.bytecore.backend.enums.OrderStatus;
+import ee.bytecore.backend.integration.payment.PaymentEventPublisher;
+import ee.bytecore.backend.integration.payment.event.PaymentRequestedEvent;
 import ee.bytecore.backend.repositories.payment.OrderItemRepository;
 import ee.bytecore.backend.repositories.payment.OrderRepository;
 
@@ -26,23 +29,33 @@ import jakarta.persistence.EntityNotFoundException;
 @Service
 public class OrderService {
 
+    // The catalog/checkout has no per-order currency selection today; every
+    // amount in the system (ProductVariant.price, Order.totalAmount, ...) is
+    // implicitly this single currency. Kept as one named constant rather than
+    // duplicated string literals so a future multi-currency change has one
+    // place to start.
+    private static final String DEFAULT_CURRENCY = "EUR";
+
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
     private final CartService cartService;
     private final InventoryService inventoryService;
     private final OrderStatusPublisher orderStatusPublisher;
+    private final PaymentEventPublisher paymentEventPublisher;
 
     public OrderService(
             OrderRepository orderRepository,
             OrderItemRepository orderItemRepository,
             CartService cartService,
             InventoryService inventoryService,
-            OrderStatusPublisher orderStatusPublisher) {
+            OrderStatusPublisher orderStatusPublisher,
+            PaymentEventPublisher paymentEventPublisher) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
         this.cartService = cartService;
         this.inventoryService = inventoryService;
         this.orderStatusPublisher = orderStatusPublisher;
+        this.paymentEventPublisher = paymentEventPublisher;
     }
 
     public Optional<Order> findById(Long id) {
@@ -113,6 +126,13 @@ public class OrderService {
         }
 
         cartService.clear(userId);
+
+        // Same transaction as the Order/OrderItem writes above - see
+        // KafkaPaymentEventPublisher: this only writes an outbox row here,
+        // the actual Kafka send happens later, outside this transaction.
+        paymentEventPublisher.publishPaymentRequested(new PaymentRequestedEvent(
+                UUID.randomUUID(), saved.getId(), userId, totalAmount, DEFAULT_CURRENCY, Instant.now()));
+
         return saved;
     }
 
@@ -131,6 +151,18 @@ public class OrderService {
 
     @Transactional
     public Order updateStatus(Long id, OrderStatus status) {
+        return updateStatus(id, status, null);
+    }
+
+    /**
+     * @param cancellationReason only meaningful when {@code status ==
+     *     CANCELLED}; distinguishes an automatic payment-failure
+     *     cancellation from a manual one (e.g. via the admin
+     *     {@code updateOrderStatus} mutation, which always passes {@code
+     *     null} here). Ignored for every other status.
+     */
+    @Transactional
+    public Order updateStatus(Long id, OrderStatus status, String cancellationReason) {
         Order order = orderRepository
                 .findById(id)
                 .orElseThrow(() -> new EntityNotFoundException(String.format("Order with id %s not found", id)));
@@ -145,6 +177,7 @@ public class OrderService {
             for (OrderItem item : orderItemRepository.findAllByOrderId(id)) {
                 inventoryService.restore(item.getInventory().getId(), item.getQuantity());
             }
+            order.setCancellationReason(cancellationReason);
         }
 
         order.setStatus(status);
