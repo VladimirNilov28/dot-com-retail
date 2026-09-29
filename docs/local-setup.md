@@ -7,8 +7,8 @@ This guide walks through setting up the ByteCore e-commerce application for loca
 | Tool | Version | Notes |
 |---|---|---|
 | JDK | 21 | Required by the backend toolchain |
-| Node.js | 22+ | Required for Angular 22 / TypeScript 6 |
-| pnpm | 11.11.0 | Frontend package manager |
+| Node.js | 22+ | Required for Next.js 16 / TypeScript 5 |
+| bun | 1.4.2 | Frontend package manager (see `frontend/package.json#packageManager`) |
 | Docker | Latest | PostgreSQL container + Testcontainers |
 | Git | Latest | Version control |
 
@@ -16,8 +16,8 @@ This guide walks through setting up the ByteCore e-commerce application for loca
 
 ```
 dot-com-retail/
-├── backend/          # Spring Boot 4.0 (WebFlux, GraphQL, R2DBC, Kafka)
-├── frontend/         # Angular 22 (Tailwind CSS 4, SSR via Express)
+├── backend/          # Spring Boot 4.0 (Spring MVC, Spring Data JPA, GraphQL via DGS, Kafka)
+├── frontend/         # Next.js 16 (React 19, Tailwind CSS 4)
 ├── docs/             # Project documentation
 ├── scripts/          # Utility scripts
 ├── infrastructure/   # Docker, Kubernetes, Jenkins, Nginx configs
@@ -26,15 +26,16 @@ dot-com-retail/
 
 ## Backend
 
-The backend is a reactive Spring Boot 4.0 application written in Java 21, using Gradle as the build system.
+The backend is a Spring Boot 4.0 application written in Java 21, using
+Spring MVC (blocking) and Gradle as the build system.
 
 ### Key dependencies
 
-- **Spring Boot 4.0.7** (WebFlux, Security, OAuth2 Client, Actuator)
-- **PostgreSQL** via R2DBC (reactive database access)
+- **Spring Boot 4.0.7** (Spring MVC, Security, OAuth2 Resource Server, Actuator)
+- **Spring Data JPA** over blocking JDBC (schema owned by Flyway, `ddl-auto=validate`)
 - **Flyway** for database migrations
 - **GraphQL** via Netflix DGS Framework 11.1.0
-- **Apache Kafka** for messaging
+- **Apache Kafka** for messaging (plain `spring-kafka` `@KafkaListener`s)
 - **SpringDoc OpenAPI** for REST API documentation
 
 ### Setup
@@ -91,31 +92,30 @@ Tests use JUnit 5 with Testcontainers. The `TestcontainersConfiguration` class s
 
 ## Frontend
 
-The frontend is an Angular 22 application with Tailwind CSS 4 and SSR support.
+The frontend is a Next.js 16 application (App Router, React 19) with
+Tailwind CSS 4. It's currently a minimal scaffold — see `frontend/AGENTS.md`.
 
 ### Key dependencies
 
-- **Angular 22** with SSR (Angular SSG/SSR packages)
+- **Next.js 16** (App Router) with **React 19**
 - **Tailwind CSS 4.x** via PostCSS
-- **Vitest** for unit testing
-- **Express.js** for the SSR server
+- **ESLint** for linting
 
 ### Setup
 
 ```bash
 cd frontend
-pnpm install
+bun install
 ```
 
 ### Common commands
 
 | Command | What it does |
 |---|---|
-| `pnpm start` | Dev server on `http://localhost:4200/` |
-| `pnpm build` | Production build (output to `dist/`) |
-| `pnpm test` | Run unit tests via Vitest |
-| `pnpm watch` | Watch mode with dev config |
-| `pnpm serve:ssr:frontend` | Serve SSR production build on port 4000 |
+| `bun dev` | Dev server on `http://localhost:3000/` |
+| `bun run build` | Production build |
+| `bun start` | Serve the production build |
+| `bun run lint` | Run ESLint |
 
 ## Running the Full Stack
 
@@ -133,18 +133,112 @@ pnpm install
 3. **Start the frontend** (in another terminal):
    ```bash
    cd frontend
-   pnpm start
+   bun dev
    ```
 
-4. Open `http://localhost:4200/` in your browser.
+4. Open `http://localhost:3000/` in your browser.
 
-For SSR mode, build and serve instead:
+For a production-style run, build then start instead:
 ```bash
 cd frontend
-pnpm build
-pnpm serve:ssr:frontend
-# Open http://localhost:4000/
+bun run build
+bun start
+# Open http://localhost:3000/
 ```
+
+## User Registration
+
+Normal end users self-register directly against the Spring backend (not
+through Hive Router / GraphQL) — this is the one intentionally
+unauthenticated endpoint in the API:
+
+```bash
+curl -s -X POST http://localhost:8080/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{
+        "username": "jane-doe",
+        "email": "jane@example.com",
+        "password": "a-strong-test-password",
+        "dateOfBirth": "1995-06-15"
+      }'
+```
+
+This creates the canonical Spring `User` (role always `USER` — the request
+has no `role` field, so it cannot be supplied by the client), creates a
+matching Kratos identity (credentials only — Spring never stores the
+password), and links them via `metadata_admin.spring_user_id`, mirroring the
+existing dev/admin bootstrap convention. Duplicate username/email returns
+`409 Conflict`; invalid input returns `400 Bad Request`.
+
+Once registered, the user logs in through the existing Kratos/Hydra flow
+(see "Get a dev JWT" below for the headless dev-token shortcut, or the
+browser login flow via Hive Router/`bytecore-web`) — no separate
+registration-specific login path exists.
+
+## GraphQL API access
+
+Hive Router (`infrastructure/hive/`, Compose service `hive-router`) is the
+single external GraphQL entry point — it fronts the Spring/DGS `retail`
+subgraph and is started as part of Docker infrastructure (`make dev` /
+`docker compose -f infrastructure/compose.yml --env-file .env up -d`).
+
+1. **GraphQL endpoint**: `http://localhost:4002/graphql`
+2. **GraphQL IDE**: open `http://localhost:4002` in a browser — Hive
+   Router's built-in IDE (Docs/schema explorer, autocomplete, queries,
+   mutations, subscriptions). This replaces Spring GraphiQL, which is
+   disabled.
+3. **Get a dev JWT**:
+   ```bash
+   curl -s -X POST http://127.0.0.1:4447/internal/token \
+     -H 'Content-Type: application/json' \
+     -d '{"email":"admin@bytecore.ee","password":"admin-dev-password"}'
+   ```
+4. In the IDE, open the headers panel and add:
+   ```json
+   { "Authorization": "Bearer <access_token>" }
+   ```
+5. Run queries/mutations/subscriptions as usual. The router forwards only
+   the `Authorization` header to Spring; Spring remains the sole JWT
+   validation and authorization authority — the router does not.
+6. **Health/readiness**: `curl http://localhost:4002/health` (liveness),
+   `curl http://localhost:4002/readiness` (supergraph loaded — will be
+   unhealthy if the local supergraph was never generated).
+
+### Regenerating the local supergraph
+
+The supergraph is a reproducible, locally-composed artifact — no Hive
+Cloud account or schema registry is used or required:
+
+```bash
+cd infrastructure/hive
+./scripts/compose-supergraph.sh        # requires Spring running on :8080
+                                        # and oauth-service running (:4447)
+docker compose -f ../compose.yml --env-file ../../.env restart hive-router
+```
+
+This fetches the `retail` subgraph's SDL (via `{ _service { sdl } }`),
+composes it with [Rover](https://www.apollographql.com/docs/rover/) into
+Federation v2's `supergraph.graphql`, and reloads the router. Regenerate it
+whenever the GraphQL schema changes.
+
+### Smoke-testing Hive Router
+
+```bash
+infrastructure/hive/scripts/smoke-test.sh
+```
+
+Checks: router reachable, introspection works, unauthenticated query is
+denied, authenticated query succeeds, a mutation reaches Spring, and a
+validation error propagates with its original message (not masked).
+
+### Troubleshooting Hive Router
+
+| Symptom | Likely cause |
+|---|---|
+| `readiness` returns non-200 | `supergraph.graphql` missing/stale — run `compose-supergraph.sh` |
+| Query returns `SUBREQUEST_HTTP_ERROR` / `Connect` | Spring isn't running on `:8080`, or the firewall rule from "One-time firewall setup" is missing (router reaches Spring via `host.docker.internal`, same path as `oauth-service`) |
+| `401`/`Unexpected error` on every operation | No `Authorization` header set in the IDE, or the dev JWT expired — fetch a new one |
+| IDE loads but Docs panel is empty | Router's local `supergraph.graphql` is out of date — regenerate it |
 
 ## Development Workflow
 
@@ -160,7 +254,7 @@ pnpm serve:ssr:frontend
 cd backend && ./gradlew build
 
 # Frontend
-cd frontend && pnpm test && pnpm build
+cd frontend && bun run lint && bun run build
 ```
 
 ### Environment variables
@@ -181,10 +275,16 @@ The backend will fail to start if Docker isn't available (the `spring-boot-docke
 
 | Port | Service |
 |---|---|
-| 4200 | Angular dev server |
-| 4000 | SSR Express server |
+| 3000 | Next.js dev/prod server |
+| 4002 | Hive Router (GraphQL entry point + IDE) |
 | 5432 | PostgreSQL |
 | 9092 | Kafka (via Testcontainers) |
+
+### GraphQL IDE
+
+Spring/DGS GraphiQL is **disabled** (`dgs.graphql.graphiql.enabled: false` in
+`application-dev.yaml`). Use Hive Router's built-in GraphQL IDE instead —
+see "GraphQL API access" below.
 
 ### Testcontainers issues
 
@@ -195,11 +295,11 @@ sudo usermod -aG docker $USER
 # Log out and back in for the group change to take effect
 ```
 
-### pnpm version mismatch
+### bun version mismatch
 
-If you see warnings about pnpm version, install the exact version:
+If you see warnings about the bun version, install the exact version
+declared in `frontend/package.json`'s `packageManager` field:
 
 ```bash
-corepack enable
-corepack prepare pnpm@11.11.0 --activate
+curl -fsSL https://bun.sh/install | bash -s "bun-v1.4.2"
 ```
