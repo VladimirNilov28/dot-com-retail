@@ -4,6 +4,7 @@ import org.springframework.graphql.execution.DataFetcherExceptionResolverAdapter
 import org.springframework.graphql.execution.ErrorType;
 import org.springframework.stereotype.Component;
 
+import ee.bytecore.backend.exceptions.InsufficientStockException;
 import ee.bytecore.backend.exceptions.UserAlreadyExistsException;
 import ee.bytecore.backend.exceptions.UserNotFoundException;
 
@@ -37,6 +38,12 @@ public class GraphQlExceptionResolver extends DataFetcherExceptionResolverAdapte
                     .build();
         }
         if (exception instanceof UserAlreadyExistsException) {
+            return GraphqlErrorBuilder.newError(env)
+                    .errorType(ErrorClassification.errorClassification("CONFLICT"))
+                    .message(exception.getMessage())
+                    .build();
+        }
+        if (exception instanceof InsufficientStockException) {
             return GraphqlErrorBuilder.newError(env)
                     .errorType(ErrorClassification.errorClassification("CONFLICT"))
                     .message(exception.getMessage())

@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 import ee.bytecore.backend.entities.inventory.Inventory;
 import ee.bytecore.backend.entities.inventory.Warehouse;
 import ee.bytecore.backend.entities.product.ProductVariant;
+import ee.bytecore.backend.exceptions.InsufficientStockException;
 import ee.bytecore.backend.repositories.inventory.InventoryRepository;
 import ee.bytecore.backend.repositories.inventory.WarehouseRepository;
 import ee.bytecore.backend.repositories.product.ProductVariantRepository;
@@ -60,5 +61,40 @@ public class InventoryService {
                                     String.format("Warehouse with id %s not found", warehouseId)));
                     return inventoryRepository.save(Inventory.create(variant, warehouse, quantity));
                 });
+    }
+
+    /**
+     * Locks and picks the single inventory row (lowest id first, i.e. the
+     * MVP multi-warehouse tie-break rule) that can fulfil the full requested
+     * quantity for a variant, then decrements it in place. Split fulfillment
+     * across multiple rows/warehouses is intentionally out of scope: if no
+     * single row has enough stock, this fails even if the sum across rows
+     * would be sufficient.
+     */
+    @Transactional
+    public Inventory allocateAndDecrement(Long productVariantId, int quantity) {
+        List<Inventory> candidates = inventoryRepository.lockAllByProductVariantIdOrderByIdAsc(productVariantId);
+        int bestAvailable =
+                candidates.stream().mapToInt(Inventory::getQuantity).max().orElse(0);
+        Inventory chosen = candidates.stream()
+                .filter(inventory -> inventory.getQuantity() >= quantity)
+                .findFirst()
+                .orElseThrow(() -> new InsufficientStockException(productVariantId, quantity, bestAvailable));
+        chosen.setQuantity(chosen.getQuantity() - quantity);
+        return inventoryRepository.save(chosen);
+    }
+
+    /**
+     * Restores previously decremented stock to its exact source row, used
+     * for early order cancellation restock.
+     */
+    @Transactional
+    public void restore(Long inventoryId, int quantity) {
+        Inventory inventory = inventoryRepository
+                .lockById(inventoryId)
+                .orElseThrow(() ->
+                        new EntityNotFoundException(String.format("Inventory with id %s not found", inventoryId)));
+        inventory.setQuantity(inventory.getQuantity() + quantity);
+        inventoryRepository.save(inventory);
     }
 }

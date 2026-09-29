@@ -106,7 +106,8 @@ class UserServiceTest {
 
     @Test
     void shouldThrowWhenCreatingUserWithWhitespaceOnlyUsernameTest() {
-        assertThatThrownBy(() -> userService.create("   ", "whitespace-username@example.com", LocalDate.of(1995, 6, 15)))
+        assertThatThrownBy(
+                        () -> userService.create("   ", "whitespace-username@example.com", LocalDate.of(1995, 6, 15)))
                 .isInstanceOf(IllegalArgumentException.class);
 
         verify(userRepository, never()).save(any());
@@ -122,8 +123,7 @@ class UserServiceTest {
 
     @Test
     void shouldThrowWhenCreatingUserWithMalformedEmailTest() {
-        assertThatThrownBy(
-                        () -> userService.create("malformed-email-user", "not-an-email", LocalDate.of(1995, 6, 15)))
+        assertThatThrownBy(() -> userService.create("malformed-email-user", "not-an-email", LocalDate.of(1995, 6, 15)))
                 .isInstanceOf(IllegalArgumentException.class);
 
         verify(userRepository, never()).save(any());
@@ -179,6 +179,21 @@ class UserServiceTest {
         assertThatThrownBy(() -> userService.deleteById(999L)).isInstanceOf(UserNotFoundException.class);
 
         verify(userRepository, never()).deleteById(any());
+    }
+
+    @Test
+    void shouldTranslateForeignKeyViolationWhenDeletingUserWithOrdersTest() {
+        when(userRepository.existsById(1L)).thenReturn(true);
+        org.mockito.Mockito.doThrow(new org.springframework.dao.DataIntegrityViolationException("fk_order_user"))
+                .when(userRepository)
+                .deleteById(1L);
+
+        assertThatThrownBy(() -> userService.deleteById(1L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .satisfies(error -> assertThat(error.getMessage())
+                        .as("must not leak the raw SQL/constraint exception to the client")
+                        .doesNotContain("DataIntegrityViolationException")
+                        .doesNotContain("fk_order_user"));
     }
 
     @Test

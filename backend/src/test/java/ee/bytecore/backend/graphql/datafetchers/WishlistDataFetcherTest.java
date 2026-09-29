@@ -25,6 +25,7 @@ import ee.bytecore.backend.graphql.scalars.GraphQLConfig;
 import ee.bytecore.backend.graphql.scalars.InstantScalar;
 import ee.bytecore.backend.graphql.scalars.LocalDateScalar;
 import ee.bytecore.backend.repositories.product.ProductVariantRepository;
+import ee.bytecore.backend.repositories.user.UserRepository;
 import ee.bytecore.backend.repositories.wishlist.WishlistItemRepository;
 import ee.bytecore.backend.repositories.wishlist.WishlistRepository;
 
@@ -57,6 +58,9 @@ class WishlistDataFetcherTest {
 
     @MockitoBean
     ProductVariantRepository productVariantRepository;
+
+    @MockitoBean
+    UserRepository userRepository;
 
     private User user;
     private Wishlist wishlist;
@@ -105,6 +109,64 @@ class WishlistDataFetcherTest {
                 .path("myWishlist.items")
                 .entityList(Object.class)
                 .hasSize(0);
+    }
+
+    @Test
+    @WithMockUser(username = "1")
+    void shouldLazilyCreateWishlistForMyWishlistWhenMissingTest() {
+        when(wishlistRepository.findByUserId(user.getId())).thenReturn(Optional.empty());
+        when(userRepository.getReferenceById(user.getId())).thenReturn(user);
+        when(wishlistRepository.saveAndFlush(any(Wishlist.class))).thenReturn(wishlist);
+
+        @Language("GraphQl")
+        var query =
+                """
+            query {
+              myWishlist {
+                items {
+                  productVariant {
+                    sku
+                  }
+                }
+              }
+            }
+        """;
+
+        graphQlTester
+                .document(query)
+                .execute()
+                .path("myWishlist.items")
+                .entityList(Object.class)
+                .hasSize(0);
+    }
+
+    @Test
+    @WithMockUser(username = "1")
+    void shouldResolveWishlistForWishlistItemTest() {
+        wishlist.getItems().add(wishlistItem);
+        when(wishlistRepository.findByUserId(user.getId())).thenReturn(Optional.of(wishlist));
+        when(wishlistItemRepository.findById(wishlistItem.getId())).thenReturn(Optional.of(wishlistItem));
+
+        @Language("GraphQl")
+        var query =
+                """
+            query {
+              myWishlist {
+                items {
+                  wishlist {
+                    id
+                  }
+                }
+              }
+            }
+        """;
+
+        graphQlTester
+                .document(query)
+                .execute()
+                .path("myWishlist.items[0].wishlist.id")
+                .entity(String.class)
+                .isEqualTo(wishlist.getId().toString());
     }
 
     @Test

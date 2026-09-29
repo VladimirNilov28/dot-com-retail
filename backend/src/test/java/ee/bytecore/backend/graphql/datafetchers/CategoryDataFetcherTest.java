@@ -226,13 +226,9 @@ class CategoryDataFetcherTest {
             }
         """;
 
-        graphQlTester
-                .document(mutation)
-                .execute()
-                .errors()
-                .satisfy(errors -> assertThat(errors)
-                        .as("a parentId that doesn't reference an existing category must be rejected")
-                        .isNotEmpty());
+        graphQlTester.document(mutation).execute().errors().satisfy(errors -> assertThat(errors)
+                .as("a parentId that doesn't reference an existing category must be rejected")
+                .isNotEmpty());
     }
 
     @Test
@@ -250,11 +246,9 @@ class CategoryDataFetcherTest {
             }
         """;
 
-        graphQlTester
-                .document(mutation)
-                .execute()
-                .errors()
-                .satisfy(errors -> assertThat(errors).as("a blank name must be rejected").isNotEmpty());
+        graphQlTester.document(mutation).execute().errors().satisfy(errors -> assertThat(errors)
+                .as("a blank name must be rejected")
+                .isNotEmpty());
     }
 
     @Test

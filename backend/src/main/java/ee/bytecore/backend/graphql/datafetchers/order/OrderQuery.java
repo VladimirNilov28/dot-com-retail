@@ -60,6 +60,23 @@ public class OrderQuery {
                 .toList();
     }
 
+    /**
+     * {@link OrderMapper#toGraphQlType(ee.bytecore.backend.entities.payment.OrderItem)}
+     * deliberately never sets {@code order} to avoid eagerly re-mapping the
+     * parent Order for every item; this resolves it only when a query
+     * actually selects {@code OrderItem.order}. Re-loads via
+     * {@link OrderService#getOwnedOrderItem} so read access is re-checked
+     * rather than trusting the parent's already-resolved data.
+     */
+    @DgsData(parentType = "OrderItem", field = "order")
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).ORDER_READ)")
+    public Order orderForOrderItem(DgsDataFetchingEnvironment dfe) {
+        OrderItem source = dfe.getSource();
+        ee.bytecore.backend.entities.payment.OrderItem item = orderService.getOwnedOrderItem(
+                Long.valueOf(source.getId()), currentUserProvider.getCurrentUserId(), isStaff());
+        return OrderMapper.toGraphQlType(item.getOrder());
+    }
+
     private boolean isStaff() {
         return SecurityContextHolder.getContext().getAuthentication().getAuthorities().stream()
                 .anyMatch(a -> a.getAuthority().equals("ROLE_ORDER_MANAGER")

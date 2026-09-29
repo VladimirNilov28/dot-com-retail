@@ -24,18 +24,21 @@ public class PaymentMethodsByUserIdDataLoader implements MappedBatchLoader<Long,
         this.userPaymentMethodRepository = userPaymentMethodRepository;
     }
 
+    /**
+     * Runs synchronously on the calling (request) thread - see
+     * {@code ProductVariantsByProductIdDataLoader} for why
+     * {@code CompletableFuture.supplyAsync} is unsafe here.
+     */
     @Override
     public CompletionStage<Map<Long, List<UserPaymentMethod>>> load(Set<Long> userIds) {
-        return CompletableFuture.supplyAsync(() -> {
-            List<UserPaymentMethod> all = userPaymentMethodRepository.findAllByUserIdIn(new ArrayList<>(userIds));
-            Map<Long, List<UserPaymentMethod>> grouped = all.stream()
-                    .collect(Collectors.groupingBy(pm -> pm.getUser().getId()));
+        List<UserPaymentMethod> all = userPaymentMethodRepository.findAllByUserIdIn(new ArrayList<>(userIds));
+        Map<Long, List<UserPaymentMethod>> grouped =
+                all.stream().collect(Collectors.groupingBy(pm -> pm.getUser().getId()));
 
-            Map<Long, List<UserPaymentMethod>> result = new HashMap<>();
-            for (Long userId : userIds) {
-                result.put(userId, grouped.getOrDefault(userId, List.of()));
-            }
-            return result;
-        });
+        Map<Long, List<UserPaymentMethod>> result = new HashMap<>();
+        for (Long userId : userIds) {
+            result.put(userId, grouped.getOrDefault(userId, List.of()));
+        }
+        return CompletableFuture.completedFuture(result);
     }
 }

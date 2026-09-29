@@ -32,6 +32,7 @@ import ee.bytecore.backend.graphql.scalars.LocalDateScalar;
 import ee.bytecore.backend.repositories.cart.CartItemRepository;
 import ee.bytecore.backend.repositories.cart.CartRepository;
 import ee.bytecore.backend.repositories.product.ProductVariantRepository;
+import ee.bytecore.backend.repositories.user.UserRepository;
 import ee.bytecore.backend.security.CurrentUserProvider;
 import ee.bytecore.backend.services.CartService;
 
@@ -73,6 +74,9 @@ class CartMutationAuthorizationTest {
 
     @MockitoBean
     ProductVariantRepository productVariantRepository;
+
+    @MockitoBean
+    UserRepository userRepository;
 
     @MockitoBean
     JwtDecoder jwtDecoder;

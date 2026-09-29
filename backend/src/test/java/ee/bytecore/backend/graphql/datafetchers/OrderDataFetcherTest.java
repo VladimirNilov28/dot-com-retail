@@ -20,6 +20,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import ee.bytecore.backend.entities.cart.Cart;
 import ee.bytecore.backend.entities.cart.CartItem;
+import ee.bytecore.backend.entities.inventory.Inventory;
+import ee.bytecore.backend.entities.inventory.Warehouse;
 import ee.bytecore.backend.entities.payment.Order;
 import ee.bytecore.backend.entities.product.Product;
 import ee.bytecore.backend.entities.product.ProductVariant;
@@ -51,6 +53,7 @@ import reactor.test.StepVerifier;
             ee.bytecore.backend.services.OrderService.class,
             ee.bytecore.backend.services.OrderStatusPublisher.class,
             ee.bytecore.backend.services.CartService.class,
+            ee.bytecore.backend.services.InventoryService.class,
             ee.bytecore.backend.security.CurrentUserProvider.class
         })
 @EnableDgsMockMvcTest
@@ -72,6 +75,15 @@ class OrderDataFetcherTest {
 
     @MockitoBean
     ee.bytecore.backend.repositories.product.ProductVariantRepository productVariantRepository;
+
+    @MockitoBean
+    ee.bytecore.backend.repositories.inventory.InventoryRepository inventoryRepository;
+
+    @MockitoBean
+    ee.bytecore.backend.repositories.inventory.WarehouseRepository warehouseRepository;
+
+    @MockitoBean
+    ee.bytecore.backend.repositories.user.UserRepository userRepository;
 
     private User user;
     private Order order;
@@ -118,6 +130,49 @@ class OrderDataFetcherTest {
                 .path("order.totalAmount")
                 .entity(BigDecimal.class)
                 .isEqualTo(order.getTotalAmount());
+    }
+
+    @Test
+    @WithMockUser(username = "1")
+    void shouldResolveOrderForOrderItemTest() {
+        Long id = order.getId();
+        when(orderRepository.findById(id)).thenReturn(Optional.of(order));
+
+        Product product = Product.create("T-Shirt", "t-shirt", "A plain t-shirt");
+        product.setId(1L);
+        ProductVariant variant = ProductVariant.create(product, "TSHIRT-M-BLACK", new BigDecimal("19.99"));
+        variant.setId(1L);
+        Warehouse warehouse = Warehouse.create("Main Warehouse", null);
+        warehouse.setId(1L);
+        Inventory inventory = Inventory.create(variant, warehouse, 5);
+        inventory.setId(1L);
+        ee.bytecore.backend.entities.payment.OrderItem item = ee.bytecore.backend.entities.payment.OrderItem.create(
+                order, variant, inventory, 2, new BigDecimal("19.99"));
+        item.setId(1L);
+        when(orderItemRepository.findAllByOrderId(id)).thenReturn(List.of(item));
+        when(orderItemRepository.findById(item.getId())).thenReturn(Optional.of(item));
+
+        @Language("GraphQl")
+        var query =
+                """
+            query($id: ID!) {
+              order(id: $id) {
+                items {
+                  order {
+                    id
+                  }
+                }
+              }
+            }
+        """;
+
+        graphQlTester
+                .document(query)
+                .variable("id", id)
+                .execute()
+                .path("order.items[0].order.id")
+                .entity(String.class)
+                .isEqualTo(order.getId().toString());
     }
 
     @Test
@@ -250,6 +305,14 @@ class OrderDataFetcherTest {
         variant.setId(1L);
         cart.getItems().add(CartItem.create(cart, variant, 2));
         when(cartRepository.findByUserId(user.getId())).thenReturn(Optional.of(cart));
+        Warehouse warehouse = Warehouse.create("Main Warehouse", null);
+        warehouse.setId(1L);
+        Inventory inventory = Inventory.create(variant, warehouse, 5);
+        inventory.setId(1L);
+        when(inventoryRepository.lockAllByProductVariantIdOrderByIdAsc(variant.getId()))
+                .thenReturn(List.of(inventory));
+        when(inventoryRepository.save(org.mockito.ArgumentMatchers.any(Inventory.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
         when(orderRepository.save(org.mockito.ArgumentMatchers.any(Order.class)))
                 .thenReturn(order);
 
@@ -291,13 +354,9 @@ class OrderDataFetcherTest {
             }
         """;
 
-        graphQlTester
-                .document(mutation)
-                .execute()
-                .errors()
-                .satisfy(errors -> Assertions.assertThat(errors)
-                        .as("creating an order from an empty cart must be rejected")
-                        .isNotEmpty());
+        graphQlTester.document(mutation).execute().errors().satisfy(errors -> Assertions.assertThat(errors)
+                .as("creating an order from an empty cart must be rejected")
+                .isNotEmpty());
     }
 
     @Test
@@ -330,6 +389,7 @@ class OrderDataFetcherTest {
     @WithMockUser(username = "1")
     void shouldSubscribeToOrderStatusChangesTest() {
         Long id = order.getId();
+        order.setStatus(OrderStatus.PAID);
         when(orderRepository.findById(id)).thenReturn(Optional.of(order));
         when(orderRepository.save(order)).thenReturn(order);
 

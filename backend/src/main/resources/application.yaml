@@ -6,6 +6,13 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
+  graphql:
+    # Enables the WS transport for the "orderStatusChanged" subscription.
+    # Without this, the schema-declared Subscription field is unreachable:
+    # Spring GraphQL never upgrades the connection (405/timeout) even
+    # though the resolver + publisher are fully implemented.
+    websocket:
+      path: /graphql
   docker:
     compose:
       file: ../infrastructure/compose.yml

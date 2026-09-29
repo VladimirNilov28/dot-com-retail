@@ -29,11 +29,15 @@ import ee.bytecore.backend.graphql.scalars.InstantScalar;
 import ee.bytecore.backend.graphql.scalars.LocalDateScalar;
 import ee.bytecore.backend.repositories.cart.CartItemRepository;
 import ee.bytecore.backend.repositories.cart.CartRepository;
+import ee.bytecore.backend.repositories.inventory.InventoryRepository;
+import ee.bytecore.backend.repositories.inventory.WarehouseRepository;
 import ee.bytecore.backend.repositories.payment.OrderItemRepository;
 import ee.bytecore.backend.repositories.payment.OrderRepository;
 import ee.bytecore.backend.repositories.product.ProductVariantRepository;
+import ee.bytecore.backend.repositories.user.UserRepository;
 import ee.bytecore.backend.security.CurrentUserProvider;
 import ee.bytecore.backend.services.CartService;
+import ee.bytecore.backend.services.InventoryService;
 import ee.bytecore.backend.services.OrderService;
 import ee.bytecore.backend.services.OrderStatusPublisher;
 
@@ -59,6 +63,7 @@ import org.junit.jupiter.api.Test;
             OrderService.class,
             OrderStatusPublisher.class,
             CartService.class,
+            InventoryService.class,
             CurrentUserProvider.class
         })
 @EnableDgsMockMvcTest
@@ -84,6 +89,15 @@ class OrderMutationAuthorizationTest {
 
     @MockitoBean
     ProductVariantRepository productVariantRepository;
+
+    @MockitoBean
+    InventoryRepository inventoryRepository;
+
+    @MockitoBean
+    WarehouseRepository warehouseRepository;
+
+    @MockitoBean
+    UserRepository userRepository;
 
     @MockitoBean
     JwtDecoder jwtDecoder;

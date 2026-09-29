@@ -24,18 +24,21 @@ public class AddressesByUserIdDataLoader implements MappedBatchLoader<Long, List
         this.userAddressRepository = userAddressRepository;
     }
 
+    /**
+     * Runs synchronously on the calling (request) thread - see
+     * {@code ProductVariantsByProductIdDataLoader} for why
+     * {@code CompletableFuture.supplyAsync} is unsafe here.
+     */
     @Override
     public CompletionStage<Map<Long, List<UserAddress>>> load(Set<Long> userIds) {
-        return CompletableFuture.supplyAsync(() -> {
-            List<UserAddress> all = userAddressRepository.findAllByUserIdIn(new ArrayList<>(userIds));
-            Map<Long, List<UserAddress>> grouped = all.stream()
-                    .collect(Collectors.groupingBy(address -> address.getUser().getId()));
+        List<UserAddress> all = userAddressRepository.findAllByUserIdIn(new ArrayList<>(userIds));
+        Map<Long, List<UserAddress>> grouped = all.stream()
+                .collect(Collectors.groupingBy(address -> address.getUser().getId()));
 
-            Map<Long, List<UserAddress>> result = new HashMap<>();
-            for (Long userId : userIds) {
-                result.put(userId, grouped.getOrDefault(userId, List.of()));
-            }
-            return result;
-        });
+        Map<Long, List<UserAddress>> result = new HashMap<>();
+        for (Long userId : userIds) {
+            result.put(userId, grouped.getOrDefault(userId, List.of()));
+        }
+        return CompletableFuture.completedFuture(result);
     }
 }

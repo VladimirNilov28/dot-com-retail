@@ -28,6 +28,7 @@ import ee.bytecore.backend.graphql.scalars.LocalDateScalar;
 import ee.bytecore.backend.repositories.cart.CartItemRepository;
 import ee.bytecore.backend.repositories.cart.CartRepository;
 import ee.bytecore.backend.repositories.product.ProductVariantRepository;
+import ee.bytecore.backend.repositories.user.UserRepository;
 
 import com.netflix.graphql.dgs.test.EnableDgsMockMvcTest;
 import org.intellij.lang.annotations.Language;
@@ -59,6 +60,9 @@ class CartDataFetcherTest {
 
     @MockitoBean
     ProductVariantRepository productVariantRepository;
+
+    @MockitoBean
+    UserRepository userRepository;
 
     private User user;
     private Cart cart;
@@ -105,6 +109,90 @@ class CartDataFetcherTest {
                 .path("myCart.items")
                 .entityList(Object.class)
                 .hasSize(0);
+    }
+
+    @Test
+    @WithMockUser(username = "1")
+    void shouldResolveCartForCartItemTest() {
+        cart.getItems().add(cartItem);
+        when(cartRepository.findByUserId(user.getId())).thenReturn(Optional.of(cart));
+        when(cartItemRepository.findById(cartItem.getId())).thenReturn(Optional.of(cartItem));
+
+        @Language("GraphQl")
+        var query =
+                """
+            query {
+              myCart {
+                items {
+                  cart {
+                    id
+                  }
+                }
+              }
+            }
+        """;
+
+        graphQlTester
+                .document(query)
+                .execute()
+                .path("myCart.items[0].cart.id")
+                .entity(String.class)
+                .isEqualTo(cart.getId().toString());
+    }
+
+    @Test
+    @WithMockUser(username = "1")
+    void shouldLazilyCreateCartForMyCartWhenMissingTest() {
+        when(cartRepository.findByUserId(user.getId())).thenReturn(Optional.empty());
+        when(userRepository.getReferenceById(user.getId())).thenReturn(user);
+        when(cartRepository.saveAndFlush(any(Cart.class))).thenReturn(cart);
+
+        @Language("GraphQl")
+        var query =
+                """
+            query {
+              myCart {
+                items {
+                  quantity
+                }
+              }
+            }
+        """;
+
+        graphQlTester
+                .document(query)
+                .execute()
+                .path("myCart.items")
+                .entityList(Object.class)
+                .hasSize(0);
+    }
+
+    @Test
+    @WithMockUser(username = "1")
+    void shouldLazilyCreateCartForAddCartItemWhenMissingTest() {
+        when(cartRepository.findByUserId(user.getId())).thenReturn(Optional.empty());
+        when(userRepository.getReferenceById(user.getId())).thenReturn(user);
+        when(cartRepository.saveAndFlush(any(Cart.class))).thenReturn(cart);
+        when(productVariantRepository.findById(productVariant.getId())).thenReturn(Optional.of(productVariant));
+        when(cartItemRepository.save(any(CartItem.class))).thenReturn(cartItem);
+
+        @Language("GraphQl")
+        var mutation =
+                """
+            mutation($variantId: ID!) {
+              addCartItem(input: { productVariantId: $variantId, quantity: 2 }) {
+                quantity
+              }
+            }
+        """;
+
+        graphQlTester
+                .document(mutation)
+                .variable("variantId", productVariant.getId())
+                .execute()
+                .path("addCartItem.quantity")
+                .entity(Integer.class)
+                .isEqualTo(2);
     }
 
     @Test
@@ -182,7 +270,9 @@ class CartDataFetcherTest {
                 .variable("variantId", productVariant.getId())
                 .execute()
                 .errors()
-                .satisfy(errors -> assertThat(errors).as("a zero quantity must be rejected").isNotEmpty());
+                .satisfy(errors -> assertThat(errors)
+                        .as("a zero quantity must be rejected")
+                        .isNotEmpty());
     }
 
     @Test

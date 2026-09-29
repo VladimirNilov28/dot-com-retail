@@ -22,6 +22,8 @@ CREATE TABLE order_items (
     public_id uuid NOT NULL UNIQUE DEFAULT gen_random_uuid(),
     order_id bigint NOT NULL,
     product_variant_id bigint NOT NULL,
+    -- FK added in V6__create_inventory.sql, once the `inventory` table exists.
+    inventory_id bigint NOT NULL,
     quantity integer NOT NULL CHECK (quantity > 0),
     price_at_purchase decimal(10, 2) NOT NULL CHECK (price_at_purchase >= 0),
     CONSTRAINT fk_order_items_order FOREIGN KEY (order_id) REFERENCES orders (id) ON DELETE CASCADE,

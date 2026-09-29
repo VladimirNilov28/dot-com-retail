@@ -110,7 +110,8 @@ public class ProductVariantService {
                     .collect(Collectors.joining("; "));
             throw new IllegalArgumentException(String.format("Invalid product variant: %s", violations));
         } catch (DataIntegrityViolationException e) {
-            throw new IllegalArgumentException(String.format("Product variant with SKU '%s' already exists", variant.getSku()));
+            throw new IllegalArgumentException(
+                    String.format("Product variant with SKU '%s' already exists", variant.getSku()));
         }
     }
 }

@@ -92,7 +92,8 @@ public class ProductService {
                     .collect(Collectors.joining("; "));
             throw new IllegalArgumentException(String.format("Invalid product: %s", violations));
         } catch (DataIntegrityViolationException e) {
-            throw new IllegalArgumentException(String.format("Product with slug '%s' already exists", product.getSlug()));
+            throw new IllegalArgumentException(
+                    String.format("Product with slug '%s' already exists", product.getSlug()));
         }
     }
 }

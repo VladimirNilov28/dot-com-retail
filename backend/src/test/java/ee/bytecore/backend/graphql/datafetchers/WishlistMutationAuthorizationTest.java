@@ -30,6 +30,7 @@ import ee.bytecore.backend.graphql.scalars.GraphQLConfig;
 import ee.bytecore.backend.graphql.scalars.InstantScalar;
 import ee.bytecore.backend.graphql.scalars.LocalDateScalar;
 import ee.bytecore.backend.repositories.product.ProductVariantRepository;
+import ee.bytecore.backend.repositories.user.UserRepository;
 import ee.bytecore.backend.repositories.wishlist.WishlistItemRepository;
 import ee.bytecore.backend.repositories.wishlist.WishlistRepository;
 import ee.bytecore.backend.security.CurrentUserProvider;
@@ -73,6 +74,9 @@ class WishlistMutationAuthorizationTest {
 
     @MockitoBean
     ProductVariantRepository productVariantRepository;
+
+    @MockitoBean
+    UserRepository userRepository;
 
     @MockitoBean
     JwtDecoder jwtDecoder;

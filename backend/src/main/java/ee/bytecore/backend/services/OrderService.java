@@ -1,7 +1,9 @@
 package ee.bytecore.backend.services;
 
 import java.math.BigDecimal;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -12,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import ee.bytecore.backend.entities.cart.Cart;
 import ee.bytecore.backend.entities.cart.CartItem;
+import ee.bytecore.backend.entities.inventory.Inventory;
 import ee.bytecore.backend.entities.payment.Order;
 import ee.bytecore.backend.entities.payment.OrderItem;
 import ee.bytecore.backend.enums.OrderStatus;
@@ -26,16 +29,19 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
     private final CartService cartService;
+    private final InventoryService inventoryService;
     private final OrderStatusPublisher orderStatusPublisher;
 
     public OrderService(
             OrderRepository orderRepository,
             OrderItemRepository orderItemRepository,
             CartService cartService,
+            InventoryService inventoryService,
             OrderStatusPublisher orderStatusPublisher) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
         this.cartService = cartService;
+        this.inventoryService = inventoryService;
         this.orderStatusPublisher = orderStatusPublisher;
     }
 
@@ -55,6 +61,20 @@ public class OrderService {
         return orderItemRepository.findAllByOrderId(orderId);
     }
 
+    /**
+     * Resolves an owned {@link OrderItem} by id - used by the nested
+     * {@code OrderItem.order} resolver so it can't be used to read another
+     * user's order item.
+     */
+    public OrderItem getOwnedOrderItem(Long orderItemId, Long currentUserId, boolean isStaff) {
+        OrderItem item = orderItemRepository
+                .findById(orderItemId)
+                .orElseThrow(() ->
+                        new EntityNotFoundException(String.format("OrderItem with id %s not found", orderItemId)));
+        requireReadable(item.getOrder(), currentUserId, isStaff);
+        return item;
+    }
+
     @Transactional
     public Order createOrder(Long userId) {
         Cart cart = cartService.getMyCart(userId);
@@ -69,6 +89,17 @@ public class OrderService {
                     cartItem.getProductVariant().getPrice().multiply(BigDecimal.valueOf(cartItem.getQuantity())));
         }
 
+        // Allocate (lock + verify + decrement) stock for every cart item
+        // first. If any item is insufficient, this throws and the whole
+        // transaction rolls back before any Order/OrderItem is persisted and
+        // before the cart is touched - no partial updates.
+        Map<CartItem, Inventory> allocations = new LinkedHashMap<>();
+        for (CartItem cartItem : cartItems) {
+            Inventory inventory = inventoryService.allocateAndDecrement(
+                    cartItem.getProductVariant().getId(), cartItem.getQuantity());
+            allocations.put(cartItem, inventory);
+        }
+
         Order order = Order.create(cart.getUser(), OrderStatus.PENDING, totalAmount);
         Order saved = orderRepository.save(order);
 
@@ -76,6 +107,7 @@ public class OrderService {
             orderItemRepository.save(OrderItem.create(
                     saved,
                     cartItem.getProductVariant(),
+                    allocations.get(cartItem),
                     cartItem.getQuantity(),
                     cartItem.getProductVariant().getPrice()));
         }
@@ -102,6 +134,19 @@ public class OrderService {
         Order order = orderRepository
                 .findById(id)
                 .orElseThrow(() -> new EntityNotFoundException(String.format("Order with id %s not found", id)));
+
+        OrderStatus currentStatus = order.getStatus();
+        if (!OrderStatusTransitions.canTransition(currentStatus, status)) {
+            throw new IllegalArgumentException(
+                    String.format("Cannot transition order %s from %s to %s", id, currentStatus, status));
+        }
+
+        if (status == OrderStatus.CANCELLED) {
+            for (OrderItem item : orderItemRepository.findAllByOrderId(id)) {
+                inventoryService.restore(item.getInventory().getId(), item.getQuantity());
+            }
+        }
+
         order.setStatus(status);
         Order saved = orderRepository.save(order);
         orderStatusPublisher.publish(saved);

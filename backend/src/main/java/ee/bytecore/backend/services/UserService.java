@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.util.Optional;
 import java.util.regex.Pattern;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -90,7 +91,15 @@ public class UserService {
         if (!userRepository.existsById(id)) {
             throw new UserNotFoundException(String.format("User with id %s not found", id));
         }
-        userRepository.deleteById(id);
+        try {
+            userRepository.deleteById(id);
+        } catch (DataIntegrityViolationException e) {
+            // The user still has related rows (e.g. orders) that reference
+            // them via a non-cascading FK - surface a clean domain error
+            // instead of leaking the raw SQL/constraint message.
+            throw new IllegalArgumentException(
+                    String.format("Cannot delete user %s: user has existing orders or other related records", id));
+        }
     }
 
     @Transactional

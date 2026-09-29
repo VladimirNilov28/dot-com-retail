@@ -312,19 +312,26 @@ INSERT INTO orders (id, user_id, status, total_amount, created_at) VALUES
 (11, 14, 'COMPLETED', 749.00, NOW() - INTERVAL '15 days'),
 (12, 15, 'COMPLETED', 269.00, NOW() - INTERVAL '8 days');
 
-INSERT INTO order_items (order_id, product_variant_id, quantity, price_at_purchase) VALUES
-(1, 17, 1, 899.00), (1, 39, 1, 99.00), (1, 37, 1, 50.00),
-(2, 6, 1, 1349.00),
-(3, 8, 1, 2599.00), (3, 41, 1, 149.00), (3, 22, 1, 200.00),
-(4, 30, 1, 149.00),
-(5, 27, 1, 139.00), (5, 25, 1, 69.00),
-(6, 42, 1, 999.00),
-(7, 34, 1, 429.00),
-(8, 44, 1, 899.00),
-(9, 10, 1, 1899.00),
-(10, 23, 1, 59.00), (10, 46, 1, 89.00), (10, 37, 1, 30.00),
-(11, 33, 1, 749.00),
-(12, 22, 1, 149.00), (12, 46, 1, 89.00), (12, 37, 1, 31.00);
+-- inventory_id references the same warehouse (1) used for every seeded
+-- variant, since `inventory` is populated for every variant × warehouse
+-- combination above.
+INSERT INTO order_items (order_id, product_variant_id, inventory_id, quantity, price_at_purchase)
+SELECT t.order_id, t.product_variant_id, i.id, t.quantity, t.price_at_purchase
+FROM (VALUES
+    (1, 17, 1, 899.00), (1, 39, 1, 99.00), (1, 37, 1, 50.00),
+    (2, 6, 1, 1349.00),
+    (3, 8, 1, 2599.00), (3, 41, 1, 149.00), (3, 22, 1, 200.00),
+    (4, 30, 1, 149.00),
+    (5, 27, 1, 139.00), (5, 25, 1, 69.00),
+    (6, 42, 1, 999.00),
+    (7, 34, 1, 429.00),
+    (8, 44, 1, 899.00),
+    (9, 10, 1, 1899.00),
+    (10, 23, 1, 59.00), (10, 46, 1, 89.00), (10, 37, 1, 30.00),
+    (11, 33, 1, 749.00),
+    (12, 22, 1, 149.00), (12, 46, 1, 89.00), (12, 37, 1, 31.00)
+) AS t(order_id, product_variant_id, quantity, price_at_purchase)
+JOIN inventory i ON i.product_variant_id = t.product_variant_id AND i.warehouse_id = 1;
 
 -- =====================================================
 -- Sync sequences with explicitly inserted ids

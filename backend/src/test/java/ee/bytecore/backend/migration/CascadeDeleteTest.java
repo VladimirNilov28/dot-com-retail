@@ -128,14 +128,26 @@ public class CascadeDeleteTest {
 
         jdbcTemplate.update(
                 """
+        INSERT INTO warehouses (id, name)
+        VALUES (1, 'Test Warehouse')
+        """);
+
+        jdbcTemplate.update(
+                """
+        INSERT INTO inventory (id, product_variant_id, warehouse_id, quantity)
+        VALUES (1, 1, 1, 10)
+        """);
+
+        jdbcTemplate.update(
+                """
         INSERT INTO orders (id, user_id, total_amount)
         VALUES (1, 1, 49.95)
         """);
 
         jdbcTemplate.update(
                 """
-        INSERT INTO order_items (order_id, product_variant_id, quantity, price_at_purchase)
-        VALUES (1, 1, 5, 9.99)
+        INSERT INTO order_items (order_id, product_variant_id, inventory_id, quantity, price_at_purchase)
+        VALUES (1, 1, 1, 5, 9.99)
         """);
 
         jdbcTemplate.update("""

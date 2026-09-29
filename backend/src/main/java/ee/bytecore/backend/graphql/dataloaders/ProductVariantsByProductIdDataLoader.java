@@ -24,19 +24,27 @@ public class ProductVariantsByProductIdDataLoader implements MappedBatchLoader<L
         this.productVariantRepository = productVariantRepository;
     }
 
+    /**
+     * Runs synchronously on the calling (request) thread rather than via
+     * {@code CompletableFuture.supplyAsync} - the latter hops onto the
+     * common {@code ForkJoinPool}, which has neither the Hibernate
+     * session (OSIV) nor the Spring Security context bound to it. Any
+     * nested resolver reached only through this DataLoader (e.g.
+     * {@code ProductVariant.product}, {@code ProductVariant.inventory})
+     * would then fail with {@code LazyInitializationException} or
+     * {@code AuthenticationCredentialsNotFoundException}. Batching (one
+     * query per distinct set of product ids) is unaffected.
+     */
     @Override
     public CompletionStage<Map<Long, List<ProductVariant>>> load(Set<Long> productIds) {
-        return CompletableFuture.supplyAsync(() -> {
-            List<ProductVariant> all = productVariantRepository.findAllByProductIdIn(new ArrayList<>(productIds));
-            Map<Long, List<ProductVariant>> grouped = all.stream()
-                    .collect(Collectors.groupingBy(
-                            variant -> variant.getProduct().getId()));
+        List<ProductVariant> all = productVariantRepository.findAllByProductIdIn(new ArrayList<>(productIds));
+        Map<Long, List<ProductVariant>> grouped = all.stream()
+                .collect(Collectors.groupingBy(variant -> variant.getProduct().getId()));
 
-            Map<Long, List<ProductVariant>> result = new HashMap<>();
-            for (Long productId : productIds) {
-                result.put(productId, grouped.getOrDefault(productId, List.of()));
-            }
-            return result;
-        });
+        Map<Long, List<ProductVariant>> result = new HashMap<>();
+        for (Long productId : productIds) {
+            result.put(productId, grouped.getOrDefault(productId, List.of()));
+        }
+        return CompletableFuture.completedFuture(result);
     }
 }

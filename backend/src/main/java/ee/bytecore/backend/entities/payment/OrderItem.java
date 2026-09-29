@@ -3,6 +3,7 @@ package ee.bytecore.backend.entities.payment;
 import java.math.BigDecimal;
 import java.util.UUID;
 
+import ee.bytecore.backend.entities.inventory.Inventory;
 import ee.bytecore.backend.entities.product.ProductVariant;
 
 import jakarta.persistence.*;
@@ -36,6 +37,15 @@ public class OrderItem {
     @JoinColumn(name = "product_variant_id", nullable = false)
     private ProductVariant productVariant;
 
+    /**
+     * The exact Inventory row stock was decremented from for this line item,
+     * so early cancellation can restore stock to its precise source instead
+     * of guessing a warehouse.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "inventory_id", nullable = false)
+    private Inventory inventory;
+
     @Positive @Column(name = "quantity", nullable = false)
     private Integer quantity;
 
@@ -43,10 +53,15 @@ public class OrderItem {
     private BigDecimal priceAtPurchase;
 
     public static OrderItem create(
-            Order order, ProductVariant productVariant, Integer quantity, BigDecimal priceAtPurchase) {
+            Order order,
+            ProductVariant productVariant,
+            Inventory inventory,
+            Integer quantity,
+            BigDecimal priceAtPurchase) {
         OrderItem orderItem = new OrderItem();
         orderItem.order = order;
         orderItem.productVariant = productVariant;
+        orderItem.inventory = inventory;
         orderItem.quantity = quantity;
         orderItem.priceAtPurchase = priceAtPurchase;
         return orderItem;

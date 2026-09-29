@@ -233,6 +233,37 @@ class ProductDataFetcherTest {
 
     @Test
     @WithMockUser
+    void shouldResolveProductForVariantTest() {
+        Long id = product.getId();
+        when(productRepository.findById(id)).thenReturn(Optional.of(product));
+        when(productVariantRepository.findAllByProductIdIn(List.of(id))).thenReturn(List.of(productVariant));
+        when(productVariantRepository.findById(productVariant.getId())).thenReturn(Optional.of(productVariant));
+
+        @Language("GraphQl")
+        var query =
+                """
+            query($id: ID!) {
+              product(id: $id) {
+                variants {
+                  product {
+                    name
+                  }
+                }
+              }
+            }
+        """;
+
+        graphQlTester
+                .document(query)
+                .variable("id", id)
+                .execute()
+                .path("product.variants[0].product.name")
+                .entity(String.class)
+                .isEqualTo(product.getName());
+    }
+
+    @Test
+    @WithMockUser
     void shouldReturnEmptyProductVariantsTest() {
         Long id = product.getId();
         when(productRepository.findById(id)).thenReturn(Optional.of(product));
@@ -299,13 +330,9 @@ class ProductDataFetcherTest {
             }
         """;
 
-        graphQlTester
-                .document(mutation)
-                .execute()
-                .errors()
-                .satisfy(errors -> assertThat(errors)
-                        .as("a categoryId that doesn't reference an existing category must be rejected")
-                        .isNotEmpty());
+        graphQlTester.document(mutation).execute().errors().satisfy(errors -> assertThat(errors)
+                .as("a categoryId that doesn't reference an existing category must be rejected")
+                .isNotEmpty());
     }
 
     @Test

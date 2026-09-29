@@ -24,19 +24,22 @@ public class CategoriesByProductIdDataLoader implements MappedBatchLoader<Long, 
         this.productRepository = productRepository;
     }
 
+    /**
+     * Runs synchronously on the calling (request) thread - see
+     * {@code ProductVariantsByProductIdDataLoader} for why
+     * {@code CompletableFuture.supplyAsync} is unsafe here.
+     */
     @Override
     public CompletionStage<Map<Long, List<Category>>> load(Set<Long> productIds) {
-        return CompletableFuture.supplyAsync(() -> {
-            List<Product> products = productRepository.findAllByIdInWithCategories(new ArrayList<>(productIds));
+        List<Product> products = productRepository.findAllByIdInWithCategories(new ArrayList<>(productIds));
 
-            Map<Long, List<Category>> result = new HashMap<>();
-            for (Long productId : productIds) {
-                result.put(productId, List.of());
-            }
-            for (Product product : products) {
-                result.put(product.getId(), new ArrayList<>(product.getCategories()));
-            }
-            return result;
-        });
+        Map<Long, List<Category>> result = new HashMap<>();
+        for (Long productId : productIds) {
+            result.put(productId, List.of());
+        }
+        for (Product product : products) {
+            result.put(product.getId(), new ArrayList<>(product.getCategories()));
+        }
+        return CompletableFuture.completedFuture(result);
     }
 }

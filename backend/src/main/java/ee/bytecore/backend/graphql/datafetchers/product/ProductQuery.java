@@ -77,4 +77,25 @@ public class ProductQuery {
                 .thenApply(categories ->
                         categories.stream().map(CategoryMapper::toGraphQlType).toList());
     }
+
+    /**
+     * {@code ProductMapper.toGraphQlType(ProductVariant)} deliberately leaves
+     * {@code product} unset (it doesn't have the owning entity's Product
+     * loaded eagerly). Resolved here per-variant rather than via a
+     * DataLoader: variants are only ever selected in small, single-parent
+     * lists (a product's own variants, or a cart/order item's variant) - no
+     * N+1 has been demonstrated yet, matching this project's
+     * DataLoader-only-when-needed convention.
+     */
+    @DgsData(parentType = "ProductVariant", field = "product")
+    public Product productForVariant(DgsDataFetchingEnvironment dfe) {
+        ProductVariant variant = dfe.getSource();
+        if (variant == null) {
+            return null;
+        }
+        return productVariantService
+                .findById(Long.valueOf(variant.getId()))
+                .map(entity -> ProductMapper.toGraphQlType(entity.getProduct()))
+                .orElse(null);
+    }
 }
