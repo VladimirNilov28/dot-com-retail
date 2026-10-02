@@ -2,7 +2,7 @@ from typing import Optional
 from urllib.parse import urlencode
 
 from clients.hydra import HydraClient
-from clients.kratos import KratosClient
+from clients.kratos import KratosClient, KratosSecondFactorRequiredError
 from clients.spring_auth import SpringAuthClient
 from config import Config
 
@@ -42,25 +42,19 @@ def handle_login(
     """Returns the URL the browser should be redirected to next."""
     login_request = hydra_client.get_login_request(login_challenge)
 
-    if login_request.get("skip"):
-        # Hydra already knows the subject for this session (e.g. remembered
-        # from a previous login). By construction that subject is already a
-        # Spring user id, so re-resolve the role directly from Spring.
-        subject = login_request["subject"]
-        spring_user = spring_auth_client.resolve_user(int(subject))
-    else:
+    return_to = _self_url(config, "/login", login_challenge=login_challenge)
+    try:
         session = kratos_client.whoami(cookie_header)
-        if session is None:
-            # Not authenticated yet — send the browser through Kratos's own
-            # login flow, returning back to this same endpoint once it
-            # succeeds. Kratos remains solely responsible for verifying the
-            # password.
-            return_to = _self_url(config, "/login", login_challenge=login_challenge)
-            return kratos_client.browser_login_url(config.kratos_browser_url, return_to)
+    except KratosSecondFactorRequiredError:
+        return kratos_client.browser_login_url(config.kratos_browser_url, return_to, aal="aal2")
+    if session is None:
+        return kratos_client.browser_login_url(config.kratos_browser_url, return_to)
 
-        kratos_identity_id = session["identity"]["id"]
-        spring_user = resolve_canonical_user(kratos_client, spring_auth_client, kratos_identity_id)
-        subject = str(spring_user["id"])
+    kratos_identity_id = session["identity"]["id"]
+    spring_user = resolve_canonical_user(kratos_client, spring_auth_client, kratos_identity_id)
+    subject = str(spring_user["id"])
+    if login_request.get("skip") and login_request.get("subject") != subject:
+        raise BridgeError("Remembered OAuth subject does not match the authenticated identity")
 
     accepted = hydra_client.accept_login_request(
         login_challenge, subject, context={"role": spring_user["role"]}

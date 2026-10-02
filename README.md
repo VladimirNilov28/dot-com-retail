@@ -69,6 +69,20 @@ Returns a real Hydra-issued bearer JWT for the seeded dev admin user
 (`role: ADMIN`, full scope set). Loopback-only by design — never exposed
 beyond `127.0.0.1`.
 
+### Optional TOTP two-factor authentication
+
+Kratos `v26.2.0` owns optional TOTP enrollment, AAL2 challenges and single-use
+backup codes. Use its native settings/login APIs; no frontend auth UI or
+authenticator-vendor integration is required. Both OAuth login bridges enforce
+Kratos's `highest_available` assurance, including remembered Hydra logins.
+Enrolled users complete Kratos AAL2 and submit the native session token to
+`POST :4447/internal/token`; password-only requests cannot issue their JWT.
+
+See the [TOTP runbook](infrastructure/oauth/service/README.md#totp-runbook) for
+enrollment, secure disable, recovery codes and the executable local smoke test.
+Hydra/Kratos admin APIs and Mailpit ports are published on loopback only.
+The web client cannot request machine-only user-provisioning scope.
+
 ### GraphQL: querying through Hive Router
 
 Open `http://localhost:4002` for the Hive Router's built-in GraphQL IDE

@@ -1,13 +1,14 @@
 import hashlib
 import secrets
 from base64 import urlsafe_b64encode
+from typing import Optional
 
 from clients.hydra import HydraClient, parse_query_param
-from clients.kratos import KratosClient
+from clients.kratos import KratosAuthenticationError, KratosClient
 from clients.spring_auth import SpringAuthClient
 from config import Config
 from models import TokenResponse
-from services.login_consent import resolve_canonical_user
+from services.login_consent import handle_consent, resolve_canonical_user
 
 
 def _generate_pkce_pair() -> tuple[str, str]:
@@ -22,17 +23,29 @@ def issue_dev_token(
     hydra_client: HydraClient,
     kratos_client: KratosClient,
     spring_auth_client: SpringAuthClient,
-    email: str,
-    password: str,
+    email: Optional[str],
+    password: Optional[str],
+    kratos_session_token: Optional[str] = None,
 ) -> TokenResponse:
     """Headlessly drives the same authorization-code flow a browser would,
-    for local developer tooling only. Kratos verifies the password and Hydra
-    issues/signs the token — this function only orchestrates the existing
-    login/consent challenge exchange, exactly as services.login_consent does
-    for the browser-driven flow."""
-    kratos_login = kratos_client.authenticate_with_password(email, password)
-    kratos_session = kratos_login["session"]
-    kratos_session_token = kratos_login.get("session_token")
+    for local developer tooling only. Accepts either a password login or
+    an externally completed native Kratos session, then validates assurance.
+    Kratos verifies credentials and Hydra issues/signs the token. This
+    function orchestrates the challenge exchange and reuses the browser
+    bridge's consent handling."""
+    if kratos_session_token:
+        if email is not None or password is not None:
+            raise KratosAuthenticationError("Use only one authentication mode")
+    else:
+        if not email or not password:
+            raise KratosAuthenticationError("Missing authentication credentials")
+        kratos_login = kratos_client.authenticate_with_password(email, password)
+        kratos_session_token = kratos_login.get("session_token")
+    if not isinstance(kratos_session_token, str) or not kratos_session_token:
+        raise KratosAuthenticationError("Kratos did not return a native session token")
+    kratos_session = kratos_client.whoami(None, session_token=kratos_session_token)
+    if kratos_session is None:
+        raise KratosAuthenticationError("Invalid or expired Kratos session")
     kratos_identity_id = kratos_session["identity"]["id"]
     spring_user = resolve_canonical_user(kratos_client, spring_auth_client, kratos_identity_id)
     subject = str(spring_user["id"])
@@ -58,17 +71,9 @@ def issue_dev_token(
     consent_redirect = hydra_client.follow_redirect(http_session, accepted_login["redirect_to"])
     consent_challenge = parse_query_param(consent_redirect, "consent_challenge")
 
-    consent_request = hydra_client.get_consent_request(consent_challenge)
-    consent_role = (consent_request.get("context") or {}).get("role")
-    access_token_claims = {"role": consent_role} if consent_role else None
-    accepted_consent = hydra_client.accept_consent_request(
-        consent_challenge,
-        grant_scope=consent_request.get("requested_scope", []),
-        grant_access_token_audience=consent_request.get("requested_access_token_audience", []),
-        access_token_claims=access_token_claims,
-    )
+    accepted_consent_redirect = handle_consent(config, hydra_client, consent_challenge)
 
-    final_redirect = hydra_client.follow_redirect(http_session, accepted_consent["redirect_to"])
+    final_redirect = hydra_client.follow_redirect(http_session, accepted_consent_redirect)
     code = parse_query_param(final_redirect, "code")
 
     token = hydra_client.exchange_code_for_token(

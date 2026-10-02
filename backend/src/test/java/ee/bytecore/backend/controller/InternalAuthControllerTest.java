@@ -55,7 +55,9 @@ class InternalAuthControllerTest {
         when(userService.findById(1L)).thenReturn(Optional.of(user));
 
         mockMvc.perform(get("/internal/users/{id}", 1L)
-                        .with(jwt().authorities(new SimpleGrantedAuthority("SCOPE_internal:provision-user"))))
+                        .with(jwt().jwt(jwt -> jwt.subject("oauth-service-internal")
+                                        .claim("client_id", "oauth-service-internal"))
+                                .authorities(new SimpleGrantedAuthority("SCOPE_internal:provision-user"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id", is(1)))
                 .andExpect(jsonPath("$.username", is("admin")))
@@ -67,21 +69,27 @@ class InternalAuthControllerTest {
         when(userService.findById(999L)).thenReturn(Optional.empty());
 
         mockMvc.perform(get("/internal/users/{id}", 999L)
-                        .with(jwt().authorities(new SimpleGrantedAuthority("SCOPE_internal:provision-user"))))
+                        .with(jwt().jwt(jwt -> jwt.subject("oauth-service-internal")
+                                        .claim("client_id", "oauth-service-internal"))
+                                .authorities(new SimpleGrantedAuthority("SCOPE_internal:provision-user"))))
                 .andExpect(status().isNotFound());
     }
 
     @Test
     void shouldRejectMalformedUserIdTest() throws Exception {
         mockMvc.perform(get("/internal/users/{id}", "not-a-number")
-                        .with(jwt().authorities(new SimpleGrantedAuthority("SCOPE_internal:provision-user"))))
+                        .with(jwt().jwt(jwt -> jwt.subject("oauth-service-internal")
+                                        .claim("client_id", "oauth-service-internal"))
+                                .authorities(new SimpleGrantedAuthority("SCOPE_internal:provision-user"))))
                 .andExpect(status().is4xxClientError());
     }
 
     @Test
     void shouldRejectMalformedProvisionRequestBodyTest() throws Exception {
         mockMvc.perform(post("/internal/users")
-                        .with(jwt().authorities(new SimpleGrantedAuthority("SCOPE_internal:provision-user")))
+                        .with(jwt().jwt(jwt -> jwt.subject("oauth-service-internal")
+                                        .claim("client_id", "oauth-service-internal"))
+                                .authorities(new SimpleGrantedAuthority("SCOPE_internal:provision-user")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{ not valid json"))
                 .andExpect(status().is4xxClientError());
@@ -95,7 +103,9 @@ class InternalAuthControllerTest {
         var request = new ProvisionUserRequest("admin", "admin@bytecore.ee", LocalDate.of(2000, 1, 1), UserRole.ADMIN);
 
         mockMvc.perform(post("/internal/users")
-                        .with(jwt().authorities(new SimpleGrantedAuthority("SCOPE_internal:provision-user")))
+                        .with(jwt().jwt(jwt -> jwt.subject("oauth-service-internal")
+                                        .claim("client_id", "oauth-service-internal"))
+                                .authorities(new SimpleGrantedAuthority("SCOPE_internal:provision-user")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())

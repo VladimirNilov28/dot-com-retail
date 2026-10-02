@@ -6,7 +6,7 @@ from typing import Optional
 from urllib.parse import urlparse
 
 from clients.hydra import HydraClient
-from clients.kratos import KratosAuthenticationError, KratosClient
+from clients.kratos import KratosAuthenticationError, KratosClient, KratosSecondFactorRequiredError
 from clients.spring_auth import SpringAuthClient
 from config import Config
 from models import ErrorResponse, InvalidRequestError, TokenRequest
@@ -43,7 +43,7 @@ def make_internal_handler(
 ):
     class InternalRequestHandler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):  # noqa: A002 - matches BaseHTTPRequestHandler signature
-            logger.info("%s - %s", self.address_string(), fmt % args)
+            logger.info("%s - %s %s", self.address_string(), self.command, urlparse(self.path).path)
 
         def do_POST(self):
             if self.client_address[0] not in _ALLOWED_ADDRESSES:
@@ -70,15 +70,22 @@ def make_internal_handler(
                     spring_auth_client,
                     token_request.email,
                     token_request.password,
+                    kratos_session_token=token_request.kratos_session_token,
                 )
+            except KratosSecondFactorRequiredError:
+                self._respond_json(
+                    403, ErrorResponse(error="second_factor_required",
+                                       error_description="Complete Kratos AAL2 login, then submit its session token")
+                )
+                return
             except KratosAuthenticationError:
                 self._respond_json(
-                    401, ErrorResponse(error="invalid_grant", error_description="invalid email or password")
+                    401, ErrorResponse(error="invalid_grant", error_description="invalid authentication credentials")
                 )
                 return
             except Exception as exc:  # noqa: BLE001 - top-level request error boundary
-                logger.error("dev token issuance failed: %s", exc)
-                self._respond_json(502, ErrorResponse(error="upstream_error", error_description=str(exc)))
+                logger.error("dev token issuance failed (%s)", type(exc).__name__)
+                self._respond_json(502, ErrorResponse(error="upstream_error", error_description="authentication upstream failed"))
                 return
 
             self._respond(200, token_response.to_json_bytes())
@@ -89,6 +96,7 @@ def make_internal_handler(
         def _respond(self, status: int, body: bytes):
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
+            self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)

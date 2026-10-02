@@ -1,6 +1,7 @@
 import os
 import sys
 import unittest
+from pathlib import Path
 from unittest.mock import Mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
@@ -12,6 +13,7 @@ from services.bootstrap import (  # noqa: E402
     Scope,
     _build_desired_client_payload,
     _parse_clients,
+    load_and_validate_spec,
     reconcile_hydra_clients,
 )
 
@@ -220,6 +222,24 @@ class ReconcileHydraClientsTest(unittest.TestCase):
 
         payload = hydra_client.create_client.call_args[0][0]
         self.assertNotIn("client_secret", payload)
+
+
+class ApplicationClientBoundaryTest(unittest.TestCase):
+    def setUp(self):
+        path = Path(__file__).resolve().parents[2] / "access-control.yml"
+        self.spec = load_and_validate_spec(str(path))
+
+    def test_web_client_has_all_existing_application_scopes_but_no_machine_scope(self):
+        client = next(client for client in self.spec.clients if client.client_id == "bytecore-web")
+        payload = _build_desired_client_payload(client, self.spec)
+        expected = {scope.name for scope in self.spec.scopes} - {"internal:provision-user"}
+        self.assertEqual(set(payload["scope"].split()), expected | {"offline_access"})
+
+    def test_machine_client_remains_limited_to_provisioning(self):
+        client = next(client for client in self.spec.clients if client.client_id == "oauth-service-internal")
+        payload = _build_desired_client_payload(client, self.spec)
+        self.assertEqual(payload["scope"], "internal:provision-user")
+        self.assertEqual(payload["grant_types"], ["client_credentials"])
 
 
 if __name__ == "__main__":

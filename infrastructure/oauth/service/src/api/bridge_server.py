@@ -18,7 +18,7 @@ def make_bridge_handler(
 ):
     class BridgeRequestHandler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):  # noqa: A002 - matches BaseHTTPRequestHandler signature
-            logger.info("%s - %s", self.address_string(), fmt % args)
+            logger.info("%s - %s %s", self.address_string(), self.command, urlparse(self.path).path)
 
         def do_GET(self):
             parsed = urlparse(self.path)
@@ -47,8 +47,8 @@ def make_bridge_handler(
             except KeyError as exc:
                 self._respond(400, f"missing query parameter: {exc}".encode())
             except Exception as exc:  # noqa: BLE001 - top-level request error boundary
-                logger.error("request failed: %s", exc)
-                self._respond(502, str(exc).encode())
+                logger.error("request failed (%s)", type(exc).__name__)
+                self._respond(502, b"authentication upstream failed")
 
         def do_POST(self):
             parsed = urlparse(self.path)
@@ -73,8 +73,8 @@ def make_bridge_handler(
                     logout_request.kratos_session_token,
                 )
             except Exception as exc:  # noqa: BLE001 - top-level request error boundary
-                logger.error("logout failed: %s", exc)
-                self._respond_json(502, ErrorResponse(error="upstream_error", error_description=str(exc)))
+                logger.error("logout failed (%s)", type(exc).__name__)
+                self._respond_json(502, ErrorResponse(error="upstream_error", error_description="logout upstream failed"))
                 return
 
             self._respond(204, b"")
@@ -82,6 +82,7 @@ def make_bridge_handler(
         def _redirect(self, location: str):
             self.send_response(302)
             self.send_header("Location", location)
+            self.send_header("Cache-Control", "no-store")
             self.end_headers()
 
         def _respond_json(self, status: int, body):
@@ -90,6 +91,7 @@ def make_bridge_handler(
         def _respond(self, status: int, body: bytes):
             self.send_response(status)
             self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(body)
 

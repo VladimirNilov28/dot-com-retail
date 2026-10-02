@@ -49,18 +49,19 @@ This runs the full build pipeline: formatting (Spotless), compilation, tests (JU
 
 ### Database
 
-A `compose.yaml` at `backend/compose.yaml` defines the PostgreSQL service:
+The shared `infrastructure/compose.yml` defines PostgreSQL and the auth stack:
 
 | Setting | Value |
 |---|---|
-| Database | `mydatabase` |
-| Username | `myuser` |
-| Password | `secret` |
+| Database | `retail` |
+| Container credentials | `DB_USERNAME` / `DB_PASSWORD` from the root `.env` |
+| Spring connection | Host `127.0.0.1:5432`, configured in `application-dev.yaml` |
 
-Spring Boot's `spring-boot-docker-compose` dev module auto-starts the container when you run the application. Alternatively, start it manually:
+Spring's Docker Compose auto-management is disabled. Start infrastructure explicitly
+and keep Spring's datasource credentials consistent with the root `.env`:
 
 ```bash
-docker compose -f backend/compose.yaml up -d
+docker compose -f infrastructure/compose.yml --env-file .env up -d
 ```
 
 ### Configuration
@@ -119,9 +120,10 @@ bun install
 
 ## Running the Full Stack
 
-1. **Start Docker** and ensure the PostgreSQL container is running:
+1. **Start the shared development infrastructure** (PostgreSQL, Kratos,
+   Hydra, oauth-service, Hive, Kafka and Mailpit):
    ```bash
-   docker compose -f backend/compose.yaml up -d
+   docker compose -f infrastructure/compose.yml --env-file .env up -d
    ```
 
 2. **Start the backend** (in one terminal):
@@ -137,6 +139,9 @@ bun install
    ```
 
 4. Open `http://localhost:3000/` in your browser.
+
+Alternatively, `make dev` starts infrastructure and runs Spring in its own
+terminal. Do not also launch a second Spring process on port 8080.
 
 For a production-style run, build then start instead:
 ```bash
@@ -174,6 +179,24 @@ Once registered, the user logs in through the existing Kratos/Hydra flow
 (see "Get a dev JWT" below for the headless dev-token shortcut, or the
 browser login flow via Hive Router/`bytecore-web`) — no separate
 registration-specific login path exists.
+
+## Optional TOTP two-factor authentication
+
+Users can enroll any standard RFC 6238 authenticator through Kratos's native
+authenticated settings flow. Kratos manages secrets, QR/setup data, verification
+and single-use backup codes. Spring still owns users/roles and Hydra still issues
+JWTs; no frontend authentication UI or CAPTCHA is added.
+
+An enrolled user's password-only dev-token request returns
+`403 second_factor_required`. Complete Kratos's native AAL2 login and then send
+only `{"kratos_session_token": ...}` to `POST http://127.0.0.1:4447/internal/token`.
+Both bridges enforce the highest available assurance, including remembered Hydra
+logins. Disabling all 2FA requires privileged removal of both TOTP and lookup codes.
+Old JWTs/refresh grants are not retroactively invalidated by enrollment.
+
+The [TOTP runbook](../infrastructure/oauth/service/README.md#totp-runbook) contains
+actual enrollment/challenge/disable/recovery commands, JWT checks, the manual
+checklist and the runnable real-infrastructure smoke sequence.
 
 ## GraphQL API access
 

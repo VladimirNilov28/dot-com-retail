@@ -10,8 +10,15 @@ class KratosNotReadyError(RuntimeError):
 
 
 class KratosAuthenticationError(RuntimeError):
-    """Raised when Kratos itself rejects the submitted email/password. This is
-    Kratos reporting invalid credentials, not this service checking them."""
+    """Kratos rejected credentials or did not validate an active session."""
+
+
+class KratosSecondFactorRequiredError(KratosAuthenticationError):
+    """Kratos requires step-up before this session may authorize a login."""
+
+
+class KratosUpstreamError(RuntimeError):
+    pass
 
 
 class KratosClient:
@@ -89,23 +96,51 @@ class KratosClient:
 
     # --- Login bridge (browser-driven) ---
 
-    def whoami(self, cookie_header: Optional[str]) -> Optional[dict]:
-        """Returns the active Kratos session for the given browser Cookie header,
-        or None if there is no valid session."""
-        if not cookie_header:
+    def whoami(self, cookie_header: Optional[str], session_token: Optional[str] = None) -> Optional[dict]:
+        """Uses Kratos's highest_available whoami policy for either credential
+        type. A provisional AAL1 session is not a completed MFA login."""
+        if cookie_header and session_token:
+            raise KratosAuthenticationError("Use only one Kratos session credential")
+        if not cookie_header and not session_token:
             return None
 
-        response = requests.get(
-            f"{self._public_url}/sessions/whoami",
-            headers={"Cookie": cookie_header},
-            timeout=10,
-        )
-        if response.status_code == 200:
-            return response.json()
-        return None
+        headers = {"Accept": "application/json"}
+        if session_token:
+            headers["X-Session-Token"] = session_token
+        else:
+            headers["Cookie"] = cookie_header
+        try:
+            response = requests.get(
+                f"{self._public_url}/sessions/whoami", headers=headers, timeout=10,
+            )
+            if response.status_code == 401:
+                return None
+            if response.status_code == 403:
+                body = response.json()
+                error = body.get("error") if isinstance(body, dict) else None
+                if isinstance(error, dict) and error.get("id") == "session_aal2_required":
+                    raise KratosSecondFactorRequiredError("Complete Kratos second-factor authentication")
+            if response.status_code != 200:
+                raise KratosUpstreamError(f"Kratos session check failed (HTTP {response.status_code})")
+            session = response.json()
+        except (requests.RequestException, ValueError) as exc:
+            raise KratosUpstreamError("Kratos session check unavailable") from exc
 
-    def browser_login_url(self, browser_url: str, return_to: str) -> str:
-        query = urllib.parse.urlencode({"return_to": return_to})
+        if (
+            not isinstance(session, dict)
+            or session.get("active") is not True
+            or session.get("authenticator_assurance_level") not in ("aal1", "aal2")
+            or not isinstance(session.get("identity"), dict)
+            or not session["identity"].get("id")
+        ):
+            raise KratosAuthenticationError("Kratos did not return a valid active session")
+        return session
+
+    def browser_login_url(self, browser_url: str, return_to: str, aal: Optional[str] = None) -> str:
+        parameters = {"return_to": return_to}
+        if aal:
+            parameters["aal"] = aal
+        query = urllib.parse.urlencode(parameters)
         return f"{browser_url}/self-service/login/browser?{query}"
 
     # --- Headless password login (dev token issuance) ---
@@ -113,10 +148,9 @@ class KratosClient:
     def authenticate_with_password(self, email: str, password: str) -> dict:
         """Drives Kratos's own native (non-browser) self-service login flow.
         Kratos performs the actual password check; this only relays the flow.
-        Returns the full native-login response body — {"session_token": ...,
-        "session": {...}} — since callers need both: session["identity"]["id"]
-        as the Hydra login `subject`, and session_token to later revoke this
-        specific session via logout(). Raises KratosAuthenticationError on
+        Returns the native-login response, which may still represent only
+        AAL1. Callers must revalidate the session token via strict whoami
+        before authorizing OAuth. Raises KratosAuthenticationError on
         invalid credentials, as reported by Kratos."""
         init_response = requests.get(
             f"{self._public_url}/self-service/login/api",

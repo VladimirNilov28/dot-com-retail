@@ -46,3 +46,7 @@ logging:
     org.hibernate: WARN
     org.springframework.orm.jpa: WARN
     org.springframework.boot.autoconfigure.orm.jpa: WARN
+
+oauth:
+  service:
+    client-id: ${OAUTH_SERVICE_CLIENT_ID:oauth-service-internal}

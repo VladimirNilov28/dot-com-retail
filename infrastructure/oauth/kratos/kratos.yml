@@ -16,11 +16,19 @@ selfservice:
   methods:
     password:
       enabled: true
+    totp:
+      enabled: true
+      config:
+        issuer: Bytecore Retail
+    lookup_secret:
+      enabled: true
   flows:
     registration:
       enabled: true
     login: {}
     settings:
+      required_aal: highest_available
+      privileged_session_max_age: 15m
       after:
         password:
           # Any password change (including a post-recovery reset) invalidates
@@ -42,6 +50,10 @@ identity:
     - id: default
       url: file:///etc/kratos/identity.schema.json
 
+session:
+  whoami:
+    required_aal: highest_available
+
 # Dev-only: Kratos's courier delivers recovery emails via SMTP to Mailpit
 # (infrastructure/compose.yml), a local mail-catcher with no real outbound
 # delivery. Mailpit's SMTP listener does not support STARTTLS, so
@@ -54,5 +66,6 @@ courier:
     from_name: Bytecore Retail
 
 log:
-  level: debug
+  level: info
   format: text
+  leak_sensitive_values: false

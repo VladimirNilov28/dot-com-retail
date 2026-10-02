@@ -41,7 +41,7 @@ dev:
 	@$(COMPOSE) config >/dev/null || { echo "$(YELLOW)✗ docker compose config failed — check .env for missing values above$(RESET)"; exit 1; }
 	@echo "$(CYAN)🐳 starting docker containers...$(RESET)"
 	@$(COMPOSE) up -d
-	@echo "$(YELLOW)⚠ Spring is not started by this target — start it now (e.g. from your IDE, or in another terminal: cd backend && ./gradlew bootRun)$(RESET)"
+	@echo "$(YELLOW)⚠ Spring will start below on host :8080 — do not start a second instance$(RESET)"
 	@echo "$(CYAN)🔌 checking oauth-service -> host Spring:8080 (best-effort, 15s)...$(RESET)"
 	@for i in $$(seq 1 5); do \
 		$(COMPOSE) exec -T oauth-service python3 -c "import socket; socket.create_connection(('host.docker.internal', 8080), timeout=2)" 2>/dev/null && { echo "$(GREEN)✓ oauth-service can reach host:8080$(RESET)"; break; }; \

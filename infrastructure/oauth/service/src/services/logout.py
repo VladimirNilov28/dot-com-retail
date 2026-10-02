@@ -41,4 +41,4 @@ def perform_logout(
         try:
             kratos_client.logout(kratos_session_token)
         except Exception as exc:  # noqa: BLE001 - best-effort secondary step, see docstring
-            logger.warning("Kratos session logout failed (refresh token was already revoked): %s", exc)
+            logger.warning("Kratos session logout failed (refresh token was already revoked; %s)", type(exc).__name__)

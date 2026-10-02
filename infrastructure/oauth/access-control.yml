@@ -12,10 +12,9 @@
 # forward-looking documentation for a future Spring-side authorization task
 # (role -> GrantedAuthority mapping, @PreAuthorize, GraphQL authorization, etc).
 #
-# The Hydra bootstrap service does NOT filter the `bytecore-web` client's scope
-# list by role. A client's `scope` field is always the full, space-joined,
-# sorted list of every scope declared below — the role -> scope mapping is not
-# used to compute it.
+# The Hydra bootstrap service does NOT filter client scopes by role. Clients
+# declare their allowed scopes explicitly; machine-only provisioning is never
+# available to the web client.
 
 version: 1
 
@@ -161,11 +160,28 @@ clients:
     token_endpoint_auth_method: none
     redirect_uris:
       - http://localhost:4200/auth/callback
-    # scope is derived by the bootstrap service as the space-joined, sorted
-    # list of every scope declared above — this value is not read directly.
-    scope: __ALL_DECLARED_SCOPES__
+    scopes:
+      - user:read
+      - user:write
+      - user:manage-role
+      - product:read
+      - product:write
+      - category:read
+      - category:write
+      - cart:read
+      - cart:write
+      - wishlist:read
+      - wishlist:write
+      - warehouse:read
+      - warehouse:write
+      - order:read
+      - order:write
+      - order:manage-status
+      - payment:read
+      - payment:write
+      - payment:manage-status
     # Reserved OAuth2/OIDC protocol scope, not a business resource scope —
-    # granted on top of every declared scope above. Hydra/Fosite look for
+    # granted on top of the application's explicit scopes. Hydra/Fosite look for
     # "offline_access" in the granted scope to decide whether to issue a
     # refresh token for the authorization_code grant (see
     # ory/fosite config_default.go GetRefreshTokenScopes). Without this,
@@ -180,9 +196,8 @@ clients:
     response_types: []
     token_endpoint_auth_method: client_secret_post
     redirect_uris: []
-    # Unlike bytecore-web, this client declares an explicit scope list
-    # instead of getting every declared scope — it must only ever be able to
-    # call the internal Spring auth API, nothing else. The actual
+    # This machine client may only call the internal Spring auth API.
+    # Its explicit scope list excludes all application grants. The actual
     # client_secret is never stored here; it's injected at reconcile time
     # from OAUTH_SERVICE_CLIENT_SECRET.
     scopes:

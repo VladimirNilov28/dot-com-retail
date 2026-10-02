@@ -1,11 +1,13 @@
 import os
 import sys
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from config import Config  # noqa: E402
+from auth_fixtures import active_session  # noqa: E402
+from clients.kratos import KratosAuthenticationError, KratosClient  # noqa: E402
 from services.dev_token import issue_dev_token  # noqa: E402
 
 
@@ -45,8 +47,9 @@ class IssueDevTokenTest(unittest.TestCase):
 
         self.kratos_client.authenticate_with_password.return_value = {
             "session_token": "kratos-native-session-token",
-            "session": {"identity": {"id": "kratos-identity-uuid"}},
+            "session": active_session(),
         }
+        self.kratos_client.whoami.return_value = active_session()
         self.kratos_client.get_identity.return_value = {
             "metadata_admin": {"spring_user_id": 1},
         }
@@ -121,6 +124,83 @@ class IssueDevTokenTest(unittest.TestCase):
         )
 
         self.assertIsNone(response.refresh_token)
+
+    def test_password_session_is_revalidated_before_hydra_authorization(self):
+        calls = Mock()
+        calls.attach_mock(self.kratos_client.whoami, "whoami")
+        calls.attach_mock(self.hydra_client.start_authorization, "authorize")
+
+        issue_dev_token(
+            self.config, self.hydra_client, self.kratos_client,
+            self.spring_auth_client, "jane@example.com", "pw",
+        )
+
+        self.kratos_client.whoami.assert_called_once_with(
+            None, session_token="kratos-native-session-token",
+        )
+        self.assertEqual(calls.mock_calls[0][0], "whoami")
+
+    def test_validated_aal2_native_session_can_issue_token_without_password(self):
+        self.kratos_client.whoami.return_value = active_session("aal2")
+        response = issue_dev_token(
+            self.config, self.hydra_client, self.kratos_client,
+            self.spring_auth_client, None, None,
+            kratos_session_token="completed-aal2-session",
+        )
+        self.kratos_client.authenticate_with_password.assert_not_called()
+        self.kratos_client.whoami.assert_called_once_with(None, session_token="completed-aal2-session")
+        self.assertEqual(response.kratos_session_token, "completed-aal2-session")
+        self.assertEqual(response.scope, "user:read user:write offline_access")
+        self.hydra_client.accept_login_request.assert_called_once_with(
+            "login-chal", "1", context={"role": "USER"},
+        )
+
+    def test_invalid_native_session_never_reaches_hydra(self):
+        self.kratos_client.whoami.return_value = None
+        with self.assertRaises(KratosAuthenticationError):
+            issue_dev_token(
+                self.config, self.hydra_client, self.kratos_client,
+                self.spring_auth_client, "jane@example.com", "pw",
+            )
+        self.hydra_client.start_authorization.assert_not_called()
+        self.hydra_client.accept_login_request.assert_not_called()
+        self.hydra_client.exchange_code_for_token.assert_not_called()
+        self.spring_auth_client.resolve_user.assert_not_called()
+
+    def test_password_login_without_native_session_token_fails_closed(self):
+        self.kratos_client.authenticate_with_password.return_value = {"session": active_session()}
+        with self.assertRaises(KratosAuthenticationError):
+            issue_dev_token(
+                self.config, self.hydra_client, self.kratos_client,
+                self.spring_auth_client, "jane@example.com", "pw",
+            )
+        self.hydra_client.start_authorization.assert_not_called()
+
+    @patch("clients.kratos.requests.get")
+    @patch("clients.kratos.requests.post")
+    def test_password_only_provisional_session_is_not_an_oauth_login(self, post, get):
+        kratos = KratosClient(self.config.kratos_admin_url, self.config.kratos_public_url)
+        def kratos_response(url, **kwargs):
+            if url.endswith("/sessions/whoami"):
+                return Mock(status_code=403, json=Mock(return_value={"error": {"id": "session_aal2_required"}}))
+            if "/admin/identities/" in url:
+                return Mock(status_code=200, json=Mock(return_value={"metadata_admin": {"spring_user_id": 1}}))
+            return Mock(status_code=200, json=Mock(return_value={
+                "ui": {"action": "http://127.0.0.1:4433/self-service/login?flow=fixture"},
+            }))
+
+        get.side_effect = kratos_response
+        post.return_value = Mock(status_code=200, json=Mock(return_value={
+            "session_token": "provisional-aal1-token",
+            "session": active_session(),
+        }))
+        with self.assertRaises(KratosAuthenticationError):
+            issue_dev_token(
+                self.config, self.hydra_client, kratos, self.spring_auth_client,
+                "jane@example.com", "pw",
+            )
+        self.hydra_client.start_authorization.assert_not_called()
+        self.hydra_client.exchange_code_for_token.assert_not_called()
 
 
 if __name__ == "__main__":

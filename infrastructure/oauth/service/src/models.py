@@ -9,8 +9,9 @@ class InvalidRequestError(ValueError):
 
 @dataclass(frozen=True)
 class TokenRequest:
-    email: str
-    password: str
+    email: Optional[str] = None
+    password: Optional[str] = None
+    kratos_session_token: Optional[str] = None
 
     @staticmethod
     def from_json_bytes(body: bytes) -> "TokenRequest":
@@ -21,6 +22,14 @@ class TokenRequest:
 
         if not isinstance(raw, dict):
             raise InvalidRequestError("expected a JSON object")
+
+        if "kratos_session_token" in raw:
+            if "email" in raw or "password" in raw:
+                raise InvalidRequestError("use either email/password or kratos_session_token, not both")
+            session_token = raw["kratos_session_token"]
+            if not isinstance(session_token, str) or not session_token.strip():
+                raise InvalidRequestError("'kratos_session_token' must be a non-empty string")
+            return TokenRequest(kratos_session_token=session_token)
 
         email = raw.get("email")
         password = raw.get("password")
