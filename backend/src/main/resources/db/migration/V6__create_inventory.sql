@@ -27,3 +27,12 @@ CREATE TRIGGER trg_inventory_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION set_updated_at ();
 
+-- order_items.inventory_id (column added in V4__create_payments.sql) can only
+-- be constrained now that `inventory` exists; records exactly which inventory
+-- row was decremented for that line item, so it can be restocked precisely on
+-- early cancellation.
+ALTER TABLE order_items
+    ADD CONSTRAINT fk_order_items_inventory FOREIGN KEY (inventory_id) REFERENCES inventory (id);
+
+CREATE INDEX idx_order_items_inventory_id ON order_items (inventory_id);
+

@@ -1,0 +1,333 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: postgres
+
+    ports:
+      - "5432:5432"
+
+    environment:
+      POSTGRES_DB: retail
+      POSTGRES_USER: ${DB_USERNAME:?DB_USERNAME is required}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+
+      HYDRA_DB_USER: ${HYDRA_DB_USER:?HYDRA_DB_USER is required}
+      HYDRA_DB_PASSWORD: ${HYDRA_DB_PASSWORD:?HYDRA_DB_PASSWORD is required}
+
+      KRATOS_DB_USER: ${KRATOS_DB_USER:?KRATOS_DB_USER is required}
+      KRATOS_DB_PASSWORD: ${KRATOS_DB_PASSWORD:?KRATOS_DB_PASSWORD is required}
+
+      PAYMENT_DB_USER: ${PAYMENT_DB_USER:?PAYMENT_DB_USER is required}
+      PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:?PAYMENT_DB_PASSWORD is required}
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d retail"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+    volumes:
+      - postgres_volume:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+
+    restart: unless-stopped
+
+  # Hydra database migrations
+  hydra-migrate:
+    image: oryd/hydra:v26.2.0
+    container_name: hydra-migrate
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    environment:
+      DSN: ${HYDRA_DSN:?HYDRA_DSN is required}
+
+    command:
+      - migrate
+      - sql
+      - up
+      - -e
+      - --yes
+
+    restart: "no"
+
+  # OAuth2/OIDC authorization server
+  hydra:
+    build:
+      context: ./oauth/hydra
+
+    container_name: hydra
+
+    depends_on:
+      hydra-migrate:
+        condition: service_completed_successfully
+
+    ports:
+      - "4444:4444"
+      - "127.0.0.1:4445:4445"
+
+    environment:
+      DSN: ${HYDRA_DSN:?HYDRA_DSN is required}
+      SECRETS_SYSTEM: ${HYDRA_SYSTEM_SECRET:?HYDRA_SYSTEM_SECRET is required}
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4445/health/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+    restart: unless-stopped
+
+  # Kratos database migrations
+  kratos-migrate:
+    image: oryd/kratos:v26.2.0
+    container_name: kratos-migrate
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    environment:
+      DSN: ${KRATOS_DSN:?KRATOS_DSN is required}
+
+    command:
+      - migrate
+      - sql
+      - -e
+      - --yes
+
+    restart: "no"
+
+  # Identity and credential management
+  kratos:
+    build:
+      context: ./oauth/kratos
+
+    container_name: kratos
+
+    depends_on:
+      kratos-migrate:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_healthy
+
+    ports:
+      - "4433:4433"
+      - "127.0.0.1:4434:4434"
+
+    environment:
+      DSN: ${KRATOS_DSN:?KRATOS_DSN is required}
+      SECRETS_COOKIE: ${KRATOS_SECRETS_COOKIE:?KRATOS_SECRETS_COOKIE is required}
+      SECRETS_CIPHER: ${KRATOS_SECRETS_CIPHER:?KRATOS_SECRETS_CIPHER is required}
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4434/health/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+    restart: unless-stopped
+
+  # Dev-only mail catcher: Kratos's courier (see kratos.yml) delivers
+  # recovery emails here via SMTP instead of a real provider. Its web UI
+  # (http://localhost:8025) lets you read the recovery email/code without
+  # a real mailbox. Not used by Spring, and never wired into production —
+  # see the "[Infra] Configure production SMTP provider for Kratos
+  # Courier" issue for the prod replacement.
+  mailpit:
+    image: axllent/mailpit:v1.22
+    container_name: mailpit
+
+    ports:
+      - "127.0.0.1:8025:8025"
+      - "127.0.0.1:1025:1025"
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8025/readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+    restart: unless-stopped
+
+  # Hydra <-> Kratos bootstrap (client + dev admin identity reconciliation)
+  # and the minimal Hydra login/consent challenge bridge. Long-running: it
+  # bootstraps once at startup, then serves /login and /consent.
+  oauth-service:
+    build:
+      context: ./oauth/service
+
+    container_name: oauth-service
+
+    depends_on:
+      hydra:
+        condition: service_healthy
+      kratos:
+        condition: service_healthy
+
+    # Spring runs on the host (not in this compose file, by design — see
+    # infrastructure/compose.yml comments below), so oauth-service needs a
+    # route back to the host. Linux Docker doesn't resolve
+    # host.docker.internal by default; this maps it to the host gateway.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    ports:
+      - "4446:4446"
+      - "127.0.0.1:4447:4447"
+
+    environment:
+      HYDRA_ADMIN_URL: ${HYDRA_ADMIN_URL:?HYDRA_ADMIN_URL is required}
+      HYDRA_PUBLIC_URL: ${HYDRA_PUBLIC_URL:?HYDRA_PUBLIC_URL is required}
+      KRATOS_ADMIN_URL: ${KRATOS_ADMIN_URL:?KRATOS_ADMIN_URL is required}
+      KRATOS_PUBLIC_URL: ${KRATOS_PUBLIC_URL:?KRATOS_PUBLIC_URL is required}
+      KRATOS_BROWSER_URL: ${KRATOS_BROWSER_URL:?KRATOS_BROWSER_URL is required}
+      ACCESS_CONTROL_FILE: /app/access-control.yml
+      SPRING_INTERNAL_BASE_URL: ${SPRING_INTERNAL_BASE_URL:?SPRING_INTERNAL_BASE_URL is required}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:?ADMIN_USERNAME is required}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
+      OAUTH_SERVICE_CLIENT_ID: ${OAUTH_SERVICE_CLIENT_ID:?OAUTH_SERVICE_CLIENT_ID is required}
+      OAUTH_SERVICE_CLIENT_SECRET: ${OAUTH_SERVICE_CLIENT_SECRET:?OAUTH_SERVICE_CLIENT_SECRET is required}
+      BOOTSTRAP_RETRY_ATTEMPTS: "30"
+      BOOTSTRAP_RETRY_DELAY_SECONDS: "3"
+
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4446/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+    volumes:
+      - ./oauth/access-control.yml:/app/access-control.yml:ro
+
+    restart: unless-stopped
+
+  # Single external GraphQL entry point. Fronts the Spring/DGS `retail`
+  # subgraph; Spring itself keeps running on the host (see README "Local
+  # development architecture"), so the router reaches it the same way
+  # oauth-service does, via host.docker.internal on the pinned dev subnet.
+  # The supergraph is a local, reproducible artifact (see
+  # infrastructure/hive/scripts/compose-supergraph.sh) — no Hive Cloud/
+  # registry account is used or required.
+  hive-router:
+    image: ghcr.io/graphql-hive/router:0.2.19
+    container_name: hive-router
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    ports:
+      - "4002:4000"
+
+    volumes:
+      - ./hive/router.config.yaml:/app/router.config.yaml:ro
+      - ./hive/supergraph.graphql:/app/supergraph.graphql:ro
+
+    # The router's distroless image ships only its own static binary (no
+    # shell, wget, or curl), so a container-exec-based healthcheck isn't
+    # possible here. Verify readiness from the host instead:
+    #   curl http://localhost:4002/health     (liveness)
+    #   curl http://localhost:4002/readiness  (supergraph loaded)
+
+    restart: unless-stopped
+
+  # TODO:
+  # Spring Boot service
+
+  # TODO:
+  # Angular service
+
+  # Single-node KRaft broker (no Zookeeper) for backend<->Payment Service
+  # asynchronous communication. Two listeners, same reasoning as Postgres:
+  # Spring runs on the host (not in this compose file), so it needs
+  # localhost:9092; every other container reaches it via kafka:29092.
+  kafka:
+    image: apache/kafka:3.9.1 # 3.9.0 has a real KRaft bug (KAFKA-18281) - do not downgrade.
+    container_name: kafka
+
+    ports:
+      - "9092:9092"
+
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      CLUSTER_ID: ${KAFKA_CLUSTER_ID:?KAFKA_CLUSTER_ID is required}
+
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+    volumes:
+      - kafka_volume:/var/lib/kafka/data
+
+    restart: unless-stopped
+
+  # Go Payment Service (backend/.../integration/payment <-> Kafka <->
+  # payment-service): consumes payment.requested, charges via the fake
+  # provider, publishes payment.succeeded/payment.failed. Owns its own
+  # Postgres database (see postgres/init/03-create-payment-service.sh) -
+  # never touches the `retail` database directly.
+  payment-service:
+    build:
+      context: ../payment-service
+    container_name: payment-service
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+    ports:
+      - "8081:8081"
+
+    environment:
+      PAYMENT_DB_URL: ${PAYMENT_DB_URL:?PAYMENT_DB_URL is required}
+      KAFKA_BROKERS: kafka:29092
+      KAFKA_CONSUMER_GROUP: payment-service
+      HTTP_PORT: "8081"
+      OUTBOX_POLL_INTERVAL_MS: "1000"
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+    restart: unless-stopped
+
+  # TODO:
+  # Redis service
+
+networks:
+  default:
+    ipam:
+      config:
+        # Pinned so the Docker->host firewall rule (see README "Local
+        # development architecture") targets a stable subnet instead of
+        # whatever Docker happens to auto-assign this project on network
+        # recreation.
+        - subnet: 172.28.88.0/24
+
+volumes:
+  postgres_volume:
+  kafka_volume:

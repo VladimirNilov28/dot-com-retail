@@ -1,0 +1,23 @@
+input CreateWarehouseInput {
+  name: String!
+  location: String
+}
+
+input UpdateWarehouseInput {
+  name: String
+  location: String
+}
+
+input SetInventoryInput {
+  productVariantId: ID!
+  warehouseId: ID!
+  quantity: Int!
+}
+
+extend type Mutation {
+  createWarehouse(input: CreateWarehouseInput!): Warehouse!
+  updateWarehouse(warehouseId: ID!, input: UpdateWarehouseInput!): Warehouse!
+  deleteWarehouse(warehouseId: ID!): Boolean!
+
+  setInventory(input: SetInventoryInput!): Inventory!
+}

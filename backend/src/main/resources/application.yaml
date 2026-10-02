@@ -6,6 +6,39 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
+  graphql:
+    # Enables the WS transport for the "orderStatusChanged" subscription.
+    # Without this, the schema-declared Subscription field is unreachable:
+    # Spring GraphQL never upgrades the connection (405/timeout) even
+    # though the resolver + publisher are fully implemented.
+    websocket:
+      path: /graphql
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: backend-payment-results
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+  docker:
+    compose:
+      file: ../infrastructure/compose.yml
+      # Spring's own docker-compose auto-management only looks for a .env
+      # file next to compose.yml, never at the repo root where ours lives
+      # (unrelated to Compose CLI's own .env discovery). infrastructure/
+      # is meant to be started explicitly and exclusively via `make dev`
+      # (docker compose --env-file .env ...), so disable the redundant,
+      # differently-configured auto-management path instead of routing
+      # around it with a duplicate/symlinked .env.
+      enabled: false
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://127.0.0.1:4444
 
 logging:
   level:
@@ -13,3 +46,7 @@ logging:
     org.hibernate: WARN
     org.springframework.orm.jpa: WARN
     org.springframework.boot.autoconfigure.orm.jpa: WARN
+
+oauth:
+  service:
+    client-id: ${OAUTH_SERVICE_CLIENT_ID:oauth-service-internal}
