@@ -204,14 +204,13 @@ func (c *RequestConsumer) handle(ctx context.Context, msg kafkago.Message) outco
 				"paymentId", payment.ID, "status", payment.Status)
 			return outcomeCommit
 		}
-		// Inserted earlier but the process crashed before charging/
-		// recording a result (restart/reprocessing safety) - fall through
-		// and charge using the existing row's id.
+		// The provider may already have charged before an uncertain response
+		// or failed result transaction. Retry with the persisted identity;
+		// only gateway-side idempotency makes this distributed window safe.
 		logger.Info("resuming previously-recorded but unresolved payment request", "paymentId", payment.ID)
 	}
 
-	result, err := c.provider.Charge(ctx, provider.ChargeRequest{
-		PaymentID:   payment.ID.String(),
+	result, err := c.provider.ChargeIdempotently(ctx, payment.ID, provider.ChargeRequest{
 		OrderID:     payment.OrderID,
 		AmountCents: payment.AmountCents,
 		Currency:    payment.Currency,

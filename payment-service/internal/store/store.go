@@ -79,8 +79,9 @@ type SaveRequestedResult struct {
 }
 
 // SaveRequested idempotently records a new payment request. A duplicate
-// RequestEventID (redelivered message) never creates a second row and never
-// triggers a second charge - the caller must check Inserted before charging.
+// RequestEventID never creates a second row. Terminal payments need no charge
+// call; unresolved payments resume with the existing ID and immutable fields.
+// Preventing a second external charge requires provider-side idempotency.
 func (s *Store) SaveRequested(ctx context.Context, p domain.Payment) (SaveRequestedResult, error) {
 	row := s.pool.QueryRow(ctx, `
 		INSERT INTO payments (id, request_event_id, order_id, user_id, amount_cents, currency, status)

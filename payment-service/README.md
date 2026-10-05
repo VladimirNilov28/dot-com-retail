@@ -10,10 +10,10 @@ Spring backend (OrderService.createOrder, same DB tx)
   -> payment_outbox table -> PaymentOutboxPublisher (Spring) -> Kafka topic: payment.requested
        -> Payment Service RequestConsumer
             -> idempotent INSERT into payments (unique request_event_id)
-            -> FakeProvider.Charge(...)
+            -> Provider.ChargeIdempotently(persisted Payment ID, ...)
             -> payments status update + payment_outbox row, same DB tx
        -> Payment Service OutboxPublisher -> Kafka topic: payment.succeeded | payment.failed
-  -> Spring PaymentResultListener -> OrderService.updateStatus(orderId, PAID | CANCELLED, reason)
+  -> Spring PaymentResultListener -> verified request/receipt + OrderService transition, same DB tx
 ```
 
 ## Why these libraries
@@ -41,12 +41,15 @@ Spring backend (OrderService.createOrder, same DB tx)
   `INSERT ... ON CONFLICT (request_event_id) DO NOTHING`; the pre-existing
   row is loaded and, if already resolved (`SUCCEEDED`/`FAILED`), the message
   is treated as a safe no-op instead of triggering a second charge. If the
-  row exists but is still `REQUESTED` (a crash between recording the
-  request and recording the result), it resumes/completes it using the
-  same payment ID. A real provider must use this stable ID as its
-  idempotency key: the provider call can repeat after an uncertain charge
-  or failed result transaction. The development FakeProvider has no
-  external charging side effects.
+  row exists but is still `REQUESTED` (a crash between recording the request
+  and recording its result), processing resumes with the same payment ID.
+  `Provider.ChargeIdempotently` requires that UUID separately
+  from the immutable charge parameters; an adapter must use its canonical
+  UUID string as the gateway idempotency key. It is never a per-attempt UUID.
+  All adapters must atomically deduplicate concurrent/restarted calls at the
+  gateway and return the original result. Changed parameters for a key must
+  fail closed. The development fake rejects missing keys/changed parameters
+  and memoizes outcomes, but performs no financial side effects.
 - Result events (`payment.succeeded`/`payment.failed`) are **never**
   published directly from the request-processing transaction. Instead the
   status update and the outbox row are written in one DB transaction
@@ -55,10 +58,38 @@ Spring backend (OrderService.createOrder, same DB tx)
   This is the transactional outbox pattern - the same pattern used on the
   Spring side - and avoids the dual-write hazard (DB commit succeeds, Kafka
   publish fails, or vice versa) without XA/distributed transactions.
-- A duplicate *result* (the outbox row gets published twice because
-  `MarkPublished` failed after a successful publish) is safe: Spring's
-  `PaymentResultListener` relies on `OrderStatusTransitions` rejecting an
-  already-applied transition as a no-op.
+- A duplicate *result* retains the same payload/event ID when republished.
+  Spring verifies the persisted request/order and records immutable
+  request/payment/result identities in `payment_result_receipts` atomically
+  with the order/stock transition. Identical outcomes are idempotent;
+  mismatched identities and contradictory outcomes cannot mutate the order.
+
+### Distributed guarantees and the post-charge crash window
+
+Kafka delivers at least once; offset commits do not make gateway calls
+exactly once. Payment database uniqueness yields one logical Payment and
+preserves its ID/parameters. The result transaction/outbox yields one durable
+terminal state/event, but **cannot** roll back an external charge.
+
+If the gateway charges and the response is lost, the result transaction fails,
+or the service crashes, the row remains `REQUESTED`. Retrying the *same*
+persisted ID asks the gateway for the original outcome, not another charge.
+After durable completion, redelivery skips the provider altogether. Concurrent
+attempts share the persisted ID, and the guarded terminal update writes only
+one result/outbox row.
+
+At-most-once financial effect therefore depends on the gateway's durable,
+atomic idempotency contract, not on a local cache or a premature success flag.
+Its key/outcome retention must cover the entire retry/redelivery lifetime.
+If a gateway expires keys sooner, the adapter must reconcile the original
+charge or stop for operator recovery; it must not submit a fresh charge.
+Provider-specific durable reconciliation and retention verification are
+mandatory acceptance requirements for #25. No real gateway is integrated or
+certified by this development implementation.
+
+Spring correlation prevents unrelated/conflicting results from settling an
+order, but still trusts the Payment Service/producer for the first valid
+financial outcome; it does not independently prove a provider charge.
 
 ## Fake payment provider
 
@@ -66,7 +97,8 @@ Spring backend (OrderService.createOrder, same DB tx)
 charged amount's cents component equals `13`** (e.g. `10.13`), and approves
 everything else. No real provider is integrated in this milestone. Nothing in
 `ChargeRequest`/`ChargeResult` carries card/PAN/CVV data - there is no such
-field to store or log, by design.
+field to store or log, by design. Its in-memory outcome cache is a development
+simulation only; it is not the source of restart safety for a real gateway.
 
 ## Failure handling
 

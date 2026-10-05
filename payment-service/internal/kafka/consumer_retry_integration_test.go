@@ -145,6 +145,7 @@ func runRetryConsumer(t *testing.T, c *RequestConsumer) func() {
 				if err != nil {
 					t.Errorf("Run on cancellation: %v", err)
 				}
+
 			case <-time.After(3 * time.Second):
 				t.Error("consumer did not stop on cancellation")
 			}
@@ -152,6 +153,18 @@ func runRetryConsumer(t *testing.T, c *RequestConsumer) func() {
 	}
 	t.Cleanup(stop)
 	return stop
+}
+
+func (f *retryFixture) resumeConsumer(t *testing.T, topic, group string, p provider.Provider, logs *retryLogs) *RequestConsumer {
+	t.Helper()
+	c := NewRequestConsumer(f.brokers, group, f.store, p, slog.New(slog.NewTextHandler(logs, nil)))
+	_ = c.reader.Close()
+	c.reader = kafkago.NewReader(kafkago.ReaderConfig{
+		Brokers: f.brokers, Topic: topic, GroupID: group, MinBytes: 1, MaxBytes: 10e6,
+		StartOffset: kafkago.FirstOffset,
+	})
+	t.Cleanup(func() { _ = c.Close() })
+	return c
 }
 
 func (f *retryFixture) write(t *testing.T, topic string, values ...[]byte) {
@@ -259,7 +272,7 @@ type idempotentRetryProvider struct {
 	fail     atomic.Bool
 }
 
-func (p *idempotentRetryProvider) Charge(ctx context.Context, req provider.ChargeRequest) (provider.ChargeResult, error) {
+func (p *idempotentRetryProvider) ChargeIdempotently(ctx context.Context, paymentID uuid.UUID, _ provider.ChargeRequest) (provider.ChargeResult, error) {
 	if err := ctx.Err(); err != nil {
 		return provider.ChargeResult{}, err
 	}
@@ -272,7 +285,7 @@ func (p *idempotentRetryProvider) Charge(ctx context.Context, req provider.Charg
 	if p.payments == nil {
 		p.payments = make(map[string]bool)
 	}
-	p.payments[req.PaymentID] = true
+	p.payments[paymentID.String()] = true
 	return provider.ChargeResult{Approved: true}, nil
 }
 
@@ -284,7 +297,7 @@ type failingCommitReader struct {
 
 type blockingRetryProvider struct{ entered chan struct{} }
 
-func (p *blockingRetryProvider) Charge(ctx context.Context, _ provider.ChargeRequest) (provider.ChargeResult, error) {
+func (p *blockingRetryProvider) ChargeIdempotently(ctx context.Context, _ uuid.UUID, _ provider.ChargeRequest) (provider.ChargeResult, error) {
 	close(p.entered)
 	<-ctx.Done()
 	return provider.ChargeResult{}, ctx.Err()
@@ -406,13 +419,7 @@ func TestRequestConsumerOffsetSafety(t *testing.T) {
 			if restart {
 				stop()
 				_ = c.Close()
-				next := NewRequestConsumer(f.brokers, group, f.store, p, slog.New(slog.NewTextHandler(logs, nil)))
-				_ = next.reader.Close()
-				next.reader = kafkago.NewReader(kafkago.ReaderConfig{
-					Brokers: f.brokers, Topic: topic, GroupID: group, MinBytes: 1, MaxBytes: 10e6,
-					StartOffset: kafkago.FirstOffset,
-				})
-				t.Cleanup(func() { _ = next.Close() })
+				next := f.resumeConsumer(t, topic, group, p, logs)
 				runRetryConsumer(t, next)
 			} else {
 				reader.fail.Store(false)
@@ -519,12 +526,7 @@ func TestRequestConsumerOffsetSafety(t *testing.T) {
 		if _, err := f.sql.Exec(context.Background(), "DELETE FROM retry_fault WHERE order_id=$1", req.OrderID); err != nil {
 			t.Fatal(err)
 		}
-		restarted := NewRequestConsumer(f.brokers, group, f.store, p, slog.New(slog.NewTextHandler(logs, nil)))
-		_ = restarted.reader.Close()
-		restarted.reader = kafkago.NewReader(kafkago.ReaderConfig{
-			Brokers: f.brokers, Topic: topic, GroupID: group, MinBytes: 1, MaxBytes: 10e6, StartOffset: kafkago.FirstOffset,
-		})
-		t.Cleanup(func() { _ = restarted.Close() })
+		restarted := f.resumeConsumer(t, topic, group, p, logs)
 		runRetryConsumer(t, restarted)
 		// No republish: the original unacknowledged record must be redelivered.
 		awaitRetry(t, "original record redelivery after restart", func() bool { return f.offset(t, topic, group) == 1 })

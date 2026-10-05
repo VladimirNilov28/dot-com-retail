@@ -6,13 +6,15 @@
 // to expose across this boundary (amount, currency, a correlation id).
 package provider
 
-import "context"
+import (
+	"context"
+
+	"github.com/google/uuid"
+)
 
 // ChargeRequest is what the Payment Service asks a Provider to charge.
-// PaymentID is passed through only for correlation/logging - never sent
-// anywhere as payment credentials, because there are none here.
+// The immutable parameters must be reused with the same idempotency identity.
 type ChargeRequest struct {
-	PaymentID   string
 	OrderID     int64
 	AmountCents int64
 	Currency    string
@@ -26,8 +28,17 @@ type ChargeResult struct {
 	Reason string
 }
 
-// Provider is the boundary a real payment gateway integration would
-// implement later; FakeProvider is the only implementation for now.
+// Provider must atomically deduplicate charges at the gateway using the
+// persisted Payment ID (its canonical UUID string) as the idempotency key.
+// Concurrent calls and retries after uncertain responses, DB failure or
+// service restart must return the original outcome without another charge.
+// Reusing a key with different parameters must fail, never create a charge.
+// The gateway's key/outcome retention must cover the entire retry/redelivery
+// lifetime; after expiry an adapter must reconcile or fail closed, not charge
+// again. Local caches or marking a payment successful before this call do not
+// satisfy this contract. No production gateway is integrated yet.
+// Returned errors/reasons must be safe to log: never include credentials,
+// tokens, card data or raw gateway response bodies.
 type Provider interface {
-	Charge(ctx context.Context, req ChargeRequest) (ChargeResult, error)
+	ChargeIdempotently(ctx context.Context, paymentID uuid.UUID, req ChargeRequest) (ChargeResult, error)
 }

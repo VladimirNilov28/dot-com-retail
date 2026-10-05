@@ -19,9 +19,9 @@ const (
 )
 
 // Payment is one payment-processing attempt for a single order. RequestEventID
-// is the durable idempotency key: a unique DB constraint on it means a
-// redelivered/duplicate payment.requested message can never result in a
-// second charge (INSERT ... ON CONFLICT DO NOTHING short-circuits it).
+// uniquely identifies the persisted request. ID is the stable provider
+// idempotency identity; database uniqueness alone cannot deduplicate remote
+// charges while a payment remains REQUESTED.
 type Payment struct {
 	ID             uuid.UUID
 	RequestEventID uuid.UUID
