@@ -29,6 +29,7 @@ export function FoundationDemo() {
         </Card.Content>
         <Card.Footer>
           <Button
+            className="max-w-full whitespace-normal"
             aria-controls={detailsId}
             aria-expanded={isExpanded}
             onPress={() => setIsExpanded((expanded) => !expanded)}

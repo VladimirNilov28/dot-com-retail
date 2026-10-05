@@ -2,8 +2,11 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "ByteCore | Frontend foundation",
-  description: "A minimal, accessible HeroUI v3 foundation with a fixed dark theme.",
+  title: {
+    default: "ByteCore",
+    template: "%s | ByteCore",
+  },
+  description: "The ByteCore storefront. Shopping features are coming soon.",
 };
 
 export const viewport: Viewport = {

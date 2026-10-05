@@ -37,5 +37,108 @@
     max-width: var(--page-max-width);
     margin-inline: auto;
     padding-inline: var(--page-gutter);
+    overflow-wrap: anywhere;
+  }
+
+  .store-header {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 1rem;
+    padding-block: 1rem;
+  }
+
+  .store-brand {
+    justify-self: start;
+    font-size: 1.25rem;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    border-radius: var(--radius-sm);
+  }
+
+  .store-navigation {
+    display: contents;
+  }
+
+  .store-mobile-nav {
+    display: contents;
+  }
+
+  .store-desktop-nav {
+    display: none;
+  }
+
+  .store-mobile-panel {
+    grid-column: 1 / -1;
+  }
+
+  .store-nav-link {
+    display: block;
+    padding: 0.625rem 0.875rem;
+    border-radius: var(--radius-lg);
+    color: var(--muted);
+  }
+
+  .store-nav-link:hover {
+    background: var(--surface);
+    color: var(--foreground);
+  }
+
+  .store-nav-link[aria-current="page"] {
+    background: var(--surface-secondary);
+    color: var(--accent);
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 0.25em;
+  }
+
+  .store-link {
+    color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: 0.25em;
+    border-radius: var(--radius-sm);
+  }
+
+  @media (max-width: 16rem) {
+    .store-header {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  .store-brand:focus-visible,
+  .store-nav-link:focus-visible,
+  .store-link:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 4px;
+  }
+
+  @media (min-width: 48rem) {
+    .store-header {
+      display: flex;
+      flex-wrap: wrap;
+    }
+
+    .store-navigation {
+      display: block;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .store-desktop-nav {
+      display: block;
+    }
+
+    .store-mobile-nav {
+      display: none;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .store-mobile-nav *,
+    .store-link,
+    .store-nav-link {
+      animation: none;
+      transition: none;
+    }
   }
 }
