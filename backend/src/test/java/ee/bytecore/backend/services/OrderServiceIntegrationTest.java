@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 
+import ee.bytecore.backend.config.KafkaTestConfiguration;
 import ee.bytecore.backend.config.PostgresTestConfiguration;
 import ee.bytecore.backend.entities.cart.Cart;
 import ee.bytecore.backend.entities.cart.CartItem;
@@ -52,7 +53,7 @@ import org.junit.jupiter.api.Test;
  * relying on automatic rollback.
  */
 @SpringBootTest
-@Import(PostgresTestConfiguration.class)
+@Import({PostgresTestConfiguration.class, KafkaTestConfiguration.class})
 @Tag("integration")
 class OrderServiceIntegrationTest {
 

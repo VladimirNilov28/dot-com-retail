@@ -130,7 +130,7 @@ class OrderMutationAuthorizationTest {
 
     @Test
     void shouldAllowUpdateOrderStatusForOrderManagerTest() throws Exception {
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
         when(orderRepository.save(order)).thenReturn(order);
 
         mockMvc.perform(
@@ -174,7 +174,7 @@ class OrderMutationAuthorizationTest {
 
     @Test
     void shouldAllowUpdateOrderStatusForAdminWithScopeTest() throws Exception {
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
         when(orderRepository.save(order)).thenReturn(order);
 
         mockMvc.perform(

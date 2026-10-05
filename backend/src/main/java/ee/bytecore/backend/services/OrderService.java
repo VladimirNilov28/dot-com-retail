@@ -12,6 +12,8 @@ import java.util.UUID;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import ee.bytecore.backend.entities.cart.Cart;
 import ee.bytecore.backend.entities.cart.CartItem;
@@ -164,7 +166,7 @@ public class OrderService {
     @Transactional
     public Order updateStatus(Long id, OrderStatus status, String cancellationReason) {
         Order order = orderRepository
-                .findById(id)
+                .findByIdForUpdate(id)
                 .orElseThrow(() -> new EntityNotFoundException(String.format("Order with id %s not found", id)));
 
         OrderStatus currentStatus = order.getStatus();
@@ -182,7 +184,16 @@ public class OrderService {
 
         order.setStatus(status);
         Order saved = orderRepository.save(order);
-        orderStatusPublisher.publish(saved);
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    orderStatusPublisher.publish(saved);
+                }
+            });
+        } else {
+            orderStatusPublisher.publish(saved);
+        }
         return saved;
     }
 }

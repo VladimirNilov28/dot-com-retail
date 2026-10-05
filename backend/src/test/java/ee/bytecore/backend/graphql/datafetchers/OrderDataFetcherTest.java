@@ -307,7 +307,7 @@ class OrderDataFetcherTest {
         ProductVariant variant = ProductVariant.create(product, "TSHIRT-M-BLACK", new BigDecimal("19.99"));
         variant.setId(1L);
         cart.getItems().add(CartItem.create(cart, variant, 2));
-        when(cartRepository.findByUserId(user.getId())).thenReturn(Optional.of(cart));
+        when(cartRepository.findByUserIdForUpdate(user.getId())).thenReturn(Optional.of(cart));
         Warehouse warehouse = Warehouse.create("Main Warehouse", null);
         warehouse.setId(1L);
         Inventory inventory = Inventory.create(variant, warehouse, 5);
@@ -343,7 +343,7 @@ class OrderDataFetcherTest {
     void shouldRejectCreateOrderWithEmptyCartTest() {
         Cart cart = Cart.create(user);
         cart.setId(1L);
-        when(cartRepository.findByUserId(user.getId())).thenReturn(Optional.of(cart));
+        when(cartRepository.findByUserIdForUpdate(user.getId())).thenReturn(Optional.of(cart));
         when(orderRepository.save(org.mockito.ArgumentMatchers.any(Order.class)))
                 .thenReturn(order);
 
@@ -366,7 +366,7 @@ class OrderDataFetcherTest {
     @WithMockUser(username = "1")
     void shouldUpdateOrderStatusTest() {
         Long id = order.getId();
-        when(orderRepository.findById(id)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(id)).thenReturn(Optional.of(order));
         when(orderRepository.save(order)).thenReturn(order);
 
         @Language("GraphQl")
@@ -393,7 +393,7 @@ class OrderDataFetcherTest {
     void shouldSubscribeToOrderStatusChangesTest() {
         Long id = order.getId();
         order.setStatus(OrderStatus.PAID);
-        when(orderRepository.findById(id)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(id)).thenReturn(Optional.of(order));
         when(orderRepository.save(order)).thenReturn(order);
 
         @Language("GraphQl")
