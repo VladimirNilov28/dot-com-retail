@@ -16,6 +16,7 @@ import ee.bytecore.backend.integration.payment.event.PaymentSucceededEvent;
 import ee.bytecore.backend.repositories.payment.PaymentOutboxEventRepository;
 import ee.bytecore.backend.services.OrderService;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -74,7 +75,7 @@ public class PaymentResultListener {
             T event = OBJECT_MAPPER.readValue(payload, type);
             if (event == null) throw new IllegalArgumentException("Event must not be null");
             return event;
-        } catch (Exception e) {
+        } catch (JsonProcessingException | IllegalArgumentException e) {
             // Not a rejected-transition case - this is a genuinely malformed
             // message, so let it propagate to the container's error handler
             // (bounded retry, then DLT) rather than swallowing it here.

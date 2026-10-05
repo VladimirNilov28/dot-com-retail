@@ -285,4 +285,33 @@ class PaymentResultCorrelationIntegrationTest {
         assertThat(orders.findById(request.order().getId()).orElseThrow().getStatus())
                 .isEqualTo(OrderStatus.PAID);
     }
+
+    @Test
+    void failedPaymentCannotBecomePaidThroughConflictingSuccess() throws Exception {
+        PendingRequest request = pendingRequest();
+        UUID paymentId = UUID.randomUUID();
+        String decline = JSON.writeValueAsString(new PaymentFailedEvent(
+                UUID.randomUUID(),
+                request.requestEventId(),
+                request.order().getId(),
+                paymentId,
+                "declined",
+                Instant.now()));
+        listener.onPaymentFailed(decline);
+        listener.onPaymentSucceeded(JSON.writeValueAsString(success(request, paymentId)));
+        listener.onPaymentSucceeded(JSON.writeValueAsString(success(request, UUID.randomUUID())));
+        listener.onPaymentFailed(decline);
+
+        assertThat(orders.findById(request.order().getId()).orElseThrow().getStatus())
+                .isEqualTo(OrderStatus.CANCELLED);
+        assertThat(outbox.findResultByRequestEventId(request.requestEventId())).hasValueSatisfying(receipt -> {
+            assertThat(receipt.getPaymentId()).isEqualTo(paymentId);
+            assertThat(receipt.getResultStatus()).isEqualTo("CANCELLED");
+        });
+        assertThat(jdbc.queryForObject(
+                        "SELECT count(*) FROM payment_result_receipts WHERE request_event_id=?",
+                        Long.class,
+                        request.requestEventId()))
+                .isEqualTo(1);
+    }
 }
