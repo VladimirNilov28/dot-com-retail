@@ -127,9 +127,9 @@ simulation only; it is not the source of restart safety for a real gateway.
 - **Restart safety**: because migrations, idempotent inserts, and the
   transactional outbox are all durable (Postgres, not in-memory), a Payment
   Service restart at any point resumes correctly - in-flight requests are
-  either fully unprocessed (redelivered), recorded-but-uncharged (charged on
-  resume), or fully resolved with their result outbox row waiting to be
-  published.
+  either fully unprocessed (redelivered), recorded-but-unresolved (the gateway
+  may already have charged; recover its outcome with the same key), or fully
+  resolved with their result outbox row waiting to be published.
 
 ## Configuration (environment variables)
 
@@ -173,6 +173,10 @@ go test ./internal/kafka/...
 
 # Consumer retry/offset/shutdown regressions (real Kafka/Postgres, isolated fixtures)
 GOMAXPROCS=2 go test -p 2 ./internal/kafka -run '^TestRequestConsumer'
+
+# Durable gateway simulation: post-charge DB/outbox failures, restart,
+# lost gateway response, Kafka acknowledgment failure and concurrent duplicates
+GOMAXPROCS=2 go test -race -p 2 ./internal/kafka -run '^TestRequestConsumerProviderIdempotency$'
 
 # Everything
 go test ./...

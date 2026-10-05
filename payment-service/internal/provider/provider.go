@@ -3,7 +3,7 @@
 // fake/development implementation. Neither the interface nor any
 // implementation may ever carry card/PAN/CVV data; ChargeRequest/Result are
 // intentionally limited to what a real gateway integration would still need
-// to expose across this boundary (amount, currency, a correlation id).
+// to expose across this boundary (amount, currency, durable payment identity).
 package provider
 
 import (
