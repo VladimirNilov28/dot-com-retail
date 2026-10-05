@@ -23,6 +23,7 @@ schema changes must be new `V{n}__...sql` files instead.
 | `V5__create_categories.sql` | `categories`, `product_categories` | `V2` (products) |
 | `V6__create_inventory.sql` | `warehouses`, `inventory` | `V2` (product_variants) |
 | `V7__create_wishlist.sql` | `wishlists`, `wishlist_items` | `V1` (users), `V2` (product_variants) |
+| `V10__account_deletion.sql` | `users` deletion retry/completion flags | `V1` (users) |
 | `V11__payment_result_correlation.sql` | `payment_result_receipts` | `V4` (orders), `V9` (payment_outbox) |
 
 Every foreign key either points to a table created in an earlier migration
@@ -159,7 +160,8 @@ still rely on a trusted Payment Service/producer boundary. Provider webhook
 authentication and financial verification remain separate production-provider
 work, not a new synchronous payment action. Request outbox rows and receipts
 must be retained together for durable correlation; deleting the request
-cascades its receipt (including coordinated account deletion).
+cascades its receipt. Coordinated account deletion preserves request rows
+and receipts with their historical orders.
 
 ### warehouses / inventory
 Stock is tracked per warehouse. `inventory` has a unique
