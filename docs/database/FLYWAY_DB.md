@@ -23,6 +23,7 @@ schema changes must be new `V{n}__...sql` files instead.
 | `V5__create_categories.sql` | `categories`, `product_categories` | `V2` (products) |
 | `V6__create_inventory.sql` | `warehouses`, `inventory` | `V2` (product_variants) |
 | `V7__create_wishlist.sql` | `wishlists`, `wishlist_items` | `V1` (users), `V2` (product_variants) |
+| `V11__payment_result_correlation.sql` | `payment_result_receipts` | `V4` (orders), `V9` (payment_outbox) |
 
 Every foreign key either points to a table created in an earlier migration
 file, or to a table created earlier within the same file. There are no
@@ -138,6 +139,27 @@ Status transitions lock the order row before validating its current state.
 Cancellation and exact-warehouse restoration commit or roll back together;
 duplicate/late cancellation cannot restore inventory twice. Subscription
 notifications are emitted only after the transition transaction commits.
+
+Payment results must match the persisted `payment.requested` event id and
+order id. Processing locks that outbox request and records a
+`payment_result_receipts` row in the same transaction as the order transition
+and any restoration. Each request has one immutable outcome/payment binding;
+payment ids and result event ids cannot be reused for another request.
+Duplicates with the same request/payment/outcome are no-ops. Unknown or
+mismatched identities leave order/stock unchanged; malformed required fields,
+unknown JSON fields (including an unrecognized `status`), and blank decline
+reasons go through the existing bounded retry/dead-letter path.
+
+The unchanged wire protocol has no separate result `status`: the
+`payment.succeeded`/`payment.failed` topic and strict event shape determine
+the outcome. The Go Payment Service assigns `paymentId`, so the first valid
+correlated result binds that id; Spring cannot independently pre-verify a
+first payment id or a real charge from the request alone. Results therefore
+still rely on a trusted Payment Service/producer boundary. Provider webhook
+authentication and financial verification remain separate production-provider
+work, not a new synchronous payment action. Request outbox rows and receipts
+must be retained together for durable correlation; deleting the request
+cascades its receipt (including coordinated account deletion).
 
 ### warehouses / inventory
 Stock is tracked per warehouse. `inventory` has a unique

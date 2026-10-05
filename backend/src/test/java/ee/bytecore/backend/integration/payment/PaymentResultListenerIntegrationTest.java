@@ -21,11 +21,14 @@ import org.springframework.kafka.core.KafkaTemplate;
 import ee.bytecore.backend.config.KafkaTestConfiguration;
 import ee.bytecore.backend.config.PostgresTestConfiguration;
 import ee.bytecore.backend.entities.payment.Order;
+import ee.bytecore.backend.entities.payment.PaymentOutboxEvent;
 import ee.bytecore.backend.entities.user.User;
 import ee.bytecore.backend.enums.OrderStatus;
 import ee.bytecore.backend.integration.payment.event.PaymentFailedEvent;
+import ee.bytecore.backend.integration.payment.event.PaymentRequestedEvent;
 import ee.bytecore.backend.integration.payment.event.PaymentSucceededEvent;
 import ee.bytecore.backend.repositories.payment.OrderRepository;
+import ee.bytecore.backend.repositories.payment.PaymentOutboxEventRepository;
 import ee.bytecore.backend.repositories.user.UserRepository;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -59,6 +62,9 @@ class PaymentResultListenerIntegrationTest {
     OrderRepository orderRepository;
 
     @Autowired
+    PaymentOutboxEventRepository paymentRequests;
+
+    @Autowired
     KafkaTemplate<String, String> kafkaTemplate;
 
     @Value("${spring.kafka.bootstrap-servers}")
@@ -71,11 +77,20 @@ class PaymentResultListenerIntegrationTest {
         return orderRepository.save(Order.create(user, OrderStatus.PENDING, new BigDecimal("5.00")));
     }
 
+    private UUID createPaymentRequest(Order order) throws Exception {
+        UUID requestId = UUID.randomUUID();
+        var request = new PaymentRequestedEvent(
+                requestId, order.getId(), order.getUser().getId(), order.getTotalAmount(), "EUR", Instant.now());
+        paymentRequests.save(PaymentOutboxEvent.create(
+                order.getId(), PaymentTopics.PAYMENT_REQUESTED, OBJECT_MAPPER.writeValueAsString(request)));
+        return requestId;
+    }
+
     @Test
     void paymentSucceededTransitionsOrderToPaidTest() throws Exception {
         Order order = createPendingOrder();
         PaymentSucceededEvent event = new PaymentSucceededEvent(
-                UUID.randomUUID(), UUID.randomUUID(), order.getId(), UUID.randomUUID(), Instant.now());
+                UUID.randomUUID(), createPaymentRequest(order), order.getId(), UUID.randomUUID(), Instant.now());
 
         kafkaTemplate
                 .send(
@@ -93,7 +108,7 @@ class PaymentResultListenerIntegrationTest {
     void duplicatePaymentSucceededEventIsSafeNoOpTest() throws Exception {
         Order order = createPendingOrder();
         PaymentSucceededEvent event = new PaymentSucceededEvent(
-                UUID.randomUUID(), UUID.randomUUID(), order.getId(), UUID.randomUUID(), Instant.now());
+                UUID.randomUUID(), createPaymentRequest(order), order.getId(), UUID.randomUUID(), Instant.now());
         String payload = OBJECT_MAPPER.writeValueAsString(event);
 
         kafkaTemplate
@@ -120,7 +135,12 @@ class PaymentResultListenerIntegrationTest {
     void paymentFailedCancelsOrderWithReasonTest() throws Exception {
         Order order = createPendingOrder();
         PaymentFailedEvent event = new PaymentFailedEvent(
-                UUID.randomUUID(), UUID.randomUUID(), order.getId(), UUID.randomUUID(), "card_declined", Instant.now());
+                UUID.randomUUID(),
+                createPaymentRequest(order),
+                order.getId(),
+                UUID.randomUUID(),
+                "card_declined",
+                Instant.now());
 
         kafkaTemplate
                 .send(

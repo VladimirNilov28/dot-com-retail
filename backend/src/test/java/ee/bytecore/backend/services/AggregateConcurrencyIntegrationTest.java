@@ -264,11 +264,16 @@ class AggregateConcurrencyIntegrationTest {
     void concurrentDuplicatePaymentFailuresRestockOnce() throws Exception {
         Fixture f = fixture();
         Order order = orderService.createOrder(f.user.getId());
+        UUID requestEventId = new JdbcTemplate(dataSource)
+                .queryForObject(
+                        "SELECT CAST(payload ->> 'eventId' AS uuid) FROM payment_outbox WHERE order_id = ?",
+                        UUID.class,
+                        order.getId());
         String payload = new ObjectMapper()
                 .findAndRegisterModules()
                 .writeValueAsString(new PaymentFailedEvent(
                         UUID.randomUUID(),
-                        UUID.randomUUID(),
+                        requestEventId,
                         order.getId(),
                         UUID.randomUUID(),
                         "declined",
