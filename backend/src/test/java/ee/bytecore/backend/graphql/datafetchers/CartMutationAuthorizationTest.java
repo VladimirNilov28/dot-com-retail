@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Optional;
+import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -39,11 +40,13 @@ import ee.bytecore.backend.services.CartService;
 import com.netflix.graphql.dgs.test.EnableDgsMockMvcTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /**
  * Proves myCart/addCartItem/updateCartItem/removeCartItem/clearCart enforce the
  * cart:read/cart:write scope (self-service — no role requirement; ownership is
- * enforced in CartService via CurrentUserProvider, unaffected by this test) against
+ * enforced in CartService via CurrentUserProvider) against
  * the real SecurityFilterChain + JwtAuthenticationConverter.
  */
 @SpringBootTest(
@@ -98,6 +101,27 @@ class CartMutationAuthorizationTest {
         productVariant.setId(1L);
         cartItem = CartItem.create(cart, productVariant, 2);
         cartItem.setId(1L);
+        when(userRepository.findActiveByIdForUpdate(user.getId())).thenReturn(Optional.of(user));
+        when(cartRepository.findByUserId(user.getId())).thenReturn(Optional.of(cart));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void shouldRejectInactiveOwnerEvenWithValidScopedJwtTest(boolean deleted) throws Exception {
+        user.setDeleted(deleted);
+        user.setDeletionIdentityId(UUID.randomUUID());
+        for (String query : new String[] {"{ myCart { items { quantity } } }", "mutation { clearCart }"}) {
+            mockMvc.perform(post("/graphql")
+                            .with(asAuthenticatedJwt(
+                                    jwtAuthenticationConverter, "1", "USER", "cart:read", "cart:write"))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .accept(MediaType.APPLICATION_JSON)
+                            .content("{\"query\":\"" + query + "\"}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.errors[0].extensions.errorType").value("PERMISSION_DENIED"));
+        }
+        org.mockito.Mockito.verify(cartItemRepository, org.mockito.Mockito.never())
+                .deleteAll(org.mockito.ArgumentMatchers.any());
     }
 
     @Test

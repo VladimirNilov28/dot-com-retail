@@ -104,6 +104,7 @@ class OrderDataFetcherTest {
         order = Order.create(user, OrderStatus.PENDING, new BigDecimal("39.98"));
         order.setId(1L);
         order.setPublicId(UUID.randomUUID());
+        when(userRepository.findActiveByIdForUpdate(user.getId())).thenReturn(Optional.of(user));
     }
 
     @Test

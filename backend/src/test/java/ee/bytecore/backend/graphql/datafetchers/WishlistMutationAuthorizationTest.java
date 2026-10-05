@@ -98,6 +98,7 @@ class WishlistMutationAuthorizationTest {
         productVariant.setId(1L);
         wishlistItem = WishlistItem.create(wishlist, productVariant);
         wishlistItem.setId(1L);
+        when(userRepository.findActiveByIdForUpdate(user.getId())).thenReturn(Optional.of(user));
     }
 
     @Test

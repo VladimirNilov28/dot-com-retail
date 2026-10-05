@@ -10,8 +10,6 @@ import static org.mockito.Mockito.when;
 import java.time.LocalDate;
 import java.util.Optional;
 
-import org.springframework.dao.DataIntegrityViolationException;
-
 import ee.bytecore.backend.entities.user.User;
 import ee.bytecore.backend.entities.wishlist.Wishlist;
 import ee.bytecore.backend.repositories.product.ProductVariantRepository;
@@ -101,11 +99,15 @@ class WishlistServiceTest {
 
     @Test
     void shouldReuseWishlistCreatedByConcurrentRequestWhenCreateRacesTest() {
-        when(wishlistRepository.findByUserId(1L)).thenReturn(Optional.empty(), Optional.of(wishlist));
-        when(self.createWishlist(1L)).thenThrow(new DataIntegrityViolationException("duplicate key"));
+        when(userRepository.findActiveByIdForUpdate(1L)).thenReturn(Optional.of(user));
+        when(wishlistRepository.findByUserId(1L)).thenReturn(Optional.of(wishlist));
 
-        Wishlist result = wishlistService.getMyWishlist(1L);
+        Wishlist result = wishlistService.createWishlist(1L);
 
         assertThat(result).isSameAs(wishlist);
+        var ordered = org.mockito.Mockito.inOrder(userRepository, wishlistRepository);
+        ordered.verify(userRepository).findActiveByIdForUpdate(1L);
+        ordered.verify(wishlistRepository).findByUserId(1L);
+        verify(wishlistRepository, never()).saveAndFlush(any());
     }
 }

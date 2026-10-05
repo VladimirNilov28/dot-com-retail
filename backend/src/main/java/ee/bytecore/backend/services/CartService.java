@@ -3,7 +3,6 @@ package ee.bytecore.backend.services;
 import java.util.Objects;
 
 import org.springframework.context.annotation.Lazy;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -51,41 +50,38 @@ public class CartService {
     /**
      * Returns the user's cart, lazily creating it on first access. A missing
      * cart is created in its own {@code REQUIRES_NEW} transaction so that,
-     * if a concurrent request wins the race on the {@code carts.user_id}
-     * unique constraint, the resulting {@link DataIntegrityViolationException}
-     * doesn't poison an ongoing outer transaction - we simply re-read the
-     * cart the other request just committed.
+     * serialized creation can commit before the outer checkout acquires its
+     * user/cart locks. Creation locks and validates the account, then rechecks
+     * for a cart created by another request.
      */
+    @Transactional(readOnly = true)
     public Cart getMyCart(Long userId) {
-        return cartRepository.findByUserId(userId).orElseGet(() -> getOrCreateCart(userId));
-    }
-
-    private Cart getOrCreateCart(Long userId) {
-        try {
-            return self.createCart(userId);
-        } catch (DataIntegrityViolationException e) {
-            return cartRepository
-                    .findByUserId(userId)
-                    .orElseThrow(
-                            () -> new EntityNotFoundException(String.format("Cart not found for user %s", userId)));
-        }
+        Cart cart = cartRepository.findByUserId(userId).orElseGet(() -> self.createCart(userId));
+        requireActiveOwner(cart.getUser());
+        return cart;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Cart createCart(Long userId) {
-        User userRef = userRepository.getReferenceById(userId);
-        return cartRepository.saveAndFlush(Cart.create(userRef));
+        User user = userRepository
+                .findActiveByIdForUpdate(userId)
+                .orElseThrow(() -> new AccessDeniedException("Active account is required"));
+        requireActiveOwner(user);
+        return cartRepository.findByUserId(userId).orElseGet(() -> cartRepository.saveAndFlush(Cart.create(user)));
     }
 
     @Transactional
     public Cart getMyCartForUpdate(Long userId) {
-        return cartRepository.findByUserIdForUpdate(userId).orElseGet(() -> {
-            getOrCreateCart(userId);
-            return cartRepository
-                    .findByUserIdForUpdate(userId)
-                    .orElseThrow(
-                            () -> new EntityNotFoundException(String.format("Cart not found for user %s", userId)));
-        });
+        // Creation has its own transaction; do not hold the same user lock
+        // in the outer transaction while entering that REQUIRES_NEW call.
+        cartRepository.findByUserId(userId).orElseGet(() -> self.createCart(userId));
+        User user = userRepository
+                .findActiveByIdForUpdate(userId)
+                .orElseThrow(() -> new AccessDeniedException("Active account is required"));
+        requireActiveOwner(user);
+        return cartRepository
+                .findByUserIdForUpdate(userId)
+                .orElseThrow(() -> new EntityNotFoundException(String.format("Cart not found for user %s", userId)));
     }
 
     @Transactional
@@ -137,8 +133,17 @@ public class CartService {
      * {@code CartItem.cart} resolver so it can't be used to read another
      * user's cart item.
      */
+    @Transactional(readOnly = true)
     public CartItem getOwnedCartItem(Long userId, Long cartItemId) {
-        return findOwned(userId, cartItemId);
+        CartItem item = findOwned(userId, cartItemId);
+        requireActiveOwner(item.getCart().getUser());
+        return item;
+    }
+
+    private void requireActiveOwner(User user) {
+        if (user == null || user.isDeleted() || user.getDeletionIdentityId() != null) {
+            throw new AccessDeniedException("Active account is required");
+        }
     }
 
     private CartItem findOwned(Long userId, Long cartItemId) {

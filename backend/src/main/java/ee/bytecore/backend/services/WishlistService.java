@@ -52,31 +52,25 @@ public class WishlistService {
     /**
      * Returns the user's wishlist, lazily creating it on first access. A
      * missing wishlist is created in its own {@code REQUIRES_NEW}
-     * transaction so that, if a concurrent request wins the race on the
-     * {@code wishlists.user_id} unique constraint, the resulting
-     * {@link DataIntegrityViolationException} doesn't poison an ongoing
-     * outer transaction - we simply re-read the wishlist the other request
-     * just committed.
+     * transaction. Creation locks and validates the account, then rechecks
+     * for a wishlist created by another request.
      */
+    @Transactional(readOnly = true)
     public Wishlist getMyWishlist(Long userId) {
-        return wishlistRepository.findByUserId(userId).orElseGet(() -> getOrCreateWishlist(userId));
-    }
-
-    private Wishlist getOrCreateWishlist(Long userId) {
-        try {
-            return self.createWishlist(userId);
-        } catch (DataIntegrityViolationException e) {
-            return wishlistRepository
-                    .findByUserId(userId)
-                    .orElseThrow(
-                            () -> new EntityNotFoundException(String.format("Wishlist not found for user %s", userId)));
-        }
+        Wishlist wishlist = wishlistRepository.findByUserId(userId).orElseGet(() -> self.createWishlist(userId));
+        requireActiveOwner(wishlist.getUser());
+        return wishlist;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Wishlist createWishlist(Long userId) {
-        User userRef = userRepository.getReferenceById(userId);
-        return wishlistRepository.saveAndFlush(Wishlist.create(userRef));
+        User user = userRepository
+                .findActiveByIdForUpdate(userId)
+                .orElseThrow(() -> new AccessDeniedException("Active account is required"));
+        requireActiveOwner(user);
+        return wishlistRepository
+                .findByUserId(userId)
+                .orElseGet(() -> wishlistRepository.saveAndFlush(Wishlist.create(user)));
     }
 
     /**
@@ -84,6 +78,7 @@ public class WishlistService {
      * {@code WishlistItem.wishlist} resolver so it can't be used to read
      * another user's wishlist item.
      */
+    @Transactional(readOnly = true)
     public WishlistItem getOwnedWishlistItem(Long userId, Long wishlistItemId) {
         WishlistItem item = wishlistItemRepository
                 .findById(wishlistItemId)
@@ -95,11 +90,16 @@ public class WishlistService {
         if (!Objects.equals(userId, ownerId)) {
             throw new AccessDeniedException("Wishlist item does not belong to the current user");
         }
+        requireActiveOwner(item.getWishlist().getUser());
         return item;
     }
 
+    @Transactional
     public WishlistItem addItem(Long userId, Long productVariantId) {
         Wishlist wishlist = getMyWishlist(userId);
+        requireActiveOwner(userRepository
+                .findActiveByIdForUpdate(userId)
+                .orElseThrow(() -> new AccessDeniedException("Active account is required")));
         ProductVariant variant = productVariantRepository
                 .findById(productVariantId)
                 .orElseThrow(() -> new EntityNotFoundException(
@@ -113,7 +113,11 @@ public class WishlistService {
         }
     }
 
+    @Transactional
     public boolean removeItem(Long userId, Long wishlistItemId) {
+        requireActiveOwner(userRepository
+                .findActiveByIdForUpdate(userId)
+                .orElseThrow(() -> new AccessDeniedException("Active account is required")));
         return wishlistItemRepository
                 .findById(wishlistItemId)
                 .map(item -> {
@@ -124,9 +128,16 @@ public class WishlistService {
                     if (!Objects.equals(userId, ownerId)) {
                         throw new AccessDeniedException("Wishlist item does not belong to the current user");
                     }
+                    requireActiveOwner(item.getWishlist().getUser());
                     wishlistItemRepository.deleteById(wishlistItemId);
                     return true;
                 })
                 .orElse(false);
+    }
+
+    private void requireActiveOwner(User user) {
+        if (user == null || user.isDeleted() || user.getDeletionIdentityId() != null) {
+            throw new AccessDeniedException("Active account is required");
+        }
     }
 }

@@ -85,6 +85,8 @@ class CartDataFetcherTest {
         cartItem = CartItem.create(cart, productVariant, 2);
         cartItem.setId(1L);
         when(cartRepository.findByUserIdForUpdate(user.getId())).thenReturn(Optional.of(cart));
+        when(userRepository.findActiveByIdForUpdate(user.getId())).thenReturn(Optional.of(user));
+        when(cartRepository.findByUserId(user.getId())).thenReturn(Optional.of(cart));
     }
 
     @Test
@@ -145,7 +147,6 @@ class CartDataFetcherTest {
     @WithMockUser(username = "1")
     void shouldLazilyCreateCartForMyCartWhenMissingTest() {
         when(cartRepository.findByUserId(user.getId())).thenReturn(Optional.empty());
-        when(userRepository.getReferenceById(user.getId())).thenReturn(user);
         when(cartRepository.saveAndFlush(any(Cart.class))).thenReturn(cart);
 
         @Language("GraphQl")
@@ -171,8 +172,8 @@ class CartDataFetcherTest {
     @Test
     @WithMockUser(username = "1")
     void shouldLazilyCreateCartForAddCartItemWhenMissingTest() {
-        when(cartRepository.findByUserIdForUpdate(user.getId())).thenReturn(Optional.empty(), Optional.of(cart));
-        when(userRepository.getReferenceById(user.getId())).thenReturn(user);
+        when(cartRepository.findByUserId(user.getId())).thenReturn(Optional.empty());
+        when(cartRepository.findByUserIdForUpdate(user.getId())).thenReturn(Optional.of(cart));
         when(cartRepository.saveAndFlush(any(Cart.class))).thenReturn(cart);
         when(productVariantRepository.findById(productVariant.getId())).thenReturn(Optional.of(productVariant));
         when(cartItemRepository.save(any(CartItem.class))).thenReturn(cartItem);

@@ -10,16 +10,18 @@ import static org.mockito.Mockito.when;
 
 import java.time.LocalDate;
 import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import ee.bytecore.backend.config.PostgresTestConfiguration;
 import ee.bytecore.backend.entities.user.User;
@@ -34,28 +36,24 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-@SpringBootTest(properties = "spring.kafka.bootstrap-servers=127.0.0.1:1")
-@Import({PostgresTestConfiguration.class, AccountDeletionIntegrationTest.NoKafka.class})
+@SpringBootTest(properties = {"spring.kafka.bootstrap-servers=127.0.0.1:1", "spring.kafka.listener.auto-startup=false"})
+@Import(PostgresTestConfiguration.class)
 @Tag("integration")
 class AccountDeletionIntegrationTest {
-    @TestConfiguration(proxyBeanMethods = false)
-    static class NoKafka {
-        @Bean
-        static BeanPostProcessor disableKafkaListeners() {
-            return new BeanPostProcessor() {
-                @Override
-                public Object postProcessBeforeInitialization(Object bean, String beanName) {
-                    if (bean instanceof ConcurrentKafkaListenerContainerFactory<?, ?> factory) {
-                        factory.setAutoStartup(false);
-                    }
-                    return bean;
-                }
-            };
-        }
-    }
-
     @Autowired
     UserService userService;
+
+    @Autowired
+    CartService carts;
+
+    @Autowired
+    WishlistService wishlists;
+
+    @Autowired
+    OrderService orderService;
+
+    @Autowired
+    PlatformTransactionManager transactions;
 
     @Autowired
     UserRepository users;
@@ -214,6 +212,39 @@ class AccountDeletionIntegrationTest {
     }
 
     @Test
+    void activeLockPredicateMustRejectInactiveRowEvenWithCachedEntityTest() {
+        String key = UUID.randomUUID().toString();
+        User user = users.save(User.create(key, key + "@example.com", LocalDate.of(1990, 2, 3)));
+        new TransactionTemplate(transactions).executeWithoutResult(status -> {
+            User cached = users.findById(user.getId()).orElseThrow();
+            jdbc.update("UPDATE users SET deletion_identity_id=? WHERE id=?", UUID.randomUUID(), user.getId());
+            assertThat(cached.getDeletionIdentityId()).isNull();
+            assertThat(users.findActiveByIdForUpdate(user.getId())).isEmpty();
+        });
+    }
+
+    @Test
+    void creationMustWaitForDeletionReservationAndThenFailTest() throws Exception {
+        String key = UUID.randomUUID().toString();
+        User user = users.save(User.create(key, key + "@example.com", LocalDate.of(1990, 2, 3)));
+        try (var worker = Executors.newSingleThreadExecutor()) {
+            var attempt = new AtomicReference<java.util.concurrent.Future<?>>();
+            new TransactionTemplate(transactions).executeWithoutResult(status -> {
+                User locked = users.findLockedById(user.getId()).orElseThrow();
+                locked.setDeletionIdentityId(UUID.randomUUID());
+                users.saveAndFlush(locked);
+                attempt.set(worker.submit(() -> carts.createCart(user.getId())));
+                assertThatThrownBy(() -> attempt.get().get(200, TimeUnit.MILLISECONDS))
+                        .isInstanceOf(TimeoutException.class);
+            });
+            assertThatThrownBy(() -> attempt.get().get(5, TimeUnit.SECONDS))
+                    .hasCauseInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+        }
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM carts WHERE user_id=?", Long.class, user.getId()))
+                .isZero();
+    }
+
+    @Test
     void shouldRollBackCanonicalRegistrationOnAuthenticationConflictTest() {
         org.mockito.Mockito.doThrow(new UserAlreadyExistsException("Use account recovery or contact support."))
                 .when(kratos)
@@ -223,5 +254,49 @@ class AccountDeletionIntegrationTest {
                 .isInstanceOf(UserAlreadyExistsException.class);
         assertThat(users.existsByEmail("orphan@example.com")).isFalse();
         assertThat(users.existsByUsername("orphan")).isFalse();
+    }
+
+    @Test
+    void deletedOrDeletingAccountCannotRecreatePersonalAggregatesTest() {
+        for (boolean completed : new boolean[] {false, true}) {
+            String key = UUID.randomUUID().toString();
+            User user = users.save(User.create(key, key + "@example.com", LocalDate.of(1990, 2, 3)));
+            jdbc.update(
+                    "UPDATE users SET deletion_identity_id=?, deleted=? WHERE id=?",
+                    UUID.randomUUID(),
+                    completed,
+                    user.getId());
+
+            assertThatThrownBy(() -> carts.getMyCart(user.getId()))
+                    .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+            assertThatThrownBy(() -> wishlists.getMyWishlist(user.getId()))
+                    .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM carts WHERE user_id=?", Long.class, user.getId()))
+                    .isZero();
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM wishlists WHERE user_id=?", Long.class, user.getId()))
+                    .isZero();
+        }
+    }
+
+    @Test
+    void deletingAccountCannotAccessExistingAggregatesButStaffRetainsHistoryTest() {
+        String key = UUID.randomUUID().toString();
+        User user = users.save(User.create(key, key + "@example.com", LocalDate.of(1990, 2, 3)));
+        carts.getMyCart(user.getId());
+        wishlists.getMyWishlist(user.getId());
+        var order = ee.bytecore.backend.entities.payment.Order.create(
+                user, ee.bytecore.backend.enums.OrderStatus.PENDING, java.math.BigDecimal.TEN);
+        user.setDeletionIdentityId(UUID.randomUUID());
+        users.saveAndFlush(user);
+
+        assertThatThrownBy(() -> carts.getMyCart(user.getId()))
+                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+        assertThatThrownBy(() -> carts.clear(user.getId()))
+                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+        assertThatThrownBy(() -> wishlists.getMyWishlist(user.getId()))
+                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+        assertThatThrownBy(() -> orderService.requireReadable(order, user.getId(), false))
+                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+        assertThat(orderService.requireReadable(order, 999L, true)).isSameAs(order);
     }
 }

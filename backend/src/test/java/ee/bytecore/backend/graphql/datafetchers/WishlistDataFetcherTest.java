@@ -82,6 +82,7 @@ class WishlistDataFetcherTest {
         productVariant.setId(1L);
         wishlistItem = WishlistItem.create(wishlist, productVariant);
         wishlistItem.setId(1L);
+        when(userRepository.findActiveByIdForUpdate(user.getId())).thenReturn(Optional.of(user));
     }
 
     @Test
@@ -115,7 +116,7 @@ class WishlistDataFetcherTest {
     @WithMockUser(username = "1")
     void shouldLazilyCreateWishlistForMyWishlistWhenMissingTest() {
         when(wishlistRepository.findByUserId(user.getId())).thenReturn(Optional.empty());
-        when(userRepository.getReferenceById(user.getId())).thenReturn(user);
+        when(userRepository.findActiveByIdForUpdate(user.getId())).thenReturn(Optional.of(user));
         when(wishlistRepository.saveAndFlush(any(Wishlist.class))).thenReturn(wishlist);
 
         @Language("GraphQl")

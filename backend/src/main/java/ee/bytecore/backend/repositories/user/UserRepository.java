@@ -27,6 +27,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("select u from User u where u.id = :id")
     Optional<User> findLockedById(@Param("id") Long id);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from User u where u.id = :id and u.deleted = false and u.deletionIdentityId is null")
+    Optional<User> findActiveByIdForUpdate(@Param("id") Long id);
+
     @Modifying
     @Query(value = "DELETE FROM user_address WHERE user_id = :id", nativeQuery = true)
     void deleteAddresses(@Param("id") Long id);

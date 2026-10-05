@@ -69,7 +69,9 @@ public class OrderService {
     }
 
     public List<Order> findMyOrders(Long userId) {
-        return orderRepository.findAllByUserId(userId);
+        List<Order> orders = orderRepository.findAllByUserId(userId);
+        orders.forEach(order -> requireReadable(order, userId, false));
+        return orders;
     }
 
     public List<OrderItem> findItems(Long orderId) {
@@ -144,6 +146,11 @@ public class OrderService {
      * authorization can't express "unless it's your own resource").
      */
     public Order requireReadable(Order order, Long currentUserId, boolean isStaff) {
+        if (!isStaff
+                && order.getUser() != null
+                && (order.getUser().isDeleted() || order.getUser().getDeletionIdentityId() != null)) {
+            throw new AccessDeniedException("Active account is required");
+        }
         Long ownerId = order.getUser() == null ? null : order.getUser().getId();
         if (!isStaff && !Objects.equals(currentUserId, ownerId)) {
             throw new AccessDeniedException("Order does not belong to the current user");

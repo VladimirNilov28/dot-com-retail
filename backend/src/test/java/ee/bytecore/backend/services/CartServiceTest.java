@@ -12,8 +12,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Optional;
 
-import org.springframework.dao.DataIntegrityViolationException;
-
 import ee.bytecore.backend.entities.cart.Cart;
 import ee.bytecore.backend.entities.cart.CartItem;
 import ee.bytecore.backend.entities.product.Product;
@@ -75,6 +73,7 @@ class CartServiceTest {
         product.setId(1L);
         productVariant = ProductVariant.create(product, "TSHIRT-M-BLACK", new BigDecimal("19.99"));
         productVariant.setId(1L);
+        when(userRepository.findActiveByIdForUpdate(1L)).thenReturn(Optional.of(user));
     }
 
     @Test
@@ -112,17 +111,20 @@ class CartServiceTest {
 
     @Test
     void shouldReuseCartCreatedByConcurrentRequestWhenCreateRacesTest() {
-        when(cartRepository.findByUserId(1L)).thenReturn(Optional.empty(), Optional.of(cart));
-        when(self.createCart(1L)).thenThrow(new DataIntegrityViolationException("duplicate key"));
+        when(cartRepository.findByUserId(1L)).thenReturn(Optional.of(cart));
 
-        Cart result = cartService.getMyCart(1L);
+        Cart result = cartService.createCart(1L);
 
         assertThat(result).isSameAs(cart);
+        var ordered = org.mockito.Mockito.inOrder(userRepository, cartRepository);
+        ordered.verify(userRepository).findActiveByIdForUpdate(1L);
+        ordered.verify(cartRepository).findByUserId(1L);
+        verify(cartRepository, never()).saveAndFlush(any());
     }
 
     @Test
     void shouldLazilyCreateCartWhenAddingItemToMissingCartTest() {
-        when(cartRepository.findByUserIdForUpdate(1L)).thenReturn(Optional.empty(), Optional.of(cart));
+        when(cartRepository.findByUserIdForUpdate(1L)).thenReturn(Optional.of(cart));
         when(self.createCart(1L)).thenReturn(cart);
         when(productVariantRepository.findById(1L)).thenReturn(Optional.of(productVariant));
         when(cartItemRepository.findByCartIdAndProductVariantId(1L, 1L)).thenReturn(Optional.empty());
@@ -140,6 +142,7 @@ class CartServiceTest {
         CartItem existing = CartItem.create(cart, productVariant, 2);
         existing.setId(5L);
         when(cartRepository.findByUserIdForUpdate(1L)).thenReturn(Optional.of(cart));
+        when(cartRepository.findByUserId(1L)).thenReturn(Optional.of(cart));
         when(productVariantRepository.findById(1L)).thenReturn(Optional.of(productVariant));
         when(cartItemRepository.findByCartIdAndProductVariantId(1L, 1L)).thenReturn(Optional.of(existing));
         when(cartItemRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));

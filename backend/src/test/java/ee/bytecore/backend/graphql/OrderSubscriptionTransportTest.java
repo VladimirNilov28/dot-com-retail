@@ -159,6 +159,18 @@ class OrderSubscriptionTransportTest {
     }
 
     @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void shouldRejectInactiveOrderOwnerTest(boolean deleted) throws Exception {
+        when(order.getUser().isDeleted()).thenReturn(deleted);
+        when(order.getUser().getDeletionIdentityId()).thenReturn(java.util.UUID.randomUUID());
+        try (Connection connection = connect("owner")) {
+            connection.subscribe();
+            assertThat(connection.next()).containsAnyOf("FORBIDDEN", "PERMISSION_DENIED");
+            awaitSubscribers(0);
+        }
+    }
+
+    @ParameterizedTest
     @ValueSource(strings = {"admin", "staff"})
     void shouldAllowScopedOrderStaffTest(String token) throws Exception {
         try (Connection connection = connect(token)) {

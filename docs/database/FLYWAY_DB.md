@@ -116,8 +116,14 @@ or rewrite applied Flyway migrations to hide corrupt data.
 A user's in-progress selection before checkout. `carts.user_id` is unique;
 checkout clears and reuses that cart rather than creating a new cart per
 order. `cart_items` has unique `(cart_id, product_variant_id)` membership.
-Lazy cart creation uses a separate `REQUIRES_NEW` transaction so a losing
-creation race does not poison the caller's transaction.
+Lazy cart creation uses a separate `REQUIRES_NEW` transaction. It locks the
+canonical user, rejects deleting/deleted accounts, and rechecks the cart before
+inserting. Wishlist creation follows the same lifecycle guard. Checkout and
+cart mutations validate/lock the user before locking the cart, so deletion
+cannot reserve an account midway through an accepted write. Existing personal
+aggregates are denied to inactive owners; retained order history remains
+accessible to authorized staff. A valid self-contained JWT does not override
+these data-state checks.
 
 Add/update/remove/clear and checkout acquire the owning cart's
 `PESSIMISTIC_WRITE` lock before reading its items and retain it until the
