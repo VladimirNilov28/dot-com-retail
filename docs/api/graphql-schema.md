@@ -188,6 +188,19 @@ Payment is the only domain with a subscription: order status changes
 client genuinely benefits from a live push instead of polling. No other
 domain currently has an equivalent real-time use case.
 
+`orderStatusChanged` requires `order:read` and the same ownership policy as
+`order`: the owner, or an `ORDER_MANAGER`/`ADMIN` caller. Events are not replayed
+to new subscribers; disconnecting the last subscriber does not disable future
+subscriptions.
+
+Use Hive's `/graphql` SSE transport (`Accept: text/event-stream`) with the
+Bearer HTTP header. The current router configuration uses WebSocket upstream
+to Spring, not a client-facing WebSocket endpoint. Spring's `/graphql`
+WebSocket transport accepts the JWT in either the upgrade header or the
+`connection_init` Authorization payload. Missing/invalid initialization
+credentials are rejected before subscription execution; ordinary HTTP
+GraphQL remains authenticated and stateless.
+
 ## Type relationships
 
 ```mermaid

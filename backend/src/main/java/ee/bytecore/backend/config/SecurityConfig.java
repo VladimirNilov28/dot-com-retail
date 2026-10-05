@@ -7,6 +7,7 @@ import java.util.function.Supplier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.graphql.server.WebSocketGraphQlInterceptor;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -23,6 +24,8 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtGra
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.util.function.SingletonSupplier;
 import org.springframework.web.client.RestTemplate;
+
+import ee.bytecore.backend.security.JwtWebSocketInterceptor;
 
 @Configuration
 @EnableWebSecurity
@@ -78,6 +81,11 @@ public class SecurityConfig {
     }
 
     @Bean
+    WebSocketGraphQlInterceptor jwtWebSocketInterceptor(JwtDecoder decoder, JwtAuthenticationConverter converter) {
+        return new JwtWebSocketInterceptor(decoder, converter);
+    }
+
+    @Bean
     public SecurityFilterChain filterChain(HttpSecurity http, JwtAuthenticationConverter jwtAuthenticationConverter)
             throws Exception {
 
@@ -97,6 +105,12 @@ public class SecurityConfig {
                         // path/method only — every other REST and GraphQL
                         // operation below remains authenticated.
                         .requestMatchers(HttpMethod.POST, "/auth/register")
+                        .permitAll()
+                        // Only the upgrade is public; connection_init must authenticate
+                        // through JwtWebSocketInterceptor before any operation executes.
+                        .requestMatchers(request -> "GET".equals(request.getMethod())
+                                && "/graphql".equals(request.getServletPath())
+                                && "websocket".equalsIgnoreCase(request.getHeader("Upgrade")))
                         .permitAll()
                         .requestMatchers("/graphql")
                         .authenticated()
