@@ -8,6 +8,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.transaction.annotation.Transactional;
 
+import ee.bytecore.backend.config.KafkaTestConfiguration;
 import ee.bytecore.backend.config.PostgresTestConfiguration;
 
 import org.junit.jupiter.api.Tag;
@@ -20,7 +21,7 @@ import org.junit.jupiter.api.Test;
  * context — see "Repository testing" in CLAUDE.md.
  */
 @SpringBootTest
-@Import(PostgresTestConfiguration.class)
+@Import({PostgresTestConfiguration.class, KafkaTestConfiguration.class})
 @Tag("integration")
 class CategoryServiceIntegrationTest {
 

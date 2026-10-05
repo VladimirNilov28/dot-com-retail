@@ -1,7 +1,10 @@
 package ee.bytecore.backend.services;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.dao.DataIntegrityViolationException;
@@ -34,30 +37,38 @@ public class CategoryService {
         return categoryRepository.findAll();
     }
 
+    @Transactional
     public Category create(String name, String slug, Long parentId) {
+        categoryRepository.lockHierarchy();
         validateName(name);
         Category parent = resolveParent(parentId);
+        validateParent(null, parent);
         return save(Category.create(name, slug, parent));
     }
 
     @Transactional
     public Category update(Long id, String name, String slug, Long parentId) {
+        categoryRepository.lockHierarchy();
         Category existing = categoryRepository
                 .findById(id)
                 .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException(
                         String.format("Category with id %s not found", id)));
 
+        Category parent = parentId == null ? existing.getParent() : resolveParent(parentId);
+        validateParent(id, parent);
         if (name != null) {
             validateName(name);
             existing.setName(name);
         }
         if (slug != null) existing.setSlug(slug);
-        if (parentId != null) existing.setParent(resolveParent(parentId));
+        if (parentId != null) existing.setParent(parent);
 
         return save(existing);
     }
 
+    @Transactional
     public boolean deleteById(Long id) {
+        categoryRepository.lockHierarchy();
         if (categoryRepository.findById(id).isEmpty()) {
             return false;
         }
@@ -68,6 +79,16 @@ public class CategoryService {
     private void validateName(String name) {
         if (name == null || name.isBlank()) {
             throw new IllegalArgumentException("Category name must not be blank");
+        }
+    }
+
+    private void validateParent(Long categoryId, Category parent) {
+        Set<Long> visited = new HashSet<>();
+        for (Category ancestor = parent; ancestor != null; ancestor = ancestor.getParent()) {
+            if (Objects.equals(categoryId, ancestor.getId()) || !visited.add(ancestor.getId())) {
+                throw new IllegalArgumentException(String.format(
+                        "Category parent would create or retain a cycle at category %s", ancestor.getId()));
+            }
         }
     }
 
