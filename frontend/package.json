@@ -6,23 +6,31 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
+    "@heroui/react": "3.2.6",
+    "@heroui/styles": "3.2.6",
+    "@internationalized/date": "3.12.4",
+    "@react-aria/ssr": "3.10.1",
+    "@react-aria/utils": "3.34.1",
     "next": "16.3.6",
     "react": "19.2.8",
+    "react-aria": "3.52.1",
+    "react-aria-components": "1.21.1",
     "react-dom": "19.2.8"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
+    "@tailwindcss/postcss": "4.3.3",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "babel-plugin-react-compiler": "1.0.0",
-    "eslint": "^9",
+    "eslint": "9.39.5",
     "eslint-config-next": "16.3.6",
-    "tailwindcss": "^4",
-    "typescript": "^5"
+    "tailwindcss": "4.3.3",
+    "typescript": "5.9.3"
   },
   "packageManager": "bun@1.4.2",
   "ignoreScripts": [
