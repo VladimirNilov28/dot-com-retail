@@ -4,6 +4,8 @@ import org.springframework.stereotype.Component;
 
 import ee.bytecore.backend.entities.payment.Order;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Sinks;
 
@@ -16,10 +18,15 @@ import reactor.core.publisher.Sinks;
 @Component
 public class OrderStatusPublisher {
 
-    private final Sinks.Many<Order> sink = Sinks.many().multicast().onBackpressureBuffer();
+    private static final Logger logger = LoggerFactory.getLogger(OrderStatusPublisher.class);
 
-    public void publish(Order order) {
-        sink.tryEmitNext(order);
+    private final Sinks.Many<Order> sink = Sinks.many().multicast().directBestEffort();
+
+    public synchronized void publish(Order order) {
+        Sinks.EmitResult result = sink.tryEmitNext(order);
+        if (result.isFailure() && result != Sinks.EmitResult.FAIL_ZERO_SUBSCRIBER) {
+            logger.warn("Unable to deliver order status notification for order {}: {}", order.getId(), result);
+        }
     }
 
     public Flux<Order> subscribeTo(Long orderId) {
