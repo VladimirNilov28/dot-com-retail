@@ -12,6 +12,7 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -87,10 +88,10 @@ public class SecurityConfig {
                 // POST (GraphQL queries/mutations, internal API) regardless
                 // of a valid JWT.
                 .csrf(csrf -> csrf.disable())
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .oauth2ResourceServer(
                         oauth2 -> oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)))
-                .authorizeHttpRequests(auth -> auth.requestMatchers("/graphiql/**")
-                        .permitAll()
+                .authorizeHttpRequests(auth -> auth
                         // The one intentionally public entry point: normal
                         // end-user self-registration. Scoped to this exact
                         // path/method only — every other REST and GraphQL
