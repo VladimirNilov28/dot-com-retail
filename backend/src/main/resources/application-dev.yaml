@@ -1,11 +1,34 @@
 spring:
   datasource:
-    url: "jdbc:postgresql://127.0.0.1:5432/postgres"
-    username: postgres
-    password: postgres
-  docker:
-    compose:
-      file: ../infrastructure/docker/compose.yml
-      host: 192.168.0.106
-jwt:
-  secret: W6jBttEuxF+lKLbdLMaJ+zZNungPF65LGQnPdeY3eIU0BG+S5D0AQl8MLYRyHBv38ov4kHEG7tKHXkuu2vPi8g==
+    url: "jdbc:postgresql://127.0.0.1:5432/retail"
+    username: retail
+    password: retail
+  # Hive Router's built-in GraphQL IDE (http://localhost:4002) is the
+  # canonical local GraphQL editor; Spring/DGS GraphiQL is disabled. This is
+  # the property Spring Boot's GraphQL autoconfiguration actually reads —
+  # dgs.graphql.graphiql.enabled below does not disable it by itself.
+  graphql:
+    graphiql:
+      enabled: false
+
+# Spring runs on the host in dev; Kratos's Admin API is reached via the
+# compose-published host port, not the in-container "kratos" hostname.
+kratos:
+  admin-url: http://127.0.0.1:4434
+
+hydra:
+  admin-url: http://127.0.0.1:4445
+
+cart:
+  guest:
+    secure: false
+    allowed-origins:
+      - http://localhost:3000
+      - http://localhost:4002
+
+dgs:
+  graphql:
+    graphiql:
+      enabled: false
+    introspection:
+      enabled: true

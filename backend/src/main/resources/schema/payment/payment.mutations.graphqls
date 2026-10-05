@@ -1,0 +1,8 @@
+input UpdateOrderStatusInput {
+  status: OrderStatus!
+}
+
+extend type Mutation {
+  createOrder(input: PlaceOrderInput!): Order!
+  updateOrderStatus(orderId: ID!, input: UpdateOrderStatusInput!): Order!
+}

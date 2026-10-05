@@ -1,0 +1,4 @@
+extend type Query {
+  order(id: ID, publicId: UUID): Order
+  myOrders: [Order!]!
+}

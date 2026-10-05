@@ -1,0 +1,62 @@
+enum OrderPaymentStatus {
+  PENDING
+  UNRESOLVED
+  SUCCEEDED
+  FAILED
+  UNKNOWN
+}
+
+enum OrderRefundStatus {
+  NONE
+  PENDING
+  UNRESOLVED
+  SUCCEEDED
+  FAILED
+}
+
+type OrderCancellationEligibility {
+  allowed: Boolean!
+  reason: String
+}
+
+type OrderCancellation {
+  source: String!
+  cancelledAt: Instant!
+  awaitingPaymentOutcome: Boolean!
+}
+
+type OrderPayment {
+  status: OrderPaymentStatus!
+}
+
+type OrderRefund {
+  status: OrderRefundStatus!
+  amount: BigDecimal
+  currency: String
+  failureReason: String
+}
+
+type CancellationOrder {
+  publicId: UUID!
+  status: OrderStatus!
+  cancellationEligibility: OrderCancellationEligibility!
+  cancellation: OrderCancellation
+  payment: OrderPayment!
+  refund: OrderRefund!
+}
+
+type OrderCancellationPayload {
+  requestId: UUID!
+  order: CancellationOrder!
+}
+
+input CancelOrderInput {
+  requestId: UUID!
+  publicId: UUID!
+}
+
+extend type Mutation {
+  cancelOrder(input: CancelOrderInput!): OrderCancellationPayload!
+  cancelGuestOrder(input: CancelOrderInput!): OrderCancellationPayload!
+  cancelOrderAsStaff(input: CancelOrderInput!): OrderCancellationPayload!
+}

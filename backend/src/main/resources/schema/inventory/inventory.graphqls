@@ -1,0 +1,15 @@
+type Warehouse {
+  id: ID!
+  name: String!
+  location: String
+  createdAt: Instant!
+  updatedAt: Instant!
+}
+
+type Inventory {
+  id: ID!
+  productVariant: ProductVariant!
+  warehouse: Warehouse!
+  quantity: Int!
+  updatedAt: Instant!
+}

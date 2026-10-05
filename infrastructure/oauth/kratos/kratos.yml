@@ -1,0 +1,71 @@
+version: v26.2.0
+
+serve:
+  public:
+    base_url: http://127.0.0.1:4433/
+    cors:
+      enabled: true
+  admin:
+    base_url: http://127.0.0.1:4434/
+
+selfservice:
+  default_browser_return_url: http://127.0.0.1:3000/
+  allowed_return_urls:
+    - http://127.0.0.1:3000/
+    - http://127.0.0.1:4446/
+  methods:
+    password:
+      enabled: true
+    totp:
+      enabled: true
+      config:
+        issuer: Bytecore Retail
+    lookup_secret:
+      enabled: true
+  flows:
+    registration:
+      enabled: true
+    login: {}
+    settings:
+      required_aal: highest_available
+      privileged_session_max_age: 15m
+      after:
+        password:
+          # Any password change (including a post-recovery reset) invalidates
+          # all other active Kratos sessions for that identity, so a
+          # compromised/lost session can't keep using the old password.
+          hooks:
+            - hook: revoke_active_sessions
+    recovery:
+      enabled: true
+      use: code
+      # Always respond identically whether or not the address belongs to a
+      # known identity, so the recovery flow can't be used to enumerate
+      # registered accounts.
+      notify_unknown_recipients: true
+
+identity:
+  default_schema_id: default
+  schemas:
+    - id: default
+      url: file:///etc/kratos/identity.schema.json
+
+session:
+  whoami:
+    required_aal: highest_available
+
+# Dev-only: Kratos's courier delivers recovery emails via SMTP to Mailpit
+# (infrastructure/compose.yml), a local mail-catcher with no real outbound
+# delivery. Mailpit's SMTP listener does not support STARTTLS, so
+# disable_starttls is required here. Production must point this at a real
+# SMTP provider instead — tracked separately, not part of this dev config.
+courier:
+  smtp:
+    connection_uri: smtp://mailpit:1025/?disable_starttls=true
+    from_address: no-reply@bytecore.ee
+    from_name: Bytecore Retail
+
+log:
+  level: info
+  format: text
+  leak_sensitive_values: false

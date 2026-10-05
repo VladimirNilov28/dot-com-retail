@@ -1,0 +1,4 @@
+extend type Query {
+  myCart: Cart!
+  guestCart: GuestCart
+}

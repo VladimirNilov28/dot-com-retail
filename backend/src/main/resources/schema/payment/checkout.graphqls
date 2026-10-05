@@ -1,0 +1,137 @@
+enum CheckoutShippingMethod {
+  STANDARD
+  EXPRESS
+  PICKUP
+}
+
+enum CheckoutPaymentSelection {
+  SIMULATED
+}
+
+input CheckoutAddressInput {
+  firstName: String!
+  lastName: String!
+  city: String!
+  countryCode: String!
+  postalCode: String!
+  addressLine1: String!
+  addressLine2: String
+  phone: String
+}
+
+input CheckoutInput {
+  contactEmail: String
+  contactPhone: String
+  shippingMethod: CheckoutShippingMethod!
+  shippingAddressId: ID
+  shippingAddress: CheckoutAddressInput
+  billingAddressId: ID
+  billingAddress: CheckoutAddressInput
+  billingSameAsShipping: Boolean! = false
+  paymentSelection: CheckoutPaymentSelection! = SIMULATED
+  paymentMethodId: ID
+}
+
+input PlaceOrderInput {
+  requestId: UUID!
+  acceptedQuoteVersion: String!
+  checkout: CheckoutInput!
+}
+
+type CheckoutAddress {
+  firstName: String!
+  lastName: String!
+  city: String!
+  countryCode: String!
+  postalCode: String!
+  addressLine1: String!
+  addressLine2: String
+  phone: String
+}
+
+type CheckoutPickupLocation {
+  name: String!
+  address: CheckoutAddress!
+}
+
+type CheckoutShippingOption {
+  method: CheckoutShippingMethod!
+  charge: BigDecimal!
+  currency: String!
+  estimate: String!
+  supportedCountries: [String!]!
+  pickupLocation: CheckoutPickupLocation
+}
+
+type CheckoutLine {
+  productVariantId: ID!
+  productName: String!
+  sku: String!
+  attributes: JSON!
+  quantity: Int!
+  unitPrice: BigDecimal!
+  subtotal: BigDecimal!
+}
+
+type CheckoutTotals {
+  merchandiseSubtotal: BigDecimal!
+  shippingCharge: BigDecimal!
+  total: BigDecimal!
+  currency: String!
+}
+
+type CheckoutIssue {
+  code: String!
+  productVariantId: ID
+  message: String!
+}
+
+type CheckoutDetails {
+  contactEmail: String!
+  contactPhone: String
+  shippingAddress: CheckoutAddress
+  billingAddress: CheckoutAddress
+  shipping: CheckoutShippingOption!
+  paymentSelection: CheckoutPaymentSelection!
+  # Non-secret historical description, never a gateway credential.
+  paymentMethodType: PaymentMethodType
+}
+
+type CheckoutPreview {
+  quoteVersion: String!
+  placeable: Boolean!
+  lines: [CheckoutLine!]!
+  details: CheckoutDetails!
+  totals: CheckoutTotals!
+  issues: [CheckoutIssue!]!
+  availableShippingOptions: [CheckoutShippingOption!]!
+}
+
+# Immutable checkout facts plus live recovery state; no User or live catalog traversal.
+type CheckoutOrder {
+  publicId: UUID!
+  requestId: UUID!
+  status: OrderStatus!
+  cancellationReason: String
+  cancellationEligibility: OrderCancellationEligibility!
+  cancellation: OrderCancellation
+  payment: OrderPayment!
+  refund: OrderRefund!
+  lines: [CheckoutLine!]!
+  details: CheckoutDetails!
+  totals: CheckoutTotals!
+  createdAt: Instant!
+  paymentInteraction: String!
+}
+
+extend type Query {
+  checkoutShippingOptions(countryCode: String): [CheckoutShippingOption!]!
+  checkoutPreview(input: CheckoutInput!): CheckoutPreview!
+  guestCheckoutPreview(input: CheckoutInput!): CheckoutPreview!
+  checkoutOrder(requestId: UUID!): CheckoutOrder
+  guestOrder(publicId: UUID, requestId: UUID): CheckoutOrder
+}
+
+extend type Mutation {
+  createGuestOrder(input: PlaceOrderInput!): CheckoutOrder!
+}

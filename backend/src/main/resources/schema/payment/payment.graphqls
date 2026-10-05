@@ -1,0 +1,46 @@
+enum OrderStatus {
+  PENDING
+  PAID
+  SHIPPING
+  COMPLETED
+  CANCELLED
+}
+
+# Shared with User.paymentMethods; keep it here so both domains reference one definition.
+enum PaymentMethodType {
+  CARD
+  BANK_TRANSFER
+  DIGITAL_WALLET
+  CASH_ON_DELIVERY
+}
+
+type Order {
+  id: ID!
+  publicId: UUID!
+  user: User
+  # Null for legacy orders with unavailable historical checkout information.
+  checkout: CheckoutOrder
+  items: [OrderItem!]!
+  status: OrderStatus!
+  totalAmount: BigDecimal!
+  # Only set when status is CANCELLED; distinguishes an automatic
+  # payment-failure cancellation from a customer/staff cancellation. Null
+  # otherwise.
+  cancellationReason: String
+  cancellationEligibility: OrderCancellationEligibility!
+  cancellation: OrderCancellation
+  payment: OrderPayment!
+  refund: OrderRefund!
+  createdAt: Instant!
+  updatedAt: Instant!
+}
+
+type OrderItem {
+  id: ID!
+  publicId: UUID!
+  order: Order!
+  productVariant: ProductVariant!
+  quantity: Int!
+  priceAtPurchase: BigDecimal!
+  snapshot: CheckoutLine
+}
