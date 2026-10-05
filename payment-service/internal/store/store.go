@@ -7,6 +7,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -23,7 +24,7 @@ import (
 var migrationsFS embed.FS
 
 // Store wraps a Postgres connection pool for the Payment Service's own
-// schema (payments, payment_outbox).
+// schema (payments, refunds, shared outbox and simulated provider ledger).
 type Store struct {
 	pool *pgxpool.Pool
 }
@@ -107,6 +108,10 @@ func (s *Store) SaveRequested(ctx context.Context, p domain.Payment) (SaveReques
 	if err != nil {
 		return SaveRequestedResult{}, fmt.Errorf("store: load existing payment after conflict: %w", err)
 	}
+	if existing.OrderID != p.OrderID || !reflect.DeepEqual(existing.UserID, p.UserID) ||
+		existing.AmountCents != p.AmountCents || existing.Currency != p.Currency {
+		return SaveRequestedResult{}, ErrConflict
+	}
 	return SaveRequestedResult{Inserted: false, Payment: existing}, nil
 }
 
@@ -114,7 +119,7 @@ func (s *Store) SaveRequested(ctx context.Context, p domain.Payment) (SaveReques
 func (s *Store) GetByRequestEventID(ctx context.Context, requestEventID uuid.UUID) (domain.Payment, error) {
 	return s.scanOne(ctx, `
 		SELECT id, request_event_id, order_id, user_id, amount_cents, currency, status,
-		       coalesce(failure_reason, ''), created_at, updated_at
+		       coalesce(failure_reason, ''), coalesce(provider_transaction_id, ''), created_at, updated_at
 		FROM payments WHERE request_event_id = $1
 	`, requestEventID)
 }
@@ -123,7 +128,7 @@ func (s *Store) GetByRequestEventID(ctx context.Context, requestEventID uuid.UUI
 func (s *Store) GetByID(ctx context.Context, id uuid.UUID) (domain.Payment, error) {
 	return s.scanOne(ctx, `
 		SELECT id, request_event_id, order_id, user_id, amount_cents, currency, status,
-		       coalesce(failure_reason, ''), created_at, updated_at
+		       coalesce(failure_reason, ''), coalesce(provider_transaction_id, ''), created_at, updated_at
 		FROM payments WHERE id = $1
 	`, id)
 }
@@ -132,7 +137,7 @@ func (s *Store) scanOne(ctx context.Context, query string, arg any) (domain.Paym
 	var p domain.Payment
 	err := s.pool.QueryRow(ctx, query, arg).Scan(
 		&p.ID, &p.RequestEventID, &p.OrderID, &p.UserID, &p.AmountCents, &p.Currency, &p.Status,
-		&p.FailureReason, &p.CreatedAt, &p.UpdatedAt,
+		&p.FailureReason, &p.ProviderTransactionID, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		return domain.Payment{}, err
@@ -162,6 +167,16 @@ func (s *Store) RecordResultAndEnqueue(
 	topic string,
 	payload []byte,
 ) error {
+	return s.RecordPaymentResultAndEnqueue(ctx, paymentID, status, failureReason, "", topic, payload)
+}
+
+func (s *Store) RecordPaymentResultAndEnqueue(
+	ctx context.Context, paymentID uuid.UUID, status domain.Status,
+	failureReason, providerTransactionID, topic string, payload []byte,
+) error {
+	if status != domain.StatusSucceeded && status != domain.StatusFailed {
+		return ErrConflict
+	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("store: begin tx: %w", err)
@@ -170,9 +185,10 @@ func (s *Store) RecordResultAndEnqueue(
 
 	tag, err := tx.Exec(ctx, `
 		UPDATE payments
-		SET status = $1, failure_reason = $2, updated_at = now()
+		SET status = $1, failure_reason = $2, provider_transaction_id = $5,
+		    unresolved_reason = NULL, updated_at = now()
 		WHERE id = $3 AND status = $4
-	`, status, nullIfEmpty(failureReason), paymentID, domain.StatusRequested)
+	`, status, nullIfEmpty(failureReason), paymentID, domain.StatusRequested, nullIfEmpty(providerTransactionID))
 	if err != nil {
 		return fmt.Errorf("store: update payment status: %w", err)
 	}

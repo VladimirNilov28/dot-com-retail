@@ -1,6 +1,5 @@
-// Package kafka contains the Payment Service's Kafka consumer (processes
-// payment.requested) and outbox publisher (publishes payment.succeeded /
-// payment.failed). Both are built on segmentio/kafka-go.
+// Package kafka contains independent payment/refund request consumers and
+// the shared result/progress outbox publisher, built on segmentio/kafka-go.
 package kafka
 
 import (
@@ -40,13 +39,15 @@ const transientRetryDelay = 500 * time.Millisecond
 // result via the transactional outbox (never publishing to Kafka directly
 // from here).
 type RequestConsumer struct {
-	reader    requestReader
-	dlqWriter *kafkago.Writer
-	store     *store.Store
-	provider  provider.Provider
-	logger    *slog.Logger
-	closed    context.Context
-	cancel    context.CancelFunc
+	reader        requestReader
+	dlqWriter     *kafkago.Writer
+	store         *store.Store
+	provider      provider.Provider
+	logger        *slog.Logger
+	closed        context.Context
+	cancel        context.CancelFunc
+	handleMessage func(context.Context, kafkago.Message) outcome
+	topic         string
 }
 
 type requestReader interface {
@@ -64,17 +65,23 @@ func NewRequestConsumer(
 	p provider.Provider,
 	logger *slog.Logger,
 ) *RequestConsumer {
+	return newRequestConsumer(brokers, groupID, events.PaymentRequested, s, p, logger)
+}
+
+func newRequestConsumer(
+	brokers []string, groupID, topic string, s *store.Store, p provider.Provider, logger *slog.Logger,
+) *RequestConsumer {
 	reader := kafkago.NewReader(kafkago.ReaderConfig{
 		Brokers:     brokers,
 		GroupID:     groupID,
-		Topic:       events.PaymentRequested,
+		Topic:       topic,
 		MinBytes:    1,
 		MaxBytes:    10e6,
 		StartOffset: kafkago.FirstOffset,
 	})
 	dlqWriter := &kafkago.Writer{
 		Addr:                   kafkago.TCP(brokers...),
-		Topic:                  events.PaymentRequested + DLQSuffix,
+		Topic:                  topic + DLQSuffix,
 		Balancer:               &kafkago.LeastBytes{},
 		RequiredAcks:           kafkago.RequireAll,
 		AllowAutoTopicCreation: true,
@@ -82,7 +89,7 @@ func NewRequestConsumer(
 	closed, cancel := context.WithCancel(context.Background())
 	return &RequestConsumer{
 		reader: reader, dlqWriter: dlqWriter, store: s, provider: p, logger: logger,
-		closed: closed, cancel: cancel,
+		closed: closed, cancel: cancel, topic: topic,
 	}
 }
 
@@ -118,7 +125,11 @@ func (c *RequestConsumer) Run(ctx context.Context) error {
 		// FetchMessage advances the live reader even without a commit.
 		// Keep this record until both durable handling and acknowledgement
 		// succeed; fetching a later same-partition offset could lose it.
-		for ctx.Err() == nil && c.handle(ctx, msg) == outcomeRetry {
+		handle := c.handle
+		if c.handleMessage != nil {
+			handle = c.handleMessage
+		}
+		for ctx.Err() == nil && handle(ctx, msg) == outcomeRetry {
 			if !waitForRetry(ctx) {
 				return nil
 			}
@@ -163,17 +174,17 @@ func (c *RequestConsumer) handle(ctx context.Context, msg kafkago.Message) outco
 			"error", err, "offset", msg.Offset, "partition", msg.Partition)
 		return c.sendToDLQ(ctx, msg, "malformed_json: "+err.Error())
 	}
-	if req.EventID == uuid.Nil || req.OrderID == 0 {
+	if req.EventID == uuid.Nil || req.OrderID <= 0 || !validCurrency(req.Currency) {
 		c.logger.Warn("invalid payment.requested message (missing eventId/orderId), routing to DLQ",
 			"offset", msg.Offset, "partition", msg.Partition)
 		return c.sendToDLQ(ctx, msg, "missing_required_fields")
 	}
 
 	amountCents, err := money.ParseCents(req.Amount.String())
-	if err != nil {
+	if err != nil || amountCents <= 0 {
 		c.logger.Warn("invalid amount in payment.requested message, routing to DLQ",
 			"error", err, "eventId", req.EventID, "orderId", req.OrderID)
-		return c.sendToDLQ(ctx, msg, "invalid_amount: "+err.Error())
+		return c.sendToDLQ(ctx, msg, "invalid_amount")
 	}
 
 	logger := c.logger.With("eventId", req.EventID, "orderId", req.OrderID,
@@ -188,6 +199,9 @@ func (c *RequestConsumer) handle(ctx context.Context, msg kafkago.Message) outco
 		Currency:       req.Currency,
 		Status:         domain.StatusRequested,
 	})
+	if errors.Is(err, store.ErrConflict) {
+		return c.sendToDLQ(ctx, msg, "immutable_payment_parameters_conflict")
+	}
 	if err != nil {
 		logger.Error("failed to persist payment request, will retry", "error", err)
 		return outcomeRetry
@@ -216,6 +230,21 @@ func (c *RequestConsumer) handle(ctx context.Context, msg kafkago.Message) outco
 		Currency:    payment.Currency,
 	})
 	if err != nil {
+		if errors.Is(err, store.ErrConflict) {
+			return c.sendToDLQ(ctx, msg, "provider_parameters_conflict")
+		}
+		if ctx.Err() == nil {
+			payload, marshalErr := json.Marshal(events.PaymentUnresolvedEvent{
+				EventID: uuid.New(), RequestEventID: payment.RequestEventID,
+				OrderID: payment.OrderID, PaymentID: payment.ID,
+				Reason: "provider_outcome_unknown", OccurredAt: eventtime.Now(),
+			})
+			if marshalErr != nil {
+				logger.Error("failed to marshal payment progress", "error", marshalErr)
+			} else if progressErr := c.store.RecordPaymentUnresolved(ctx, payment.ID, "provider_outcome_unknown", payload); progressErr != nil {
+				logger.Error("failed to record payment progress", "error", progressErr)
+			}
+		}
 		logger.Error("provider charge attempt failed transiently, will retry", "error", err, "paymentId", payment.ID)
 		return outcomeRetry
 	}
@@ -238,16 +267,17 @@ func (c *RequestConsumer) recordResult(
 	now := eventtime.Now()
 	if result.Approved {
 		payload, err := json.Marshal(events.PaymentSucceededEvent{
-			EventID:        uuid.New(),
-			RequestEventID: requestEventID,
-			OrderID:        payment.OrderID,
-			PaymentID:      payment.ID,
-			OccurredAt:     now,
+			EventID:               uuid.New(),
+			RequestEventID:        requestEventID,
+			OrderID:               payment.OrderID,
+			PaymentID:             payment.ID,
+			ProviderTransactionID: result.ProviderTransactionID,
+			OccurredAt:            now,
 		})
 		if err != nil {
 			return fmt.Errorf("marshal PaymentSucceededEvent: %w", err)
 		}
-		return c.store.RecordResultAndEnqueue(ctx, payment.ID, domain.StatusSucceeded, "", events.PaymentSucceeded, payload)
+		return c.store.RecordPaymentResultAndEnqueue(ctx, payment.ID, domain.StatusSucceeded, "", result.ProviderTransactionID, events.PaymentSucceeded, payload)
 	}
 
 	payload, err := json.Marshal(events.PaymentFailedEvent{
@@ -265,12 +295,19 @@ func (c *RequestConsumer) recordResult(
 }
 
 func (c *RequestConsumer) sendToDLQ(ctx context.Context, msg kafkago.Message, reason string) outcome {
+	topic := c.topic
+	if msg.Topic != "" {
+		topic = msg.Topic
+	}
+	if topic == "" {
+		topic = events.PaymentRequested
+	}
 	err := c.dlqWriter.WriteMessages(ctx, kafkago.Message{
 		Key:   msg.Key,
 		Value: msg.Value,
 		Headers: []kafkago.Header{
 			{Key: "x-dlq-reason", Value: []byte(reason)},
-			{Key: "x-original-topic", Value: []byte(events.PaymentRequested)},
+			{Key: "x-original-topic", Value: []byte(topic)},
 		},
 	})
 	if err != nil {
@@ -279,4 +316,16 @@ func (c *RequestConsumer) sendToDLQ(ctx context.Context, msg kafkago.Message, re
 		return outcomeRetry
 	}
 	return outcomeCommit
+}
+
+func validCurrency(currency string) bool {
+	if len(currency) != 3 {
+		return false
+	}
+	for _, c := range currency {
+		if c < 'A' || c > 'Z' {
+			return false
+		}
+	}
+	return true
 }

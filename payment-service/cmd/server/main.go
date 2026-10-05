@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -58,20 +59,37 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 
-	fakeProvider := provider.NewFakeProvider()
+	fakeProvider := provider.NewDurableProvider(db)
 
 	consumer := paymentkafka.NewRequestConsumer(cfg.KafkaBrokers, cfg.ConsumerGroupID, db, fakeProvider, logger)
 	defer func() { _ = consumer.Close() }()
+
+	refunds := paymentkafka.NewRefundConsumer(cfg.KafkaBrokers, cfg.ConsumerGroupID, db, fakeProvider, logger)
+	defer func() { _ = refunds.Close() }()
 
 	publisher := paymentkafka.NewOutboxPublisher(
 		cfg.KafkaBrokers, db, time.Duration(cfg.OutboxPollIntervalMillis)*time.Millisecond, logger,
 	)
 	defer func() { _ = publisher.Close() }()
 
-	go publisher.Run(ctx)
+	var workers sync.WaitGroup
+	workers.Add(3)
 	go func() {
+		defer workers.Done()
+		publisher.Run(ctx)
+	}()
+	go func() {
+		defer workers.Done()
 		if err := consumer.Run(ctx); err != nil {
 			logger.Error("payment.requested consumer stopped with error", "error", err)
+			stop()
+		}
+	}()
+	go func() {
+		defer workers.Done()
+		if err := refunds.Run(ctx); err != nil {
+			logger.Error("refund.requested consumer stopped with error", "error", err)
+			stop()
 		}
 	}()
 
@@ -90,6 +108,7 @@ func run(logger *slog.Logger) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = httpServer.Shutdown(shutdownCtx)
+	workers.Wait()
 
 	return nil
 }

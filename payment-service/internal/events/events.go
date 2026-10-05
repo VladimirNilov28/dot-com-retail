@@ -16,9 +16,14 @@ import (
 // Topics are the Kafka topic names used for backend<->Payment Service
 // communication, matching ee.bytecore.backend.integration.payment.PaymentTopics.
 const (
-	PaymentRequested = "payment.requested"
-	PaymentSucceeded = "payment.succeeded"
-	PaymentFailed    = "payment.failed"
+	PaymentRequested  = "payment.requested"
+	PaymentSucceeded  = "payment.succeeded"
+	PaymentFailed     = "payment.failed"
+	PaymentUnresolved = "payment.unresolved"
+	RefundRequested   = "refund.requested"
+	RefundSucceeded   = "refund.succeeded"
+	RefundFailed      = "refund.failed"
+	RefundUnresolved  = "refund.unresolved"
 )
 
 // PaymentRequestedEvent mirrors
@@ -37,11 +42,12 @@ type PaymentRequestedEvent struct {
 // PaymentSucceededEvent mirrors
 // ee.bytecore.backend.integration.payment.event.PaymentSucceededEvent.
 type PaymentSucceededEvent struct {
-	EventID        uuid.UUID         `json:"eventId"`
-	RequestEventID uuid.UUID         `json:"requestEventId"`
-	OrderID        int64             `json:"orderId"`
-	PaymentID      uuid.UUID         `json:"paymentId"`
-	OccurredAt     eventtime.Instant `json:"occurredAt"`
+	EventID               uuid.UUID         `json:"eventId"`
+	RequestEventID        uuid.UUID         `json:"requestEventId"`
+	OrderID               int64             `json:"orderId"`
+	PaymentID             uuid.UUID         `json:"paymentId"`
+	ProviderTransactionID string            `json:"providerTransactionId,omitempty"`
+	OccurredAt            eventtime.Instant `json:"occurredAt"`
 }
 
 // PaymentFailedEvent mirrors
@@ -54,3 +60,40 @@ type PaymentFailedEvent struct {
 	Reason         string            `json:"reason"`
 	OccurredAt     eventtime.Instant `json:"occurredAt"`
 }
+
+type PaymentUnresolvedEvent PaymentFailedEvent
+
+type RefundRequestedEvent struct {
+	EventID               uuid.UUID         `json:"eventId"`
+	RefundID              uuid.UUID         `json:"refundId"`
+	RequestEventID        uuid.UUID         `json:"requestEventId"`
+	OrderID               int64             `json:"orderId"`
+	PaymentID             uuid.UUID         `json:"paymentId"`
+	Amount                json.Number       `json:"amount"`
+	Currency              string            `json:"currency"`
+	ProviderTransactionID string            `json:"providerTransactionId,omitempty"`
+	OccurredAt            eventtime.Instant `json:"occurredAt"`
+}
+
+type RefundSucceededEvent struct {
+	EventID               uuid.UUID         `json:"eventId"`
+	RequestEventID        uuid.UUID         `json:"requestEventId"`
+	RefundID              uuid.UUID         `json:"refundId"`
+	OrderID               int64             `json:"orderId"`
+	PaymentID             uuid.UUID         `json:"paymentId"`
+	ProviderTransactionID string            `json:"providerTransactionId,omitempty"`
+	OccurredAt            eventtime.Instant `json:"occurredAt"`
+}
+
+type RefundFailedEvent struct {
+	EventID               uuid.UUID         `json:"eventId"`
+	RequestEventID        uuid.UUID         `json:"requestEventId"`
+	RefundID              uuid.UUID         `json:"refundId"`
+	OrderID               int64             `json:"orderId"`
+	PaymentID             uuid.UUID         `json:"paymentId"`
+	ProviderTransactionID string            `json:"providerTransactionId,omitempty"`
+	Reason                string            `json:"reason"`
+	OccurredAt            eventtime.Instant `json:"occurredAt"`
+}
+
+type RefundUnresolvedEvent = RefundFailedEvent

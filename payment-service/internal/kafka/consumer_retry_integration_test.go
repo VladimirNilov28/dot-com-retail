@@ -206,20 +206,36 @@ func (f *retryFixture) offset(t *testing.T, topic, group string) int64 {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	client := &kafkago.Client{Addr: kafkago.TCP(f.brokers...)}
-	res, err := client.OffsetFetch(ctx, &kafkago.OffsetFetchRequest{
-		GroupID: group, Topics: map[string][]int{topic: {0}},
-	})
-	if err != nil {
-		t.Fatal(err)
+	for {
+		res, err := client.OffsetFetch(ctx, &kafkago.OffsetFetchRequest{
+			GroupID: group, Topics: map[string][]int{topic: {0}},
+		})
+		if err == nil {
+			err = res.Error
+		}
+		if err == nil {
+			partitions := res.Topics[topic]
+			if len(partitions) != 1 {
+				t.Fatalf("unexpected offset response: %+v", res)
+			}
+			err = partitions[0].Error
+			if err == nil {
+				return partitions[0].CommittedOffset
+			}
+		}
+		// A freshly started real broker may still be assigning its group
+		// coordinator. Retry the observation, never invent a committed offset.
+		if !errors.Is(err, kafkago.GroupLoadInProgress) &&
+			!errors.Is(err, kafkago.GroupCoordinatorNotAvailable) &&
+			!errors.Is(err, kafkago.NotCoordinatorForGroup) {
+			t.Fatal(err)
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("Kafka offset coordinator did not become ready: %v", err)
+		case <-time.After(20 * time.Millisecond):
+		}
 	}
-	if res.Error != nil {
-		t.Fatal(res.Error)
-	}
-	partitions := res.Topics[topic]
-	if len(partitions) != 1 || partitions[0].Error != nil {
-		t.Fatalf("unexpected offset response: %+v", res)
-	}
-	return partitions[0].CommittedOffset
 }
 
 func awaitRetry(t *testing.T, description string, condition func() bool) {

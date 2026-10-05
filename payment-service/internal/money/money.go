@@ -6,6 +6,7 @@ package money
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 )
@@ -46,6 +47,9 @@ func ParseCents(amount string) (int64, error) {
 	fracVal, err := strconv.ParseInt(frac, 10, 63)
 	if err != nil {
 		return 0, fmt.Errorf("money: invalid amount %q: %w", amount, err)
+	}
+	if wholeVal < 0 || fracVal < 0 || fracVal > 99 || wholeVal > (math.MaxInt64-fracVal)/100 {
+		return 0, fmt.Errorf("money: amount %q is invalid or exceeds the cents range", amount)
 	}
 
 	cents := wholeVal*100 + fracVal

@@ -100,13 +100,13 @@ func assertOneChargeAndResult(t *testing.T, f *retryFixture, requestID uuid.UUID
 	err = f.sql.QueryRow(context.Background(), `
 		SELECT (SELECT count(*) FROM payments WHERE request_event_id=$1),
 		       (SELECT count(*) FROM gateway_charges WHERE order_id=$2),
-		       (SELECT count(*) FROM payment_outbox WHERE payment_id=$3)
+		       (SELECT count(*) FROM payment_outbox WHERE payment_id=$3 AND topic IN ('payment.succeeded','payment.failed'))
 	`, requestID, payment.OrderID, payment.ID).Scan(&payments, &charges, &results)
 	if err != nil || payments != 1 || charges != 1 || results != 1 {
 		t.Fatalf("logical effects: payments=%d charges=%d results=%d error=%v", payments, charges, results, err)
 	}
 	var payload []byte
-	if err := f.sql.QueryRow(context.Background(), "SELECT payload FROM payment_outbox WHERE payment_id=$1", payment.ID).Scan(&payload); err != nil {
+	if err := f.sql.QueryRow(context.Background(), "SELECT payload FROM payment_outbox WHERE payment_id=$1 AND topic=$2", payment.ID, events.PaymentSucceeded).Scan(&payload); err != nil {
 		t.Fatal(err)
 	}
 	var result events.PaymentSucceededEvent
@@ -217,6 +217,12 @@ func TestRequestConsumerProviderIdempotency(t *testing.T) {
 		runRetryConsumer(t, c)
 		awaitRetry(t, "lost gateway response converges", func() bool { return f.offset(t, topic, group) == 1 })
 		p.assertIdentity(t, assertOneChargeAndResult(t, f, req.EventID), 2)
+		var progress int
+		if err := f.sql.QueryRow(context.Background(), `SELECT count(*) FROM payment_outbox
+			WHERE topic=$1 AND payment_id=(SELECT id FROM payments WHERE request_event_id=$2)`,
+			events.PaymentUnresolved, req.EventID).Scan(&progress); err != nil || progress != 1 {
+			t.Fatalf("uncertainty must emit exactly one nonterminal result: progress=%d error=%v", progress, err)
+		}
 	})
 
 	t.Run("offset_failure_then_redelivery", func(t *testing.T) {

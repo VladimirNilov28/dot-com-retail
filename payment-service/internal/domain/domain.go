@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// Status is the lifecycle state of a Payment row.
+// Status is the lifecycle state of a Payment or Refund row.
 type Status string
 
 const (
@@ -23,14 +23,37 @@ const (
 // idempotency identity; database uniqueness alone cannot deduplicate remote
 // charges while a payment remains REQUESTED.
 type Payment struct {
-	ID             uuid.UUID
-	RequestEventID uuid.UUID
-	OrderID        int64
-	UserID         *int64
-	AmountCents    int64
-	Currency       string
-	Status         Status
-	FailureReason  string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	ID                    uuid.UUID
+	RequestEventID        uuid.UUID
+	OrderID               int64
+	UserID                *int64
+	AmountCents           int64
+	Currency              string
+	Status                Status
+	FailureReason         string
+	ProviderTransactionID string
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
+}
+
+type Refund struct {
+	ID                            uuid.UUID
+	RequestEventID                uuid.UUID
+	OriginalRequestEventID        uuid.UUID
+	PaymentID                     uuid.UUID
+	OrderID                       int64
+	AmountCents                   int64
+	Currency                      string
+	OriginalProviderTransactionID string
+	ProviderTransactionID         string
+	Status                        Status
+	FailureReason                 string
+}
+
+// ProviderOutcome is a durable simulator outcome, not proof of a real
+// gateway transaction.
+type ProviderOutcome struct {
+	Approved              bool
+	Reason                string
+	ProviderTransactionID string
 }

@@ -9,12 +9,18 @@ import (
 )
 
 // Topics lists every Kafka topic the Payment Service produces to or
-// consumes from: the request topic, its DLQ, and both result topics.
+// consumes from: charge/refund requests, their DLQs, results and progress.
 var Topics = []string{
 	events.PaymentRequested,
 	events.PaymentRequested + DLQSuffix,
 	events.PaymentSucceeded,
 	events.PaymentFailed,
+	events.PaymentUnresolved,
+	events.RefundRequested,
+	events.RefundRequested + DLQSuffix,
+	events.RefundSucceeded,
+	events.RefundFailed,
+	events.RefundUnresolved,
 }
 
 // EnsureTopics explicitly creates every topic in Topics (idempotently -

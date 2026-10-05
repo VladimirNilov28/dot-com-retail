@@ -22,7 +22,8 @@ type ChargeRequest struct {
 
 // ChargeResult is the outcome of a charge attempt.
 type ChargeResult struct {
-	Approved bool
+	Approved              bool
+	ProviderTransactionID string
 	// Reason is a short, safe-to-log decline description when Approved is
 	// false (never raw provider/gateway secrets).
 	Reason string
@@ -41,4 +42,19 @@ type ChargeResult struct {
 // tokens, card data or raw gateway response bodies.
 type Provider interface {
 	ChargeIdempotently(ctx context.Context, paymentID uuid.UUID, req ChargeRequest) (ChargeResult, error)
+}
+
+type RefundRequest struct {
+	PaymentID             uuid.UUID
+	OrderID               int64
+	AmountCents           int64
+	Currency              string
+	ProviderTransactionID string
+}
+
+// RefundProvider must retain the original outcome for a refund UUID and
+// reject changed parameters or another UUID for the same full refund.
+// Errors mean uncertainty; Approved=false without an error is definitive.
+type RefundProvider interface {
+	RefundIdempotently(context.Context, uuid.UUID, RefundRequest) (ChargeResult, error)
 }

@@ -22,7 +22,7 @@ Spring backend (OrderService.createOrder, same DB tx)
   simple two-stage `golang:alpine` -> `alpine` image (no librdkafka to
   compile/ship, unlike `confluent-kafka-go`).
 - **`jackc/pgx/v5`** - the standard high-performance native Postgres driver
-  for Go; used directly (no ORM) since the schema here is two small tables.
+  for Go; used directly (no ORM).
 - **`golang-migrate/migrate`** - schema migrations embedded into the binary
   (`internal/store/migrations/*.sql` via `//go:embed`), applied idempotently
   on every startup (including restarts).
@@ -58,12 +58,14 @@ redirect, card collection, client secret or synchronous PAID response.
   All adapters must atomically deduplicate concurrent/restarted calls at the
   gateway and return the original result. Changed parameters for a key must
   fail closed. The development fake rejects missing keys/changed parameters
-  and memoizes outcomes, but performs no financial side effects.
+  and memoizes outcomes, but performs no financial side effects. Runtime now
+  uses the durable simulator described below, not this in-memory test fake.
 - Result events (`payment.succeeded`/`payment.failed`) are **never**
   published directly from the request-processing transaction. Instead the
   status update and the outbox row are written in one DB transaction
   (`Store.RecordResultAndEnqueue`), and a separate poller
-  (`kafka.OutboxPublisher`) publishes unpublished rows to Kafka afterwards.
+  (`kafka.OutboxPublisher`) publishes unpublished rows to Kafka afterwards,
+  synchronously awaiting `RequireAll` acknowledgements before marking published.
   This is the transactional outbox pattern - the same pattern used on the
   Spring side - and avoids the dual-write hazard (DB commit succeeds, Kafka
   publish fails, or vice versa) without XA/distributed transactions.
@@ -102,12 +104,125 @@ financial outcome; it does not independently prove a provider charge.
 
 ## Fake payment provider
 
-`internal/provider.FakeProvider` is deterministic: it **declines whenever the
+`internal/provider.DurableProvider` is the runtime simulator. It **declines whenever the
 charged amount's cents component equals `13`** (e.g. `10.13`), and approves
 everything else. No real provider is integrated in this milestone. Nothing in
 `ChargeRequest`/`ChargeResult` carries card/PAN/CVV data - there is no such
-field to store or log, by design. Its in-memory outcome cache is a development
-simulation only; it is not the source of restart safety for a real gateway.
+field to store or log, by design. The immutable `provider_ledger` in the existing
+Payment Service database records simulated charge/refund identities, parameters,
+outcomes and `sim-charge-<uuid>` / `sim-refund-<uuid>` references. Each operation
+commits **independently** before the consumer's result/outbox transaction; a
+rollback, lost response, duplicate delivery or process restart cannot erase its
+effect. This is simulation evidence only, never proof of a real financial
+transaction. `FakeProvider` remains an in-memory helper for existing unit tests.
+Valid full refunds of successful simulated charges are approved; `.13` is a
+charge-only decline rule. Definitive refund rejection is tested through an
+injected provider response, without inventing a second simulator decline rule.
+
+## Full refunds and uncertainty
+
+Spring persists distinct, stable refund UUID and refund-request event UUID, and
+publishes `refund.requested` for a cancelled order with a confirmed successful
+charge. Go validates the original successful Payment, original payment request
+UUID, order, **full original amount including shipping**, currency and optional
+original provider reference before calling the provider. No client-supplied
+amount can override the original Payment. Failed/pending/missing originals,
+partial amounts and altered duplicate parameters go to `refund.requested.dlq`.
+
+One `refunds` row and one simulated refund ledger operation are allowed per
+original Payment, with immutable binding. Replays resume the same refund UUID.
+A confirmed failure is terminal and does not permit another refund/key. The
+charge remains SUCCEEDED after either refund outcome.
+
+| Attempt | Durable state | Result |
+|---|---|---|
+| Persisted request | REQUESTED | None |
+| Unknown provider response | REQUESTED + unresolved metadata | `refund.unresolved`, once per unresolved phase |
+| Confirmed approval | SUCCEEDED | `refund.succeeded` |
+| Confirmed rejection | FAILED | `refund.failed` |
+| Result/outbox persistence fails | REQUESTED | Same UUID retries the original provider outcome |
+| Duplicate terminal request | Unchanged | No provider call / no second outbox row |
+
+`payment.unresolved` similarly reports an unknown charge outcome without claiming
+a decline. Progress and terminal events use the existing durable `payment_outbox`;
+its nullable `refund_id` retains refund correlation. Terminal/progress
+transactions serialize on their own record. Late progress cannot downgrade a
+terminal outcome, including when separate topics deliver progress after success.
+Spring must also retain this finality when consuming results out of order.
+
+The refund reader has its own consumer group, `<KAFKA_CONSUMER_GROUP>-refunds`,
+independent of the charge reader. An unresolved charge cannot block refunds.
+An unresolved refund deliberately blocks its refund reader until recovery; no
+offset advances over unresolved work. The existing 500ms retry, synchronous
+RequireAll DLQ acknowledgement, commit retry and shutdown conventions apply to
+both readers. All request/result/progress/DLQ topics are bootstrapped by the Go
+server, so no broker auto-creation or infrastructure edit is required.
+
+### Kafka contracts
+
+`refund.requested`:
+
+```json
+{
+  "eventId": "10000000-0000-0000-0000-000000000001",
+  "refundId": "20000000-0000-0000-0000-000000000001",
+  "requestEventId": "30000000-0000-0000-0000-000000000001",
+  "orderId": 42,
+  "paymentId": "40000000-0000-0000-0000-000000000001",
+  "amount": 54.98,
+  "currency": "EUR",
+  "providerTransactionId": "sim-charge-40000000-0000-0000-0000-000000000001",
+  "occurredAt": "2026-10-05T13:00:00Z"
+}
+```
+
+The request's `requestEventId` identifies the **original payment request**.
+Result/progress `requestEventId` instead identifies the **refund request eventId**:
+
+```json
+{
+  "eventId": "50000000-0000-0000-0000-000000000001",
+  "requestEventId": "10000000-0000-0000-0000-000000000001",
+  "refundId": "20000000-0000-0000-0000-000000000001",
+  "orderId": 42,
+  "paymentId": "40000000-0000-0000-0000-000000000001",
+  "providerTransactionId": "sim-refund-20000000-0000-0000-0000-000000000001",
+  "occurredAt": "2026-10-05T13:00:01Z"
+}
+```
+
+This is `refund.succeeded`; `refund.failed` and `refund.unresolved` have the same
+identities plus `reason` and an optional refund provider reference.
+`payment.succeeded` adds optional `providerTransactionId` without requiring it
+in old payloads. `payment.unresolved` has `eventId`, original `requestEventId`,
+`orderId`, `paymentId`, `reason`, and `occurredAt`.
+
+### Migration/rollout and limitations
+
+1. Coordinate a checkout/cancellation maintenance window; deploy Go before
+   enabling Spring's new refund/progress producer/listener behavior.
+2. Back up and preserve the Payment Service database and existing Kafka offsets.
+   Startup applies additive embedded `0003_refunds_provider_ledger`, after the
+   unchanged `0001`/`0002`, on both fresh databases and upgrades.
+3. Migration seeds labelled historical simulator charge outcomes **only** from
+   authoritative Go SUCCEEDED/FAILED Payment records, preserving the recorded
+   outcome rather than re-evaluating `.13`. Pending records remain unproven.
+   It does not rewrite old result payloads or invent real provider proof.
+   A missing historical provider reference resolves via the original Payment UUID.
+4. Deploy coordinated Spring listeners/migrations and verify refund correlation
+   and progress finality. Replay original durable Go result outbox payloads/IDs
+   when reconciling legacy missed results; never re-charge or fabricate identities.
+5. Resume traffic after a simulated charge/cancel/full-refund smoke test.
+
+Retain ledger keys/outcomes for the entire redelivery/recovery lifetime. Do not
+reset volumes or delete financial history as a rollout/recovery step. The down
+migration is destructive and is for disposable test databases, not live rollback.
+There is no real gateway, partial refund, financial state assignment API, or
+charge suppression coordinated with Spring cancellation. Cancellation during a
+queued/in-flight charge may still charge and subsequently refund. Actual
+production provider retention/reconciliation/credential integration remains
+unimplemented and requires independent certification. Neither an order label
+nor the simulator ledger proves an external financial transaction.
 
 ## Failure handling
 
@@ -187,6 +302,36 @@ GOMAXPROCS=2 go test -p 2 ./internal/kafka -run '^TestRequestConsumer'
 # lost gateway response, Kafka acknowledgment failure and concurrent duplicates
 GOMAXPROCS=2 go test -race -p 2 ./internal/kafka -run '^TestRequestConsumerProviderIdempotency$'
 
+# Full refund/runtime-ledger, independent consumer offsets, finality and migration upgrade
+go test -race ./internal/events ./internal/store ./internal/kafka \
+  -run 'TestRefund|TestPaymentSucceededLegacy|TestDurableProviderRefundLedger|TestIndependentRefundConsumer'
+
+# Charge/refund regressions (including real Kafka offsets and isolated migration fixtures)
+go test -race ./internal/events ./internal/eventtime ./internal/money ./internal/provider ./internal/store ./internal/kafka
+go vet ./...
+gofmt -l cmd internal
+
 # Everything
 go test ./...
+```
+
+When Go is missing, a pinned CGO-capable toolchain container can run these
+fixtures without changing dependencies or the running Compose stack. From
+`payment-service/` on Linux:
+
+```bash
+docker run --rm --network host \
+  -v "$PWD:/work" -v /var/run/docker.sock:/var/run/docker.sock \
+  -v payment-go-mod:/go/pkg/mod -v payment-go-build:/root/.cache/go-build \
+  -w /work -e TMPDIR=/work/.test-tmp -e TESTCONTAINERS_HOST_OVERRIDE=localhost \
+  golang:1.25.11-bookworm sh -c \
+  'mkdir -p .test-tmp && go test -race ./internal/events ./internal/eventtime ./internal/money ./internal/provider ./internal/store ./internal/kafka && go vet ./...'
+```
+
+This uses Docker daemon access and host networking for disposable Testcontainers
+fixtures, not the shared Compose services. The compiler scratch directory is
+inside the project. After tests finish, remove just that generated directory:
+
+```bash
+docker run --rm -v "$PWD:/work" golang:1.25.11-bookworm rm -rf /work/.test-tmp
 ```

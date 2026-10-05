@@ -28,6 +28,7 @@ func NewOutboxPublisher(brokers []string, s *store.Store, pollInterval time.Dura
 	writer := &kafkago.Writer{
 		Addr:                   kafkago.TCP(brokers...),
 		Balancer:               &kafkago.LeastBytes{},
+		RequiredAcks:           kafkago.RequireAll,
 		AllowAutoTopicCreation: true,
 	}
 	return &OutboxPublisher{writer: writer, store: s, logger: logger, pollInterval: pollInterval, batchSize: 50}
