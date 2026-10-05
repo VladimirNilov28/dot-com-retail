@@ -26,7 +26,7 @@ type Payment struct {
 	ID             uuid.UUID
 	RequestEventID uuid.UUID
 	OrderID        int64
-	UserID         int64
+	UserID         *int64
 	AmountCents    int64
 	Currency       string
 	Status         Status

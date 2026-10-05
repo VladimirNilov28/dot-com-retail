@@ -189,8 +189,9 @@ func (f *retryFixture) write(t *testing.T, topic string, values ...[]byte) {
 
 func requestedBytes(t *testing.T, orderID int64) (events.PaymentRequestedEvent, []byte) {
 	t.Helper()
+	userID := int64(1)
 	req := events.PaymentRequestedEvent{
-		EventID: uuid.New(), OrderID: orderID, UserID: 1,
+		EventID: uuid.New(), OrderID: orderID, UserID: &userID,
 		Amount: json.Number("20.00"), Currency: "EUR", OccurredAt: eventtime.Now(),
 	}
 	b, err := json.Marshal(req)

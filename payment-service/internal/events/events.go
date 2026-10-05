@@ -28,7 +28,7 @@ const (
 type PaymentRequestedEvent struct {
 	EventID    uuid.UUID         `json:"eventId"`
 	OrderID    int64             `json:"orderId"`
-	UserID     int64             `json:"userId"`
+	UserID     *int64            `json:"userId"`
 	Amount     json.Number       `json:"amount"`
 	Currency   string            `json:"currency"`
 	OccurredAt eventtime.Instant `json:"occurredAt"`
@@ -37,20 +37,20 @@ type PaymentRequestedEvent struct {
 // PaymentSucceededEvent mirrors
 // ee.bytecore.backend.integration.payment.event.PaymentSucceededEvent.
 type PaymentSucceededEvent struct {
-	EventID        uuid.UUID        `json:"eventId"`
-	RequestEventID uuid.UUID        `json:"requestEventId"`
-	OrderID        int64            `json:"orderId"`
-	PaymentID      uuid.UUID        `json:"paymentId"`
+	EventID        uuid.UUID         `json:"eventId"`
+	RequestEventID uuid.UUID         `json:"requestEventId"`
+	OrderID        int64             `json:"orderId"`
+	PaymentID      uuid.UUID         `json:"paymentId"`
 	OccurredAt     eventtime.Instant `json:"occurredAt"`
 }
 
 // PaymentFailedEvent mirrors
 // ee.bytecore.backend.integration.payment.event.PaymentFailedEvent.
 type PaymentFailedEvent struct {
-	EventID        uuid.UUID        `json:"eventId"`
-	RequestEventID uuid.UUID        `json:"requestEventId"`
-	OrderID        int64            `json:"orderId"`
-	PaymentID      uuid.UUID        `json:"paymentId"`
-	Reason         string           `json:"reason"`
+	EventID        uuid.UUID         `json:"eventId"`
+	RequestEventID uuid.UUID         `json:"requestEventId"`
+	OrderID        int64             `json:"orderId"`
+	PaymentID      uuid.UUID         `json:"paymentId"`
+	Reason         string            `json:"reason"`
 	OccurredAt     eventtime.Instant `json:"occurredAt"`
 }

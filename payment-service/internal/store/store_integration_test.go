@@ -54,11 +54,12 @@ func newTestStore(t *testing.T) *store.Store {
 }
 
 func newPayment(orderID int64) domain.Payment {
+	userID := int64(1)
 	return domain.Payment{
 		ID:             uuid.New(),
 		RequestEventID: uuid.New(),
 		OrderID:        orderID,
-		UserID:         1,
+		UserID:         &userID,
 		AmountCents:    3998,
 		Currency:       "EUR",
 		Status:         domain.StatusRequested,
@@ -74,11 +75,32 @@ func TestSaveRequested_FreshInsert(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SaveRequested returned error: %v", err)
 	}
+
 	if !result.Inserted {
 		t.Fatalf("expected fresh insert, got Inserted=false")
 	}
 	if result.Payment.Status != domain.StatusRequested {
 		t.Fatalf("expected status REQUESTED, got %s", result.Payment.Status)
+	}
+}
+
+func TestSaveRequested_GuestOwnershipSurvivesReloadAndReplay(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	p := newPayment(6001)
+	p.UserID = nil
+	first, err := s.SaveRequested(ctx, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := s.GetByID(ctx, first.Payment.ID)
+	if err != nil || reloaded.UserID != nil {
+		t.Fatalf("guest ownership not preserved: %#v, %v", reloaded.UserID, err)
+	}
+	p.ID = uuid.New()
+	replayed, err := s.SaveRequested(ctx, p)
+	if err != nil || replayed.Inserted || replayed.Payment.ID != first.Payment.ID || replayed.Payment.UserID != nil {
+		t.Fatalf("guest replay did not retain original payment: %#v, %v", replayed, err)
 	}
 }
 

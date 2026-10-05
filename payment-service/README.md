@@ -36,6 +36,15 @@ Spring backend (OrderService.createOrder, same DB tx)
 
 ## Persistence & idempotency
 
+Guest checkout sends `userId: null`; request/domain/pgx persistence preserve
+that null rather than inventing a numeric user or account. Migration
+`0002_guest_ownership.up.sql` makes `payments.user_id` nullable without changing
+authenticated ownership. Deploy this version before enabling Spring guest
+checkout. No customer email/address is sent over the payment seam.
+The checkout final amount includes server-calculated shipping, in EUR.
+The only supported checkout payment selection is SIMULATED, with no browser
+redirect, card collection, client secret or synchronous PAID response.
+
 - `payments.request_event_id` has a **unique constraint**. A
   redelivered/duplicate `payment.requested` message is inserted via
   `INSERT ... ON CONFLICT (request_event_id) DO NOTHING`; the pre-existing

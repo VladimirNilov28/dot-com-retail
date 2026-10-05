@@ -177,10 +177,11 @@ func (e *testEnv) readOne(t *testing.T, topic string, timeout time.Duration) kaf
 }
 
 func newRequestedEvent(orderID int64, amount string) events.PaymentRequestedEvent {
+	userID := int64(1)
 	return events.PaymentRequestedEvent{
 		EventID:    uuid.New(),
 		OrderID:    orderID,
-		UserID:     1,
+		UserID:     &userID,
 		Amount:     json.Number(amount),
 		Currency:   "EUR",
 		OccurredAt: eventtime.Now(),
@@ -200,6 +201,7 @@ func TestEndToEnd_SuccessfulPayment_PublishesSucceededEvent(t *testing.T) {
 	if err := json.Unmarshal(msg.Value, &succeeded); err != nil {
 		t.Fatalf("failed to unmarshal PaymentSucceededEvent: %v", err)
 	}
+
 	if succeeded.OrderID != req.OrderID {
 		t.Fatalf("OrderID = %d, want %d", succeeded.OrderID, req.OrderID)
 	}
@@ -213,6 +215,22 @@ func TestEndToEnd_SuccessfulPayment_PublishesSucceededEvent(t *testing.T) {
 	}
 	if payment.Status != domain.StatusSucceeded {
 		t.Fatalf("persisted status = %s, want SUCCEEDED", payment.Status)
+	}
+}
+
+func TestEndToEnd_GuestPaymentPreservesNullOwner(t *testing.T) {
+	env := newTestEnv(t, newTestLogger(t))
+	req := newRequestedEvent(6001, "24.98")
+	req.UserID = nil
+	env.publishRequested(t, req)
+	msg := env.readOne(t, events.PaymentSucceeded, 30*time.Second)
+	var succeeded events.PaymentSucceededEvent
+	if err := json.Unmarshal(msg.Value, &succeeded); err != nil {
+		t.Fatal(err)
+	}
+	payment, err := env.store.GetByRequestEventID(context.Background(), req.EventID)
+	if err != nil || payment.UserID != nil || payment.ID != succeeded.PaymentID {
+		t.Fatalf("guest payment identity/ownership mismatch: %#v, %v", payment, err)
 	}
 }
 
