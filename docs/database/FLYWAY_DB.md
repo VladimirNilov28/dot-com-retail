@@ -78,14 +78,49 @@ Stock is **not** tracked here — see `inventory`.
 sub-categories rather than a fixed two-level split. `product_categories` is
 the many-to-many join between products and categories.
 
-### carts / cart_items
-A user's in-progress selection before checkout. No uniqueness constraint on
-`carts.user_id` — a user can have multiple carts over time (e.g. a new one
-after each completed order).
+Hierarchy mutations acquire PostgreSQL's transaction-scoped
+`SHARE ROW EXCLUSIVE` table lock before reading ancestors. This serializes
+create/update/delete decisions (including concurrent opposite reparenting)
+while leaving ordinary reads available. Self/descendant parenting and
+already-cyclic parent chains are rejected before commit. Category mapping
+uses iterative traversal and reports the repeated category id instead of
+recursing indefinitely or silently truncating a corrupt hierarchy.
 
-> **Design note:** an earlier version had `UNIQUE` on both `carts.user_id`
-> and `orders.cart_id`, which limited each user to exactly one order for the
-> lifetime of their account. Both constraints were removed for this reason.
+**Existing-cycle policy:** do not automatically change shared catalog data.
+An administrator can detect affected ancestor chains with this read-only,
+bounded query:
+
+```sql
+WITH RECURSIVE ancestors AS (
+    SELECT id AS start_id, id, parent_id, ARRAY[id] AS path, false AS cycle
+    FROM categories
+    UNION ALL
+    SELECT a.start_id, c.id, c.parent_id, a.path || c.id, c.id = ANY(a.path)
+    FROM ancestors a
+    JOIN categories c ON c.id = a.parent_id
+    WHERE NOT a.cycle
+)
+SELECT start_id, path FROM ancestors WHERE cycle;
+```
+
+Repair requires an explicit, reviewed choice of the incorrect parent link:
+record the affected ids/links, acquire the same hierarchy table lock in a
+maintenance transaction, and detach that approved link (`parent_id = NULL`)
+or replace it with a verified acyclic parent. Rerun detection before commit.
+Preserve category ids and product membership; do not delete/reseed categories
+or rewrite applied Flyway migrations to hide corrupt data.
+
+### carts / cart_items
+A user's in-progress selection before checkout. `carts.user_id` is unique;
+checkout clears and reuses that cart rather than creating a new cart per
+order. `cart_items` has unique `(cart_id, product_variant_id)` membership.
+Lazy cart creation uses a separate `REQUIRES_NEW` transaction so a losing
+creation race does not poison the caller's transaction.
+
+Add/update/remove/clear and checkout acquire the owning cart's
+`PESSIMISTIC_WRITE` lock before reading its items and retain it until the
+entire operation commits. Thus overlapping additions merge quantities and
+checkout cannot erase an addition that serialized after its snapshot.
 
 ### orders / order_items / payment_details
 `orders.cart_id` is a nullable, non-unique reference to the cart it
@@ -98,6 +133,11 @@ this avoids a join on every order-list query.
 
 `payment_details` records one or more payment attempts against an order
 (`payment_status`: `SUCCESS` / `FAILED` / `PENDING`).
+
+Status transitions lock the order row before validating its current state.
+Cancellation and exact-warehouse restoration commit or roll back together;
+duplicate/late cancellation cannot restore inventory twice. Subscription
+notifications are emitted only after the transition transaction commits.
 
 ### warehouses / inventory
 Stock is tracked per warehouse. `inventory` has a unique
