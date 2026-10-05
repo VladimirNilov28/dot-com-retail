@@ -1,16 +1,12 @@
 package ee.bytecore.backend.graphql.mappers;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import ee.bytecore.backend.entities.product.Product;
 import ee.bytecore.backend.entities.product.ProductVariant;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 public class ProductMapper {
-
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     public static com.netflix.dgs.codegen.generated.types.Product toGraphQlType(Product entity) {
         if (entity == null) {
@@ -38,7 +34,7 @@ public class ProductMapper {
                 .id(entity.getId().toString())
                 .sku(entity.getSku())
                 .price(entity.getPrice())
-                .attributes(toJsonNode(entity.getAttributes()))
+                .attributes(entity.getAttributes())
                 .barcode(entity.getBarcode())
                 .weightGrams(entity.getWeightGrams())
                 .isActive(entity.getIsActive() != null && entity.getIsActive())
@@ -47,18 +43,20 @@ public class ProductMapper {
                 .build();
     }
 
-    public static Map<String, Object> toAttributesMap(JsonNode node) {
-        if (node == null) {
+    public static Map<String, Object> toAttributesMap(Object value) {
+        if (value == null) {
             return null;
         }
-        return OBJECT_MAPPER.convertValue(
-                node, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
-    }
-
-    private static JsonNode toJsonNode(Map<String, Object> attributes) {
-        if (attributes == null) {
-            return null;
+        if (!(value instanceof Map<?, ?> object)) {
+            throw new IllegalArgumentException("Attributes must be a JSON object");
         }
-        return OBJECT_MAPPER.valueToTree(attributes);
+        Map<String, Object> attributes = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : object.entrySet()) {
+            if (!(entry.getKey() instanceof String key)) {
+                throw new IllegalArgumentException("Attribute names must be strings");
+            }
+            attributes.put(key, entry.getValue());
+        }
+        return attributes;
     }
 }

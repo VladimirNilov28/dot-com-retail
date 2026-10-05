@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,6 +31,8 @@ import org.intellij.lang.annotations.Language;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 @SpringBootTest(
         classes = {
@@ -431,6 +434,147 @@ class ProductDataFetcherTest {
                 .path("createProductVariant.sku")
                 .entity(String.class)
                 .isEqualTo(productVariant.getSku());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"899.99", "\"899.99\""})
+    @WithMockUser
+    void shouldBindVariantPriceWithoutAttributesTest(String price) {
+        stubVariantCreation();
+        graphQlTester
+                .document(
+                        """
+                        mutation {
+                          createProductVariant(input: {productId: "1", sku: "BOUND", price: %s}) {
+                            price
+                            attributes
+                          }
+                        }
+                        """
+                                .formatted(price))
+                .execute()
+                .path("createProductVariant.price")
+                .entity(BigDecimal.class)
+                .isEqualTo(new BigDecimal("899.99"))
+                .path("createProductVariant.attributes")
+                .entity(Map.class)
+                .isEqualTo(Map.of());
+    }
+
+    @Test
+    @WithMockUser
+    void shouldRoundTripLiteralJsonAttributesTest() {
+        stubVariantCreation();
+        graphQlTester
+                .document(
+                        """
+                        mutation {
+                          createProductVariant(input: {
+                            productId: "1", sku: "JSON", price: 12.50,
+                            attributes: {
+                              color: "blue", dimensions: {length: 12},
+                              tags: ["new", "small"], enabled: true
+                            }
+                          }) {
+                            attributes
+                          }
+                        }
+                        """)
+                .execute()
+                .path("createProductVariant.attributes.color")
+                .entity(String.class)
+                .isEqualTo("blue")
+                .path("createProductVariant.attributes.dimensions.length")
+                .entity(Integer.class)
+                .isEqualTo(12)
+                .path("createProductVariant.attributes.tags")
+                .entityList(String.class)
+                .containsExactly("new", "small")
+                .path("createProductVariant.attributes.enabled")
+                .entity(Boolean.class)
+                .isEqualTo(true);
+    }
+
+    @Test
+    @WithMockUser
+    void shouldRoundTripVariableJsonAttributesTest() {
+        stubVariantCreation();
+        Map<String, Object> attributes = Map.of("color", "green", "tags", List.of("sale"));
+        graphQlTester
+                .document(
+                        """
+                        mutation($input: CreateProductVariantInput!) {
+                          createProductVariant(input: $input) { attributes }
+                        }
+                        """)
+                .variable(
+                        "input",
+                        Map.of("productId", "1", "sku", "VARIABLE", "price", "12.50", "attributes", attributes))
+                .execute()
+                .path("createProductVariant.attributes")
+                .entity(Map.class)
+                .isEqualTo(attributes);
+    }
+
+    @Test
+    @WithMockUser
+    void shouldUpdateJsonAttributesTest() {
+        when(productVariantRepository.findById(productVariant.getId())).thenReturn(Optional.of(productVariant));
+        when(productVariantRepository.save(productVariant)).thenReturn(productVariant);
+        graphQlTester
+                .document(
+                        """
+                        mutation($input: UpdateProductVariantInput!) {
+                          updateProductVariant(variantId: "1", input: $input) { attributes }
+                        }
+                        """)
+                .variable("input", Map.of("attributes", Map.of("nested", Map.of("sizes", List.of("M", "L")))))
+                .execute()
+                .path("updateProductVariant.attributes.nested.sizes")
+                .entityList(String.class)
+                .containsExactly("M", "L");
+    }
+
+    @Test
+    @WithMockUser
+    void shouldReadJsonAttributesWithoutJacksonMetadataTest() {
+        productVariant.setAttributes(Map.of("color", "red"));
+        when(productRepository.findById(product.getId())).thenReturn(Optional.of(product));
+        when(productVariantRepository.findAllByProductIdIn(List.of(product.getId())))
+                .thenReturn(List.of(productVariant));
+        graphQlTester
+                .document("{ product(id: \"1\") { variants { attributes } } }")
+                .execute()
+                .path("product.variants[0].attributes")
+                .entity(Map.class)
+                .isEqualTo(Map.of("color", "red"));
+    }
+
+    @Test
+    @WithMockUser
+    void shouldRejectNonObjectAttributesWithValidationErrorTest() {
+        graphQlTester
+                .document(
+                        """
+                        mutation {
+                          createProductVariant(input: {productId: "1", sku: "BAD", price: 12, attributes: ["bad"]}) {
+                            id
+                          }
+                        }
+                        """)
+                .execute()
+                .errors()
+                .satisfy(errors -> assertThat(errors).anySatisfy(error -> assertThat(error.getMessage())
+                        .contains("Attributes must be a JSON object")));
+    }
+
+    private void stubVariantCreation() {
+        when(productRepository.findById(product.getId())).thenReturn(Optional.of(product));
+        when(productVariantRepository.save(any(ProductVariant.class))).thenAnswer(invocation -> {
+            ProductVariant saved = invocation.getArgument(0);
+            saved.setId(productVariant.getId());
+            return saved;
+        });
     }
 
     @Test

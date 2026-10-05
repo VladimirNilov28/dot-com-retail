@@ -29,10 +29,16 @@ plus two hand-written coercions in `graphql/scalars/`:
 |---|---|---|
 | `UUID` | `java.util.UUID` | extended-scalars |
 | `BigDecimal` | `java.math.BigDecimal` | extended-scalars |
-| `JSON` | `Map<String, Object>` | extended-scalars |
+| `JSON` | `java.lang.Object` (native JSON values) | extended-scalars |
 | `Url` | — (unused so far) | extended-scalars |
 | `Instant` | `java.time.Instant` | `InstantScalar` |
 | `LocalDate` | `java.time.LocalDate` | `LocalDateScalar` |
+
+Product variant `attributes` must be a JSON object with string keys; nested
+objects, arrays and primitive values are supported. Literal and variable
+inputs round-trip as ordinary JSON, not Jackson node metadata. Omitted
+attributes remain an empty object. Generated scalar bindings use `Object`
+because extended-scalars produces native maps/lists, not Jackson tree nodes.
 
 ## Authorization conventions
 

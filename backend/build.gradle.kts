@@ -398,7 +398,7 @@ tasks.named("generateJava") {
             mutableMapOf(
                 "UUID" to "java.util.UUID",
                 "BigDecimal" to "java.math.BigDecimal",
-                "JSON" to "com.fasterxml.jackson.databind.JsonNode",
+                "JSON" to "java.lang.Object",
                 "Instant" to "java.time.Instant",
                 "LocalDate" to "java.time.LocalDate",
                 "Url" to "java.net.URI",
