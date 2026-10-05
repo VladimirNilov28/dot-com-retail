@@ -25,6 +25,7 @@ schema changes must be new `V{n}__...sql` files instead.
 | `V7__create_wishlist.sql` | `wishlists`, `wishlist_items` | `V1` (users), `V2` (product_variants) |
 | `V10__account_deletion.sql` | `users` deletion retry/completion flags | `V1` (users) |
 | `V11__payment_result_correlation.sql` | `payment_result_receipts` | `V4` (orders), `V9` (payment_outbox) |
+| `V12__guest_carts.sql` | guest cart fields/constraints and `guest_cart_merge_receipts` | `V3` (carts), `V1` (users) |
 
 Every foreign key either points to a table created in an earlier migration
 file, or to a table created earlier within the same file. There are no
@@ -61,6 +62,22 @@ erDiagram
 ```
 
 ## Tables
+
+### Guest ownership and merge receipts (V12)
+
+`carts.user_id` is nullable only for a guest cart with `guest_credential_hash`
+and `guest_expires_at`. A check constraint excludes simultaneous user/guest
+ownership or an ownerless cart. Existing per-user cart and per-cart variant
+uniqueness remain; guest hashes are unique and expiration is indexed.
+Raw guest credentials are never stored.
+
+`guest_cart_merge_receipts` uniquely binds `(user_id, request_id)` and the
+consumed source cart/hash to a durable per-line quantity summary. The source
+ID deliberately has no foreign key: successful merge deletes the guest cart
+in the same transaction while keeping the replay receipt. Account deletion
+explicitly removes receipts; bounded scheduled cleanup removes expired carts
+(with cascading items) and receipts. Guest CRUD/merge do not reserve inventory.
+See [Guest Cart](../api/guest-cart.md) for expiry, locking and retry semantics.
 
 ### users / user_address / user_payment_methods
 Core account data. A user has zero or more addresses and saved payment

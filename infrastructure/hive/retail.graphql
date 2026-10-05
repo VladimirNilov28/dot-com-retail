@@ -13,6 +13,7 @@ type Cart {
   createdAt: Instant!
   id: ID!
   items: [CartItem!]!
+  totals: CartTotals!
   updatedAt: Instant!
   user: User!
 }
@@ -22,6 +23,12 @@ type CartItem {
   id: ID!
   productVariant: ProductVariant!
   quantity: Int!
+  subtotal: BigDecimal!
+}
+
+type CartTotals {
+  currency: String!
+  subtotal: BigDecimal!
 }
 
 type Category {
@@ -39,6 +46,44 @@ type CategoryFacet {
   name: String!
 }
 
+type GuestCart {
+  createdAt: Instant!
+  expiresAt: Instant!
+  id: ID!
+  items: [GuestCartItem!]!
+  totals: CartTotals!
+  updatedAt: Instant!
+}
+
+type GuestCartItem {
+  id: ID!
+  productVariant: ProductVariant!
+  quantity: Int!
+  subtotal: BigDecimal!
+}
+
+type GuestCartMergeConflict {
+  code: GuestCartMergeConflictCode!
+  guestQuantity: Int!
+  message: String!
+  productVariantId: ID!
+  userQuantity: Int!
+}
+
+type GuestCartMergeResult {
+  cart: Cart
+  conflicts: [GuestCartMergeConflict!]!
+  mergedItems: [GuestCartMergedItem!]!
+  status: GuestCartMergeStatus!
+}
+
+type GuestCartMergedItem {
+  finalQuantity: Int!
+  guestQuantityAdded: Int!
+  productVariantId: ID!
+  userQuantityBefore: Int!
+}
+
 type Inventory {
   id: ID!
   productVariant: ProductVariant!
@@ -49,6 +94,7 @@ type Inventory {
 
 type Mutation {
   addCartItem(input: AddCartItemInput!): CartItem!
+  addGuestCartItem(input: AddCartItemInput!): GuestCart!
   " USER"
   addMyAddress(input: CreateAddressInput!): UserAddress!
   addMyPaymentMethod(input: CreatePaymentMethodInput!): UserPaymentMethod!
@@ -70,11 +116,15 @@ type Mutation {
   deleteUserAddress(addressId: ID!, userId: ID!): Boolean!
   deleteUserPaymentMethod(paymentMethodId: ID!, userId: ID!): Boolean!
   deleteWarehouse(warehouseId: ID!): Boolean!
+  mergeGuestCart(requestId: UUID!): GuestCartMergeResult!
   removeCartItem(cartItemId: ID!): Boolean!
+  removeGuestCartItem(cartItemId: ID!): GuestCart!
   removeWishlistItem(wishlistItemId: ID!): Boolean!
   setInventory(input: SetInventoryInput!): Inventory!
+  startGuestCart: StartGuestCartResult!
   updateCartItem(cartItemId: ID!, input: UpdateCartItemInput!): CartItem!
   updateCategory(categoryId: ID!, input: UpdateCategoryInput!): Category!
+  updateGuestCartItem(cartItemId: ID!, input: UpdateCartItemInput!): GuestCart!
   updateMyAddress(addressId: ID!, input: UpdateAddressInput!): UserAddress!
   updateOrderStatus(input: UpdateOrderStatusInput!, orderId: ID!): Order!
   updateProduct(input: UpdateProductInput!, productId: ID!): Product!
@@ -165,6 +215,7 @@ type ProductVariant {
 type Query {
   categories: [Category!]!
   category(id: ID, slug: String): Category
+  guestCart: GuestCart
   me: User!
   myCart: Cart!
   myOrders: [Order!]!
@@ -184,6 +235,11 @@ type SearchPageInfo {
   size: Int!
   totalItems: Int!
   totalPages: Int!
+}
+
+type StartGuestCartResult {
+  cart: GuestCart!
+  created: Boolean!
 }
 
 type Subscription {
@@ -492,6 +548,17 @@ enum ErrorType {
   HTTP Mapping: 520 Unknown Error
   """
   UNKNOWN
+}
+
+enum GuestCartMergeConflictCode {
+  QUANTITY_OVERFLOW
+  VARIANT_UNAVAILABLE
+}
+
+enum GuestCartMergeStatus {
+  BLOCKED
+  MERGED
+  REPLAYED
 }
 
 enum OrderStatus {

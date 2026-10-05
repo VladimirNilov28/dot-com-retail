@@ -46,6 +46,7 @@ type Cart @join__type(graph: RETAIL) {
   createdAt: Instant!
   id: ID!
   items: [CartItem!]!
+  totals: CartTotals!
   updatedAt: Instant!
   user: User!
 }
@@ -55,6 +56,12 @@ type CartItem @join__type(graph: RETAIL) {
   id: ID!
   productVariant: ProductVariant!
   quantity: Int!
+  subtotal: BigDecimal!
+}
+
+type CartTotals @join__type(graph: RETAIL) {
+  currency: String!
+  subtotal: BigDecimal!
 }
 
 type Category @join__type(graph: RETAIL) {
@@ -72,6 +79,44 @@ type CategoryFacet @join__type(graph: RETAIL) {
   name: String!
 }
 
+type GuestCart @join__type(graph: RETAIL) {
+  createdAt: Instant!
+  expiresAt: Instant!
+  id: ID!
+  items: [GuestCartItem!]!
+  totals: CartTotals!
+  updatedAt: Instant!
+}
+
+type GuestCartItem @join__type(graph: RETAIL) {
+  id: ID!
+  productVariant: ProductVariant!
+  quantity: Int!
+  subtotal: BigDecimal!
+}
+
+type GuestCartMergeConflict @join__type(graph: RETAIL) {
+  code: GuestCartMergeConflictCode!
+  guestQuantity: Int!
+  message: String!
+  productVariantId: ID!
+  userQuantity: Int!
+}
+
+type GuestCartMergeResult @join__type(graph: RETAIL) {
+  cart: Cart
+  conflicts: [GuestCartMergeConflict!]!
+  mergedItems: [GuestCartMergedItem!]!
+  status: GuestCartMergeStatus!
+}
+
+type GuestCartMergedItem @join__type(graph: RETAIL) {
+  finalQuantity: Int!
+  guestQuantityAdded: Int!
+  productVariantId: ID!
+  userQuantityBefore: Int!
+}
+
 type Inventory @join__type(graph: RETAIL) {
   id: ID!
   productVariant: ProductVariant!
@@ -82,6 +127,7 @@ type Inventory @join__type(graph: RETAIL) {
 
 type Mutation @join__type(graph: RETAIL) {
   addCartItem(input: AddCartItemInput!): CartItem!
+  addGuestCartItem(input: AddCartItemInput!): GuestCart!
   " USER"
   addMyAddress(input: CreateAddressInput!): UserAddress!
   addMyPaymentMethod(input: CreatePaymentMethodInput!): UserPaymentMethod!
@@ -103,11 +149,15 @@ type Mutation @join__type(graph: RETAIL) {
   deleteUserAddress(addressId: ID!, userId: ID!): Boolean!
   deleteUserPaymentMethod(paymentMethodId: ID!, userId: ID!): Boolean!
   deleteWarehouse(warehouseId: ID!): Boolean!
+  mergeGuestCart(requestId: UUID!): GuestCartMergeResult!
   removeCartItem(cartItemId: ID!): Boolean!
+  removeGuestCartItem(cartItemId: ID!): GuestCart!
   removeWishlistItem(wishlistItemId: ID!): Boolean!
   setInventory(input: SetInventoryInput!): Inventory!
+  startGuestCart: StartGuestCartResult!
   updateCartItem(cartItemId: ID!, input: UpdateCartItemInput!): CartItem!
   updateCategory(categoryId: ID!, input: UpdateCategoryInput!): Category!
+  updateGuestCartItem(cartItemId: ID!, input: UpdateCartItemInput!): GuestCart!
   updateMyAddress(addressId: ID!, input: UpdateAddressInput!): UserAddress!
   updateOrderStatus(input: UpdateOrderStatusInput!, orderId: ID!): Order!
   updateProduct(input: UpdateProductInput!, productId: ID!): Product!
@@ -198,6 +248,7 @@ type ProductVariant @join__type(graph: RETAIL) {
 type Query @join__type(graph: RETAIL) {
   categories: [Category!]!
   category(id: ID, slug: String): Category
+  guestCart: GuestCart
   me: User!
   myCart: Cart!
   myOrders: [Order!]!
@@ -217,6 +268,11 @@ type SearchPageInfo @join__type(graph: RETAIL) {
   size: Int!
   totalItems: Int!
   totalPages: Int!
+}
+
+type StartGuestCartResult @join__type(graph: RETAIL) {
+  cart: GuestCart!
+  created: Boolean!
 }
 
 type Subscription @join__type(graph: RETAIL) {
@@ -525,6 +581,17 @@ enum ErrorType @join__type(graph: RETAIL) {
   HTTP Mapping: 520 Unknown Error
   """
   UNKNOWN @join__enumValue(graph: RETAIL)
+}
+
+enum GuestCartMergeConflictCode @join__type(graph: RETAIL) {
+  QUANTITY_OVERFLOW @join__enumValue(graph: RETAIL)
+  VARIANT_UNAVAILABLE @join__enumValue(graph: RETAIL)
+}
+
+enum GuestCartMergeStatus @join__type(graph: RETAIL) {
+  BLOCKED @join__enumValue(graph: RETAIL)
+  MERGED @join__enumValue(graph: RETAIL)
+  REPLAYED @join__enumValue(graph: RETAIL)
 }
 
 enum OrderStatus @join__type(graph: RETAIL) {

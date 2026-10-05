@@ -137,17 +137,32 @@ nested field on the two things it relates:
 
 ### Cart (`cart/`)
 
-Types: `Cart`, `CartItem`. No root id-based query — a user has at most one
-active cart, reached only via `myCart`.
+Types: `Cart`, `CartItem`, `GuestCart`, `GuestCartItem`, `CartTotals` and explicit
+merge result/conflict types. No root id-based access — public cart IDs are not
+credentials. Authenticated carts use `myCart` with `cart:read`; writes require
+`cart:write`. Guest operations use a hashed random HttpOnly cookie and strict
+Origin/preflight-header checks. Merge requires both scopes and an active owner
+derived from the principal.
 
 | Query | Returns |
 |---|---|
 | `myCart` | `Cart!` |
+| `guestCart` | `GuestCart` — null without a credential; never lazily creates |
 
 | Mutation | Returns |
 |---|---|
 | `addCartItem` / `updateCartItem` / `removeCartItem` | `CartItem!` / `CartItem!` / `Boolean!` |
 | `clearCart` | `Boolean!` |
+| `startGuestCart` | `StartGuestCartResult!` — reuse valid cart or explicitly start empty |
+| `addGuestCartItem` / `updateGuestCartItem` / `removeGuestCartItem` | `GuestCart!` — current items and server totals |
+| `mergeGuestCart(requestId: UUID!)` | `GuestCartMergeResult!` — MERGED / REPLAYED / BLOCKED |
+
+Both cart types expose merchandise totals in EUR; item types expose subtotal.
+Guest types contain no owner or authenticated cart back-reference. Invalid,
+expired and consumed credentials return `GUEST_CART_UNAVAILABLE`. Merge is
+transactional and all-or-nothing; no quantities are silently clamped and stock
+is still checked only at checkout. See the authoritative [Guest Cart guide](guest-cart.md)
+for operation examples, cookie/CORS/CSRF, expiration, replay and configuration.
 
 ### Wishlist (`wishlist/`)
 

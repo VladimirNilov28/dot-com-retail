@@ -8,8 +8,9 @@
 - **Hive Router** (`infrastructure/hive/`, Docker Compose service
   `hive-router`) is the single external GraphQL entry point, on `:4002`. It
   composes a local supergraph from the `retail` subgraph and proxies client
-  traffic to Spring; it forwards only the `Authorization` header and takes
-  no part in JWT validation or authorization — Spring Resource Server
+  traffic to Spring; it forwards `Authorization` plus the narrowly configured
+  guest-cookie/Origin/request headers and takes no part in JWT validation
+  or authorization — Spring Resource Server
   remains the sole authority for both. Its built-in GraphQL IDE is the
   canonical local GraphQL editor; **Spring/DGS GraphiQL is disabled**.
 - **Docker Compose** (`infrastructure/compose.yml`) runs the supporting
@@ -123,6 +124,19 @@ non-enrolled accounts. Failed authentication leaves the previous SDL intact.
 
 Health/readiness: `curl http://localhost:4002/health` (liveness),
 `curl http://localhost:4002/readiness` (supergraph loaded).
+
+### Guest shopping
+
+[Guest Cart API and security guide](docs/api/guest-cart.md) documents anonymous
+server-persisted carts, cookie transport, origin/preflight requirements, live
+server totals, expiration and all-or-nothing login merge with durable retries.
+Use `credentials: "include"` and `X-Guest-Cart-Request: 1` from the allowed
+Next.js dev origin (`http://localhost:3000`). Stock remains checkout-only;
+no inventory is reserved by adding or merging cart items.
+
+Registration still uses Spring's existing REST endpoint and Hydra/Kratos
+authentication. Invoke merge only after acquiring the user's JWT. No frontend
+cart/login page or second authentication system is included.
 
 ### Common failure modes
 

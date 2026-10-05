@@ -11,7 +11,7 @@ http:
   host: 0.0.0.0
   port: 4000
 
-# Forward only the Authorization header to the retail subgraph. Spring
+# Forward only authentication and guest-cart transport headers. Spring
 # Resource Server remains the sole JWT validation authority — the router
 # does not inspect, verify, or re-issue tokens.
 headers:
@@ -19,6 +19,26 @@ headers:
     request:
       - propagate:
           named: Authorization
+  subgraphs:
+    retail:
+      request:
+        - propagate:
+            named: [Cookie, Origin, X-Guest-Cart-Request]
+      response:
+        - propagate:
+            named: Set-Cookie
+            algorithm: append
+        - propagate:
+            named: Cache-Control
+            algorithm: append
+
+cors:
+  enabled: true
+  allow_credentials: true
+  allow_headers: [Content-Type, Authorization, X-Guest-Cart-Request]
+  methods: [GET, POST, OPTIONS]
+  policies:
+    - origins: [http://localhost:3000, http://localhost:4002]
 
 # Dev-only: lets the built-in GraphQL IDE load the schema and Docs explorer.
 introspection: true

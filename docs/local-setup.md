@@ -180,6 +180,19 @@ Once registered, the user logs in through the existing Kratos/Hydra flow
 browser login flow via Hive Router/`bytecore-web`) — no separate
 registration-specific login path exists.
 
+## Guest Cart
+
+Anonymous shopping uses the [Guest Cart GraphQL contract](api/guest-cart.md)
+through Hive at `http://localhost:4002/graphql`, not the registration REST
+endpoint. Browser requests from `http://localhost:3000` use POST JSON,
+`credentials: "include"` and `X-Guest-Cart-Request: 1`; the server manages an
+HttpOnly guest cookie. Use consistent hostnames and never log the cookie.
+
+After registration, complete the existing Hydra/Kratos login, then invoke
+`mergeGuestCart(requestId: UUID!)` with the JWT and guest cookie. Keep that
+UUID across retries. Merge conflicts preserve both carts; stock remains
+checkout-only. No Next.js page/callback integration is implemented here.
+
 ## Optional TOTP two-factor authentication
 
 Users can enroll any standard RFC 6238 authenticator through Kratos's native
