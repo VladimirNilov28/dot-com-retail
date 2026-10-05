@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.function.Supplier;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -21,10 +22,12 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.SupplierJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.util.function.SingletonSupplier;
 import org.springframework.web.client.RestTemplate;
 
+import ee.bytecore.backend.security.GuestCartHttpFilter;
 import ee.bytecore.backend.security.JwtWebSocketInterceptor;
 
 @Configuration
@@ -86,13 +89,20 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http, JwtAuthenticationConverter jwtAuthenticationConverter)
+    public SecurityFilterChain filterChain(
+            HttpSecurity http,
+            JwtAuthenticationConverter jwtAuthenticationConverter,
+            ObjectProvider<GuestCartHttpFilter> guestFilters)
             throws Exception {
 
+        GuestCartHttpFilter guestFilter = guestFilters.getIfAvailable();
+        if (guestFilter != null) http.addFilterAfter(guestFilter, BearerTokenAuthenticationFilter.class);
         return http
                 // Stateless Bearer-token resource server — no cookies/session
                 // to forge, so CSRF protection (which targets cookie-based
-                // browser auth) doesn't apply and would otherwise 403 every
+                // browser auth) doesn't apply to Bearer auth. Guest cart cookie
+                // operations have separate Origin + preflight-header protection.
+                // The global token-session CSRF filter would otherwise 403 every
                 // POST (GraphQL queries/mutations, internal API) regardless
                 // of a valid JWT.
                 .csrf(csrf -> csrf.disable())
@@ -111,6 +121,10 @@ public class SecurityConfig {
                         .requestMatchers(request -> "GET".equals(request.getMethod())
                                 && "/graphql".equals(request.getServletPath())
                                 && "websocket".equalsIgnoreCase(request.getHeader("Upgrade")))
+                        .permitAll()
+                        .requestMatchers(request -> guestFilter != null
+                                && "POST".equals(request.getMethod())
+                                && "/graphql".equals(request.getServletPath()))
                         .permitAll()
                         .requestMatchers("/graphql")
                         .authenticated()

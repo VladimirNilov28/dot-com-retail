@@ -50,3 +50,10 @@ logging:
 oauth:
   service:
     client-id: ${OAUTH_SERVICE_CLIENT_ID:oauth-service-internal}
+
+cart:
+  guest:
+    ttl: PT720H
+    cleanup-interval: PT1H
+    merge-receipt-ttl: PT720H
+    cleanup-batch-size: 100

@@ -2,6 +2,7 @@ type Cart {
   id: ID!
   user: User!
   items: [CartItem!]!
+  totals: CartTotals!
   createdAt: Instant!
   updatedAt: Instant!
 }
@@ -11,4 +12,64 @@ type CartItem {
   cart: Cart!
   productVariant: ProductVariant!
   quantity: Int!
+  subtotal: BigDecimal!
+}
+
+type CartTotals {
+  subtotal: BigDecimal!
+  currency: String!
+}
+
+type GuestCart {
+  id: ID!
+  items: [GuestCartItem!]!
+  totals: CartTotals!
+  expiresAt: Instant!
+  createdAt: Instant!
+  updatedAt: Instant!
+}
+
+type GuestCartItem {
+  id: ID!
+  productVariant: ProductVariant!
+  quantity: Int!
+  subtotal: BigDecimal!
+}
+
+type StartGuestCartResult {
+  cart: GuestCart!
+  created: Boolean!
+}
+
+enum GuestCartMergeStatus {
+  MERGED
+  REPLAYED
+  BLOCKED
+}
+
+enum GuestCartMergeConflictCode {
+  VARIANT_UNAVAILABLE
+  QUANTITY_OVERFLOW
+}
+
+type GuestCartMergeConflict {
+  productVariantId: ID!
+  code: GuestCartMergeConflictCode!
+  userQuantity: Int!
+  guestQuantity: Int!
+  message: String!
+}
+
+type GuestCartMergedItem {
+  productVariantId: ID!
+  userQuantityBefore: Int!
+  guestQuantityAdded: Int!
+  finalQuantity: Int!
+}
+
+type GuestCartMergeResult {
+  status: GuestCartMergeStatus!
+  cart: Cart
+  mergedItems: [GuestCartMergedItem!]!
+  conflicts: [GuestCartMergeConflict!]!
 }

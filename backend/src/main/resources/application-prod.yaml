@@ -15,6 +15,11 @@ kratos:
 hydra:
   admin-url: ${HYDRA_ADMIN_URL}
 
+cart:
+  guest:
+    secure: true
+    allowed-origins: ${GUEST_CART_ALLOWED_ORIGINS:}
+
 dgs:
   graphql:
     introspection:

@@ -204,6 +204,7 @@ public class UserService {
             }
             userRepository.deleteAddresses(id);
             userRepository.deletePaymentMethods(id);
+            userRepository.deleteGuestCartMergeReceipts(id);
             userRepository.deleteCart(id);
             userRepository.deleteWishlist(id);
             String anonymous = "deleted-" + UUID.randomUUID();

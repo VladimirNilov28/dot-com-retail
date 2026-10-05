@@ -25,8 +25,14 @@ public class Cart {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
+    @JoinColumn(name = "user_id")
     private User user;
+
+    @Column(name = "guest_credential_hash", length = 64)
+    private String guestCredentialHash;
+
+    @Column(name = "guest_expires_at")
+    private Instant guestExpiresAt;
 
     @OneToMany(mappedBy = "cart", fetch = FetchType.LAZY)
     private List<CartItem> items = new ArrayList<>();
@@ -42,6 +48,13 @@ public class Cart {
     public static Cart create(User user) {
         Cart cart = new Cart();
         cart.user = user;
+        return cart;
+    }
+
+    public static Cart createGuest(String credentialHash, Instant expiresAt) {
+        Cart cart = new Cart();
+        cart.guestCredentialHash = credentialHash;
+        cart.guestExpiresAt = expiresAt;
         return cart;
     }
 }

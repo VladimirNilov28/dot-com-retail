@@ -12,4 +12,9 @@ extend type Mutation {
   updateCartItem(cartItemId: ID!, input: UpdateCartItemInput!): CartItem!
   removeCartItem(cartItemId: ID!): Boolean!
   clearCart: Boolean!
+  startGuestCart: StartGuestCartResult!
+  addGuestCartItem(input: AddCartItemInput!): GuestCart!
+  updateGuestCartItem(cartItemId: ID!, input: UpdateCartItemInput!): GuestCart!
+  removeGuestCartItem(cartItemId: ID!): GuestCart!
+  mergeGuestCart(requestId: UUID!): GuestCartMergeResult!
 }

@@ -16,4 +16,10 @@ public interface CartRepository extends JpaRepository<Cart, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select c from Cart c where c.user.id = :userId")
     Optional<Cart> findByUserIdForUpdate(Long userId);
+
+    Optional<Cart> findByGuestCredentialHashAndUserIsNull(String credentialHash);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select c from Cart c where c.guestCredentialHash = :credentialHash and c.user is null")
+    Optional<Cart> findGuestForUpdate(String credentialHash);
 }

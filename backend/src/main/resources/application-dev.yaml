@@ -19,6 +19,13 @@ kratos:
 hydra:
   admin-url: http://127.0.0.1:4445
 
+cart:
+  guest:
+    secure: false
+    allowed-origins:
+      - http://localhost:3000
+      - http://localhost:4002
+
 dgs:
   graphql:
     graphiql:

@@ -44,6 +44,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
     void deleteCart(@Param("id") Long id);
 
     @Modifying
+    @Query(value = "DELETE FROM guest_cart_merge_receipts WHERE user_id = :id", nativeQuery = true)
+    void deleteGuestCartMergeReceipts(@Param("id") Long id);
+
+    @Modifying
     @Query(value = "DELETE FROM wishlists WHERE user_id = :id", nativeQuery = true)
     void deleteWishlist(@Param("id") Long id);
 }
