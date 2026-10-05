@@ -139,7 +139,7 @@ class CartMutationAuthorizationTest {
 
     @Test
     void shouldAllowAddCartItemWithWriteScopeTest() throws Exception {
-        when(cartRepository.findByUserId(1L)).thenReturn(Optional.of(cart));
+        when(cartRepository.findByUserIdForUpdate(1L)).thenReturn(Optional.of(cart));
         when(productVariantRepository.findById(1L)).thenReturn(Optional.of(productVariant));
         when(cartItemRepository.save(org.mockito.ArgumentMatchers.any(CartItem.class)))
                 .thenReturn(cartItem);
@@ -170,6 +170,11 @@ class CartMutationAuthorizationTest {
     void shouldRejectRemoveCartItemForForeignCartWithWriteScopeTest() throws Exception {
         // Ownership is enforced in CartService regardless of the scope check —
         // a valid cart:write scope must not let user "2" remove user 1's item.
+        User otherUser = User.create("other-user", "other@example.com", LocalDate.of(1990, 1, 1));
+        otherUser.setId(2L);
+        Cart otherCart = Cart.create(otherUser);
+        otherCart.setId(2L);
+        when(cartRepository.findByUserIdForUpdate(2L)).thenReturn(Optional.of(otherCart));
         when(cartItemRepository.findById(1L)).thenReturn(Optional.of(cartItem));
 
         mockMvc.perform(post("/graphql")

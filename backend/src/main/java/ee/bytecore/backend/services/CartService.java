@@ -77,9 +77,21 @@ public class CartService {
         return cartRepository.saveAndFlush(Cart.create(userRef));
     }
 
+    @Transactional
+    public Cart getMyCartForUpdate(Long userId) {
+        return cartRepository.findByUserIdForUpdate(userId).orElseGet(() -> {
+            getOrCreateCart(userId);
+            return cartRepository
+                    .findByUserIdForUpdate(userId)
+                    .orElseThrow(
+                            () -> new EntityNotFoundException(String.format("Cart not found for user %s", userId)));
+        });
+    }
+
+    @Transactional
     public CartItem addItem(Long userId, Long productVariantId, Integer quantity) {
         validateQuantity(quantity);
-        Cart cart = getMyCart(userId);
+        Cart cart = getMyCartForUpdate(userId);
         ProductVariant variant = productVariantRepository
                 .findById(productVariantId)
                 .orElseThrow(() -> new EntityNotFoundException(
@@ -94,12 +106,15 @@ public class CartService {
     @Transactional
     public CartItem updateItemQuantity(Long userId, Long cartItemId, Integer quantity) {
         validateQuantity(quantity);
+        getMyCartForUpdate(userId);
         CartItem item = findOwned(userId, cartItemId);
         item.setQuantity(quantity);
         return save(item);
     }
 
+    @Transactional
     public boolean removeItem(Long userId, Long cartItemId) {
+        getMyCartForUpdate(userId);
         return cartItemRepository
                 .findById(cartItemId)
                 .map(item -> {
@@ -110,9 +125,10 @@ public class CartService {
                 .orElse(false);
     }
 
+    @Transactional
     public boolean clear(Long userId) {
-        Cart cart = getMyCart(userId);
-        cartItemRepository.deleteAll(cart.getItems());
+        Cart cart = getMyCartForUpdate(userId);
+        cartItemRepository.deleteAll(cartItemRepository.findAllByCartId(cart.getId()));
         return true;
     }
 
@@ -141,21 +157,11 @@ public class CartService {
     }
 
     private CartItem save(CartItem item) {
-        try {
-            return cartItemRepository.save(item);
-        } catch (DataIntegrityViolationException e) {
-            // Lost the race against a concurrent addItem for the same variant: merge into
-            // whichever row won instead of surfacing a raw constraint violation.
-            return cartItemRepository
-                    .findByCartIdAndProductVariantId(
-                            item.getCart().getId(), item.getProductVariant().getId())
-                    .map(existing -> mergeQuantity(existing, item.getQuantity()))
-                    .orElseThrow(() -> e);
-        }
+        return cartItemRepository.save(item);
     }
 
     private CartItem mergeQuantity(CartItem existing, Integer additionalQuantity) {
-        existing.setQuantity(existing.getQuantity() + additionalQuantity);
+        existing.setQuantity(Math.addExact(existing.getQuantity(), additionalQuantity));
         return cartItemRepository.save(existing);
     }
 

@@ -90,7 +90,7 @@ public class OrderService {
 
     @Transactional
     public Order createOrder(Long userId) {
-        Cart cart = cartService.getMyCart(userId);
+        Cart cart = cartService.getMyCartForUpdate(userId);
         List<CartItem> cartItems = cart.getItems();
         if (cartItems.isEmpty()) {
             throw new IllegalArgumentException("Cannot create an order from an empty cart");

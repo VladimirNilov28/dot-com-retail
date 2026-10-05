@@ -16,6 +16,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.transaction.annotation.Transactional;
 
+import ee.bytecore.backend.config.KafkaTestConfiguration;
 import ee.bytecore.backend.config.PostgresTestConfiguration;
 import ee.bytecore.backend.entities.cart.Cart;
 import ee.bytecore.backend.entities.cart.CartItem;
@@ -36,7 +37,7 @@ import org.junit.jupiter.api.Test;
  * Postgres/Hibernate context — see "Repository testing" in CLAUDE.md.
  */
 @SpringBootTest
-@Import(PostgresTestConfiguration.class)
+@Import({PostgresTestConfiguration.class, KafkaTestConfiguration.class})
 @Tag("integration")
 class CartServiceIntegrationTest {
 

@@ -122,7 +122,7 @@ class CartServiceTest {
 
     @Test
     void shouldLazilyCreateCartWhenAddingItemToMissingCartTest() {
-        when(cartRepository.findByUserId(1L)).thenReturn(Optional.empty());
+        when(cartRepository.findByUserIdForUpdate(1L)).thenReturn(Optional.empty(), Optional.of(cart));
         when(self.createCart(1L)).thenReturn(cart);
         when(productVariantRepository.findById(1L)).thenReturn(Optional.of(productVariant));
         when(cartItemRepository.findByCartIdAndProductVariantId(1L, 1L)).thenReturn(Optional.empty());
@@ -139,7 +139,7 @@ class CartServiceTest {
     void shouldMergeQuantityWhenItemAlreadyInCartTest() {
         CartItem existing = CartItem.create(cart, productVariant, 2);
         existing.setId(5L);
-        when(cartRepository.findByUserId(1L)).thenReturn(Optional.of(cart));
+        when(cartRepository.findByUserIdForUpdate(1L)).thenReturn(Optional.of(cart));
         when(productVariantRepository.findById(1L)).thenReturn(Optional.of(productVariant));
         when(cartItemRepository.findByCartIdAndProductVariantId(1L, 1L)).thenReturn(Optional.of(existing));
         when(cartItemRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
