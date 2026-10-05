@@ -11,6 +11,14 @@ token endpoint. No framework, stdlib `http.server` only.
 - **Login/consent bridge** (`api/bridge_server.py`, port `4446`): implements
   Hydra's `login`/`consent` challenge URLs (`/login`, `/consent`) for the
   browser-driven authorization-code flow, plus `/healthz`.
+  Consent intersects requested scopes with the YAML role mapping, the YAML
+  client maximum and Hydra's current client allow-list. ADMIN `*` excludes
+  `internal:provision-user`; unknown/missing roles or human clients fail closed.
+  `offline_access` is granted only when requested and client-allowed. Remembered
+  consent is filtered again; the dev token endpoint uses this same handler.
+  This does not replace Spring's role/scope and ownership checks. Previously
+  issued JWTs/refresh grants are not retroactively narrowed: revoke old grants
+  and reauthenticate; a role change is evaluated at the next login/consent.
 - **Internal dev token endpoint** (`api/internal_server.py`, port `4447`):
   `POST /internal/token` — takes either `{"email": ..., "password": ...}` or
   `{"kratos_session_token": ...}` (never both), drives
@@ -49,6 +57,34 @@ http POST :4447/internal/token email=admin@bytecore.ee password=admin-dev-passwo
 ```
 
 Returns `{"access_token": "...", "token_type": "bearer", ...}`.
+
+## Privileged bootstrap provenance and reconciliation
+
+Bootstrap checks Kratos **before** provisioning a canonical ADMIN. An existing
+email match, even with `spring_user_id` already attached, is not ownership proof.
+Only an identity created by this bootstrap with private
+`metadata_admin.bootstrap = {version: 1, username, email}` and `spring_user_id`
+can restart idempotently. Its schema/email and linked canonical ID/username/email/
+ADMIN role must match exactly. Restart only reads the canonical user; it never
+relinks, heals role drift, adopts credentials, or resets a password.
+
+Fresh canonical creation uses the machine-authenticated
+`POST /internal/users/bootstrap-admin` endpoint with `username`, `email`, and
+`dateOfBirth`. The backend contract is **create-only ADMIN**, rejecting an
+existing username or email without mutation, including concurrent collisions.
+The legacy upsert `/internal/users` is never used by bootstrap. An older backend
+without this distinct route fails closed rather than silently ignoring a
+create-only option. Deploy the paired backend endpoint before fresh bootstrap.
+
+Unmarked historical identities, stale/foreign/conflicting links, canonical
+preclaims, or partial failures stop startup with a secret-free reconciliation
+error. Do not automatically stamp old identities as trusted, reset their
+credentials, change their role, delete shared accounts, or reset shared volumes.
+A trusted operator must investigate provenance and outstanding grants separately.
+If historical ownership cannot be independently established, use a new dedicated,
+unclaimed bootstrap username/email and the create-only route; retain the old
+state for investigation. Creation failures can leave an unlinked canonical user,
+which likewise requires explicit operator reconciliation, not automatic adoption.
 
 ## TOTP runbook
 
@@ -93,14 +129,15 @@ Keep host/container clocks synchronized; no custom skew window is implemented.
 
 ### Automated real flows and independent local smoke
 
-Install dependencies in a temporary virtual environment, not the production image:
+Install dependencies in a repository-local virtual environment, not the production image:
 
 ```bash
-VENV=$(mktemp -d /tmp/bytecore-totp.XXXXXX)
+VENV=infrastructure/oauth/service/.venv-test
 python3 -m venv "$VENV"
 "$VENV/bin/python" -m pip install -r infrastructure/oauth/service/tests/requirements.txt
 "$VENV/bin/python" -m unittest discover -s infrastructure/oauth/service/tests -v
 "$VENV/bin/python" infrastructure/oauth/service/tests/real/totp_flow_test.py -v
+"$VENV/bin/python" infrastructure/oauth/service/tests/real/scope_grants_test.py -v
 "$VENV/bin/python" -m infrastructure.oauth.service.tests.real.totp_smoke
 cd backend && ./gradlew build
 ```
@@ -115,8 +152,15 @@ regeneration/re-reveal, secure disable, stable role/scopes, and secret-free logs
 Tokens, passwords, codes and QR/setup data remain in memory and are not printed.
 Test sessions and refresh grants are revoked; disposable domain accounts remain
 for inspection. Discovery intentionally excludes the opt-in `tests/real` files.
-The two pre-existing `test_config.py` failures are tracked in #21 and are unrelated
-to this milestone; do not interpret a failing full discovery as all tests passing.
+Config tests use isolated environments with all required URL fixtures; they
+never depend on the developer's `.env` or another test's environment.
+The scope-grants opt-in test invokes the **local source** consent handler against
+live Hydra without restarting the deployed bridge. It verifies a disposable USER's
+signed JWT grants, actual remembered consent, refresh grants and absence of an
+unrequested refresh grant. Spring registration supplies the canonical role;
+the protected machine-only canonical lookup and privileged-role accounts are
+not exercised by that real test. All six role mappings and machine separation
+are covered by mocked unit tests.
 
 ### Manual native flow (no frontend required)
 

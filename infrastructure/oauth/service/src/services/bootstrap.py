@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Union
 
+import requests
 import yaml
 
 from clients.hydra import HydraClient
@@ -275,51 +276,78 @@ DEV_ADMIN_DATE_OF_BIRTH = date(2000, 1, 1)
 DEV_ADMIN_ROLE = "ADMIN"
 
 
+class BootstrapIdentityError(RuntimeError):
+    """Privileged bootstrap cannot establish safe identity provenance."""
+
+
 def reconcile_kratos_admin_identity(
     kratos_client: KratosClient, spring_auth_client, config: Config, schema_id: str = "default"
 ) -> None:
-    """Spring is authoritative for the canonical user (id, role); Kratos only
-    stores credentials plus a metadata_admin.spring_user_id reference back to
-    it. Provisioning the Spring user is idempotent server-side (find-by-username
-    or create, self-healing role drift), so it's safe to call on every
-    bootstrap run."""
-    spring_user = spring_auth_client.provision_user(
-        config.admin_username, config.admin_email, DEV_ADMIN_DATE_OF_BIRTH, DEV_ADMIN_ROLE
-    )
-    spring_user_id = spring_user["id"]
+    """Never adopt an email match or heal privileged links/roles. Only a
+    bootstrap-created private provenance marker permits a read-only restart."""
+    provenance = {"version": 1, "username": config.admin_username, "email": config.admin_email}
+    try:
+        existing = kratos_client.find_identity_by_email(config.admin_email)
+    except (requests.RequestException, ValueError):
+        raise BootstrapIdentityError("Administrator bootstrap identity lookup failed") from None
 
-    existing = kratos_client.find_identity_by_email(config.admin_email)
+    linked_id = None
+    if existing is not None:
+        metadata = existing.get("metadata_admin") or {}
+        traits = existing.get("traits") or {}
+        linked_id = metadata.get("spring_user_id") if isinstance(metadata, dict) else None
+        if (
+            not isinstance(metadata, dict)
+            or metadata.get("bootstrap") != provenance
+            or not isinstance(traits, dict)
+            or traits.get("email") != config.admin_email
+            or existing.get("schema_id") != schema_id
+            or type(linked_id) is not int
+            or linked_id <= 0
+        ):
+            raise BootstrapIdentityError(
+                "Administrator bootstrap identity is untrusted or conflicting; manual reconciliation required"
+            )
+        try:
+            spring_user = spring_auth_client.resolve_user(linked_id)
+        except (requests.RequestException, ValueError):
+            raise BootstrapIdentityError(
+                "Administrator bootstrap link cannot be resolved; manual reconciliation required"
+            ) from None
+    else:
+        try:
+            spring_user = spring_auth_client.provision_bootstrap_admin(
+                config.admin_username, config.admin_email, DEV_ADMIN_DATE_OF_BIRTH
+            )
+        except (requests.RequestException, ValueError):
+            raise BootstrapIdentityError(
+                "Administrator bootstrap requires safe create-only canonical provisioning; manual reconciliation required"
+            ) from None
 
-    if existing is None:
-        identity = kratos_client.create_identity(
-            schema_id,
-            config.admin_email,
-            config.admin_password,
-            metadata_admin={"spring_user_id": spring_user_id},
-        )
-        logger.info(
-            "created Kratos identity %s (id=%s) linked to spring_user_id=%s",
-            config.admin_email,
-            identity.get("id"),
-            spring_user_id,
-        )
+    expected = {"username": config.admin_username, "email": config.admin_email, "role": DEV_ADMIN_ROLE}
+    if (
+        not isinstance(spring_user, dict)
+        or type(spring_user.get("id")) is not int
+        or spring_user["id"] <= 0
+        or (linked_id is not None and spring_user["id"] != linked_id)
+        or any(spring_user.get(key) != value for key, value in expected.items())
+    ):
+        raise BootstrapIdentityError("Administrator bootstrap canonical user conflicts; manual reconciliation required")
+
+    if existing is not None:
+        logger.info("trusted administrator bootstrap identity already linked, no-op")
         return
 
-    current_spring_user_id = (existing.get("metadata_admin") or {}).get("spring_user_id")
-    if current_spring_user_id == spring_user_id:
-        logger.info(
-            "Kratos identity %s already linked to spring_user_id=%s, no-op",
-            config.admin_email,
-            spring_user_id,
+    try:
+        kratos_client.create_identity(
+            schema_id, config.admin_email, config.admin_password,
+            metadata_admin={"spring_user_id": spring_user["id"], "bootstrap": provenance},
         )
-        return
-
-    kratos_client.set_identity_metadata_admin(existing["id"], {"spring_user_id": spring_user_id})
-    logger.info(
-        "linked Kratos identity %s metadata_admin.spring_user_id -> %s",
-        config.admin_email,
-        spring_user_id,
-    )
+    except (requests.RequestException, ValueError):
+        raise BootstrapIdentityError(
+            "Administrator bootstrap identity creation failed; manual reconciliation required"
+        ) from None
+    logger.info("created trusted administrator bootstrap identity")
 
 
 def run(config: Config, hydra_client: HydraClient, kratos_client: KratosClient, spring_auth_client) -> None:

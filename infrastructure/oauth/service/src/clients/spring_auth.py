@@ -62,3 +62,16 @@ class SpringAuthClient:
         )
         response.raise_for_status()
         return response.json()
+
+    def provision_bootstrap_admin(self, username: str, email: str, date_of_birth: date) -> dict:
+        """Create only: the server must reject existing usernames/emails.
+        A distinct route fails closed against older, upsert-only backends."""
+        token = self._token_provider()
+        response = requests.post(
+            f"{self._base_url}/internal/users/bootstrap-admin",
+            json={"username": username, "email": email, "dateOfBirth": date_of_birth.isoformat()},
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10,
+        )
+        response.raise_for_status()
+        return response.json()

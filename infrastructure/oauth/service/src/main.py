@@ -10,7 +10,7 @@ from clients.kratos import KratosClient, KratosNotReadyError
 from clients.spring_auth import SpringAuthClient, SpringNotReadyError
 from config import ConfigError, load_config
 from services import bootstrap
-from services.bootstrap import AccessControlSpecError
+from services.bootstrap import AccessControlSpecError, BootstrapIdentityError
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -36,7 +36,7 @@ def main() -> int:
 
     try:
         bootstrap.run(config, hydra_client, kratos_client, spring_auth_client)
-    except (HydraNotReadyError, KratosNotReadyError, SpringNotReadyError, AccessControlSpecError) as exc:
+    except (HydraNotReadyError, KratosNotReadyError, SpringNotReadyError, AccessControlSpecError, BootstrapIdentityError) as exc:
         logger.error("bootstrap failed: %s", exc)
         return 1
 

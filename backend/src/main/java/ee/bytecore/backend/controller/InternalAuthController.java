@@ -46,6 +46,14 @@ public class InternalAuthController {
         return CanonicalUserResponse.from(user);
     }
 
+    @PostMapping("/bootstrap-admin")
+    @PreAuthorize(
+            "hasAuthority('SCOPE_internal:provision-user') and @internalAuthController.isMachineCaller(authentication)")
+    public CanonicalUserResponse bootstrapAdmin(@RequestBody BootstrapAdminRequest request) {
+        return CanonicalUserResponse.from(
+                userService.provisionBootstrapAdmin(request.username(), request.email(), request.dateOfBirth()));
+    }
+
     public boolean isMachineCaller(Authentication authentication) {
         return authentication instanceof JwtAuthenticationToken jwt
                 && machineClientId.equals(jwt.getToken().getSubject())

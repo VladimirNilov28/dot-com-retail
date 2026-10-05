@@ -53,6 +53,18 @@ class SpringAuthClientTest(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             self.client.provision_user("admin", "admin@bytecore.ee", date(2000, 1, 1), "ADMIN")
 
+    @patch("clients.spring_auth.requests.post")
+    def test_bootstrap_admin_uses_distinct_create_only_endpoint(self, mock_post):
+        mock_post.return_value = Mock(status_code=200, json=Mock(return_value={"id": 1, "role": "ADMIN"}))
+        result = self.client.provision_bootstrap_admin("admin", "admin@bytecore.ee", date(2000, 1, 1))
+        self.assertEqual(result["id"], 1)
+        mock_post.assert_called_once_with(
+            "http://backend:8080/internal/users/bootstrap-admin",
+            json={"username": "admin", "email": "admin@bytecore.ee", "dateOfBirth": "2000-01-01"},
+            headers={"Authorization": "Bearer hydra-client-credentials-token"},
+            timeout=10,
+        )
+
     @patch("clients.spring_auth.requests.get")
     def test_resolve_user_gets_with_bearer_token_and_returns_parsed_response(self, mock_get):
         mock_response = Mock(status_code=200)

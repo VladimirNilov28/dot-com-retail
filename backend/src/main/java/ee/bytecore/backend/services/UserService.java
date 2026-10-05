@@ -136,6 +136,21 @@ public class UserService {
     }
 
     @Transactional
+    public User provisionBootstrapAdmin(String username, String email, LocalDate dateOfBirth) {
+        if (dateOfBirth == null) {
+            throw new IllegalArgumentException("Date of birth is required");
+        }
+        User created = create(username, email, dateOfBirth);
+        created.setRole(UserRole.ADMIN);
+        try {
+            return userRepository.saveAndFlush(created);
+        } catch (DataIntegrityViolationException e) {
+            throw new UserAlreadyExistsException(
+                    String.format("User with username %s or email %s already exists", username, email));
+        }
+    }
+
+    @Transactional
     public User updateProfile(Long id, String username, String email) {
         User user = userRepository
                 .findLockedById(id)
