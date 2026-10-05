@@ -11,6 +11,11 @@ from config import ConfigError, load_config  # noqa: E402
 class LoadConfigTest(unittest.TestCase):
     def _env(self, **overrides):
         env = {
+            "HYDRA_ADMIN_URL": "http://hydra:4445",
+            "HYDRA_PUBLIC_URL": "http://hydra:4444",
+            "KRATOS_ADMIN_URL": "http://kratos:4434",
+            "KRATOS_PUBLIC_URL": "http://kratos:4433",
+            "SPRING_INTERNAL_BASE_URL": "http://backend:8080",
             "ADMIN_USERNAME": "admin",
             "ADMIN_PASSWORD": "admin-dev-password",
             "OAUTH_SERVICE_CLIENT_SECRET": "oauth-service-dev-secret",
