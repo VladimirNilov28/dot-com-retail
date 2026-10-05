@@ -213,7 +213,7 @@ public class KratosClient {
                     .retrieve()
                     .toBodilessEntity();
         } catch (RestClientException e) {
-            throw new IdentitySyncException("Failed to sync email to Kratos: " + e.getMessage(), e);
+            throw new IdentitySyncException("Email synchronization could not be completed. Retry the profile update.");
         }
     }
 }

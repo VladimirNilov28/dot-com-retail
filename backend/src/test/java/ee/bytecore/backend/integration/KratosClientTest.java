@@ -65,12 +65,15 @@ class KratosClientTest {
     @Test
     void shouldWrapHttpFailureAsIdentitySyncExceptionTest() throws IOException {
         server = HttpServer.create(new InetSocketAddress(0), 0);
-        server.createContext("/admin/identities", exchange -> respond(exchange, 500, ""));
+        server.createContext(
+                "/admin/identities", exchange -> respond(exchange, 500, "{\"detail\":\"upstream-private-marker\"}"));
         server.start();
         KratosClient kratosClient = new KratosClient(baseUrl());
 
         assertThatThrownBy(() -> kratosClient.updateIdentityEmail("old@example.com", "new@example.com"))
-                .isInstanceOf(IdentitySyncException.class);
+                .isInstanceOf(IdentitySyncException.class)
+                .hasMessageNotContaining("upstream-private-marker")
+                .hasNoCause();
     }
 
     @Test
