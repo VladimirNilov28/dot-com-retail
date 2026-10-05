@@ -12,6 +12,9 @@ spring:
 kratos:
   admin-url: ${KRATOS_ADMIN_URL}
 
+hydra:
+  admin-url: ${HYDRA_ADMIN_URL}
+
 dgs:
   graphql:
     introspection:

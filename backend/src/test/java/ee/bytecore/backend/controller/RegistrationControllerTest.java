@@ -123,6 +123,20 @@ class RegistrationControllerTest {
     }
 
     @Test
+    void shouldReturnActionable502WhenIdentityProviderFailsTest() throws Exception {
+        when(userService.registerCustomer("new-customer", "new@example.com", "test-value", LocalDate.of(1998, 3, 20)))
+                .thenThrow(new ee.bytecore.backend.exceptions.IdentitySyncException("Retry registration."));
+        var request =
+                new RegisterUserRequest("new-customer", "new@example.com", "test-value", LocalDate.of(1998, 3, 20));
+        mockMvc.perform(post("/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadGateway())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+                        .string("Retry registration."));
+    }
+
+    @Test
     void shouldReturn409WhenServiceRejectsDuplicateTest() throws Exception {
         when(userService.registerCustomer(
                         "existing-user", "existing@example.com", "s3cret-test-pw", LocalDate.of(1998, 3, 20)))

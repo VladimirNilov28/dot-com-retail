@@ -2,17 +2,22 @@ package ee.bytecore.backend.services;
 
 import java.time.LocalDate;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.regex.Pattern;
 
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import ee.bytecore.backend.entities.user.User;
 import ee.bytecore.backend.enums.UserRole;
 import ee.bytecore.backend.exceptions.IdentitySyncException;
 import ee.bytecore.backend.exceptions.UserAlreadyExistsException;
 import ee.bytecore.backend.exceptions.UserNotFoundException;
+import ee.bytecore.backend.integration.HydraClient;
 import ee.bytecore.backend.integration.KratosClient;
 import ee.bytecore.backend.repositories.user.UserRepository;
 
@@ -25,14 +30,23 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final KratosClient kratosClient;
+    private final HydraClient hydraClient;
+    private final TransactionTemplate deletionTransaction;
 
-    public UserService(UserRepository userRepository, KratosClient kratosClient) {
+    public UserService(
+            UserRepository userRepository,
+            KratosClient kratosClient,
+            HydraClient hydraClient,
+            PlatformTransactionManager transactionManager) {
         this.userRepository = userRepository;
         this.kratosClient = kratosClient;
+        this.hydraClient = hydraClient;
+        this.deletionTransaction = new TransactionTemplate(transactionManager);
+        this.deletionTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
     public Optional<User> findById(Long id) {
-        return userRepository.findById(id);
+        return userRepository.findById(id).filter(user -> !user.isDeleted() && user.getDeletionIdentityId() == null);
     }
 
     public User create(String username, String email, LocalDate dateOfBirth) {
@@ -107,7 +121,8 @@ public class UserService {
     public User provision(String username, String email, LocalDate dateOfBirth, UserRole role) {
         Optional<User> existing = userRepository.findByUsername(username);
         if (existing.isPresent()) {
-            User user = existing.get();
+            User user = userRepository.findLockedById(existing.get().getId()).orElseThrow();
+            requireActive(user);
             if (user.getRole() != role) {
                 user.setRole(role);
                 userRepository.save(user);
@@ -123,8 +138,9 @@ public class UserService {
     @Transactional
     public User updateProfile(Long id, String username, String email) {
         User user = userRepository
-                .findById(id)
+                .findLockedById(id)
                 .orElseThrow(() -> new UserNotFoundException(String.format("User with id %s not found", id)));
+        requireActive(user);
 
         if (!user.getEmail().equals(email)) {
             // Fail-fast, before touching Spring's own state: if Kratos can't
@@ -139,26 +155,65 @@ public class UserService {
     }
 
     public void deleteById(Long id) {
-        if (!userRepository.existsById(id)) {
-            throw new UserNotFoundException(String.format("User with id %s not found", id));
+        UUID identityId = deletionTransaction.execute(status -> {
+            User user = userRepository
+                    .findLockedById(id)
+                    .orElseThrow(() -> new UserNotFoundException(String.format("User with id %s not found", id)));
+            if (user.isDeleted()) {
+                return null;
+            }
+            if (user.getDeletionIdentityId() == null) {
+                UUID verifiedIdentity = kratosClient.findLinkedIdentity(id);
+                if (verifiedIdentity == null) {
+                    throw new IdentitySyncException("No verified canonical identity link found. Contact support.");
+                }
+                user.setDeletionIdentityId(verifiedIdentity);
+                userRepository.saveAndFlush(user);
+            }
+            return user.getDeletionIdentityId();
+        });
+        if (identityId == null) {
+            return;
         }
-        try {
-            userRepository.deleteById(id);
-        } catch (DataIntegrityViolationException e) {
-            // The user still has related rows (e.g. orders) that reference
-            // them via a non-cascading FK - surface a clean domain error
-            // instead of leaking the raw SQL/constraint message.
-            throw new IllegalArgumentException(
-                    String.format("Cannot delete user %s: user has existing orders or other related records", id));
-        }
+
+        // Commit the verified retry coordinate before irreversible upstream work.
+        // Remove authentication first, then grants, so a retry after a DB/upstream
+        // failure cannot leave a live password identity hidden behind success.
+        kratosClient.deleteLinkedIdentity(identityId, id);
+        hydraClient.revokeUser(id);
+
+        deletionTransaction.executeWithoutResult(status -> {
+            User user = userRepository.findLockedById(id).orElseThrow();
+            if (user.isDeleted()) {
+                return;
+            }
+            userRepository.deleteAddresses(id);
+            userRepository.deletePaymentMethods(id);
+            userRepository.deleteCart(id);
+            userRepository.deleteWishlist(id);
+            String anonymous = "deleted-" + UUID.randomUUID();
+            user.setUsername(anonymous);
+            user.setEmail(anonymous + "@deleted.invalid");
+            user.setDateOfBirth(LocalDate.of(1970, 1, 1));
+            user.setRole(UserRole.USER);
+            user.setDeleted(true);
+            userRepository.saveAndFlush(user);
+        });
     }
 
     @Transactional
     public User updateRole(Long id, UserRole role) {
         User user = userRepository
-                .findById(id)
+                .findLockedById(id)
                 .orElseThrow(() -> new UserNotFoundException(String.format("User with id %s not found", id)));
+        requireActive(user);
         user.setRole(role);
         return user;
+    }
+
+    private void requireActive(User user) {
+        if (user.isDeleted() || user.getDeletionIdentityId() != null) {
+            throw new IllegalArgumentException("Account deletion is in progress or completed. Contact support.");
+        }
     }
 }

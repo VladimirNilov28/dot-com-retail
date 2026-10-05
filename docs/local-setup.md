@@ -326,3 +326,42 @@ declared in `frontend/package.json`'s `packageManager` field:
 ```bash
 curl -fsSL https://bun.sh/install | bash -s "bun-v1.4.2"
 ```
+## Account deletion
+
+`deleteUser(userId: ...)` remains an ADMIN-only GraphQL mutation requiring
+`user:write`. There is no customer self-delete or alternate authorization path.
+Spring uses the Kratos and Hydra admin APIs (dev loopback ports 4434 and 4445;
+production requires `KRATOS_ADMIN_URL` and `HYDRA_ADMIN_URL`).
+
+Deletion first enumerates Kratos identities and proves the unique
+`metadata_admin.spring_user_id` link. Email alone is never sufficient. Missing,
+ambiguous, or changed links fail closed and require support to repair the link.
+The verified identity UUID is committed as a retry coordinate before external
+side effects; it is not a credential. Profile/role changes and ordinary canonical
+user lookups are blocked once deletion starts.
+
+Spring then deletes that identity's sessions and the identity itself, and revokes
+all Hydra consent/token chains and login sessions for the canonical numeric
+subject. No client-wide or unrelated-user revocation is used. Only after both
+providers succeed does a database transaction remove addresses, saved payment
+methods, carts, and wishlists (including their items), replace username/email/DOB
+with anonymous values, reset the role to USER, and mark deletion complete.
+Historical orders, order items, monetary values, inventory, and payment outbox
+events remain untouched. Their required user FK points to an anonymized,
+non-authenticatable tombstone rather than cascading history away.
+
+This is not a distributed ACID transaction. Upstream failure never returns
+success. A provider may already have revoked the account when another step fails.
+Retry the same mutation/id: the committed coordinate permits an already-absent
+identity, repeats subject-scoped revocation safely, and retries the final database
+transaction. Do not manually remove the pending user/coordinate. Completed
+deletion is idempotent; deleting a never-existing id still reports not found.
+Pending deletion deliberately keeps the original unique email/username reserved;
+after completion both can be registered again as a new canonical user and identity.
+Registration provider conflicts return actionable 409 responses; provider outages
+return actionable 502 responses, not an empty authentication failure.
+
+Previously issued self-contained access JWTs can remain cryptographically valid
+until their normal expiry (currently 30 minutes); there is no new denylist.
+Refresh grants and native sessions are revoked immediately. Existing authorization
+and applicable upstream MFA requirements are unchanged.

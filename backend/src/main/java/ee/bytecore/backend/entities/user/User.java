@@ -2,6 +2,7 @@ package ee.bytecore.backend.entities.user;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.UUID;
 
 import ee.bytecore.backend.enums.UserRole;
 
@@ -38,6 +39,12 @@ public class User {
 
     @Column(name = "date_of_birth", nullable = false)
     private LocalDate dateOfBirth;
+
+    @Column(name = "deletion_identity_id")
+    private UUID deletionIdentityId;
+
+    @Column(nullable = false)
+    private boolean deleted;
 
     @CreationTimestamp
     @Column(nullable = false, updatable = false)

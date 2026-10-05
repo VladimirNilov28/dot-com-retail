@@ -1,0 +1,20 @@
+serve:
+  public:
+    base_url: http://kratos:4433/
+  admin:
+    base_url: http://kratos:4434/
+selfservice:
+  default_browser_return_url: http://client.invalid/
+  methods:
+    password:
+      enabled: true
+identity:
+  default_schema_id: default
+  schemas:
+    - id: default
+      url: file:///etc/account-deletion/identity.json
+log:
+  level: error
+courier:
+  smtp:
+    connection_uri: smtp://localhost:1025/

@@ -170,6 +170,46 @@ class UserMutationAuthorizationTest {
     }
 
     @Test
+    void shouldAllowAdminToDeleteOwnAccountWithRequiredScopeTest() throws Exception {
+        mockMvc.perform(post("/graphql")
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "1", "ADMIN", "user:write"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"mutation { deleteUser(userId: \\\"1\\\") }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.deleteUser").value(true));
+        org.mockito.Mockito.verify(userService).deleteById(1L);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(
+            strings = {"USER", "SUPPORT", "CATALOG_MANAGER", "ORDER_MANAGER", "WAREHOUSE"})
+    void shouldRejectNonAdminDeletionEvenWithWriteScopeForOwnAndOtherAccountTest(String role) throws Exception {
+        for (String id : new String[] {"1", "2"}) {
+            mockMvc.perform(post("/graphql")
+                            .with(asAuthenticatedJwt(jwtAuthenticationConverter, "1", role, "user:write"))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"query\":\"mutation { deleteUser(userId: \\\"" + id + "\\\") }\"}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.errors").isNotEmpty());
+        }
+        org.mockito.Mockito.verify(userService, org.mockito.Mockito.never()).deleteById(any());
+    }
+
+    @Test
+    void shouldNotReportDeletionSuccessWhenRevocationFailsTest() throws Exception {
+        org.mockito.Mockito.doThrow(new ee.bytecore.backend.exceptions.IdentitySyncException("Retry deletion."))
+                .when(userService)
+                .deleteById(1L);
+        mockMvc.perform(post("/graphql")
+                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", "ADMIN", "user:write"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"mutation { deleteUser(userId: \\\"1\\\") }\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.errors").isNotEmpty())
+                .andExpect(jsonPath("$.data.deleteUser").doesNotExist());
+    }
+
+    @Test
     void shouldRejectDeleteUserForAdminMissingScopeTest() throws Exception {
         // Regression: ADMIN must NOT bypass a missing user:write scope.
         mockMvc.perform(post("/graphql")

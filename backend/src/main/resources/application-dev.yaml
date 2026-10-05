@@ -16,6 +16,9 @@ spring:
 kratos:
   admin-url: http://127.0.0.1:4434
 
+hydra:
+  admin-url: http://127.0.0.1:4445
+
 dgs:
   graphql:
     graphiql:
