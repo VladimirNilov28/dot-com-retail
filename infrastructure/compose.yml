@@ -169,13 +169,8 @@ services:
         condition: service_healthy
       kratos:
         condition: service_healthy
-
-    # Spring runs on the host (not in this compose file, by design — see
-    # infrastructure/compose.yml comments below), so oauth-service needs a
-    # route back to the host. Linux Docker doesn't resolve
-    # host.docker.internal by default; this maps it to the host gateway.
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      backend:
+        condition: service_healthy
 
     ports:
       - "4446:4446"
@@ -188,7 +183,7 @@ services:
       KRATOS_PUBLIC_URL: ${KRATOS_PUBLIC_URL:?KRATOS_PUBLIC_URL is required}
       KRATOS_BROWSER_URL: ${KRATOS_BROWSER_URL:?KRATOS_BROWSER_URL is required}
       ACCESS_CONTROL_FILE: /app/access-control.yml
-      SPRING_INTERNAL_BASE_URL: ${SPRING_INTERNAL_BASE_URL:?SPRING_INTERNAL_BASE_URL is required}
+      SPRING_INTERNAL_BASE_URL: http://backend:8080
       ADMIN_USERNAME: ${ADMIN_USERNAME:?ADMIN_USERNAME is required}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
       OAUTH_SERVICE_CLIENT_ID: ${OAUTH_SERVICE_CLIENT_ID:?OAUTH_SERVICE_CLIENT_ID is required}
@@ -209,9 +204,7 @@ services:
     restart: unless-stopped
 
   # Single external GraphQL entry point. Fronts the Spring/DGS `retail`
-  # subgraph; Spring itself keeps running on the host (see README "Local
-  # development architecture"), so the router reaches it the same way
-  # oauth-service does, via host.docker.internal on the pinned dev subnet.
+  # subgraph through the Compose service address backend:8080.
   # The supergraph is a local, reproducible artifact (see
   # infrastructure/hive/scripts/compose-supergraph.sh) — no Hive Cloud/
   # registry account is used or required.
@@ -219,8 +212,9 @@ services:
     image: ghcr.io/graphql-hive/router:0.2.19
     container_name: hive-router
 
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    depends_on:
+      backend:
+        condition: service_healthy
 
     ports:
       - "4002:4000"
@@ -237,16 +231,52 @@ services:
 
     restart: unless-stopped
 
-  # TODO:
-  # Spring Boot service
+  backend:
+    build:
+      context: ../backend
+    container_name: backend
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      hydra:
+        condition: service_healthy
+      kratos:
+        condition: service_healthy
+
+    ports:
+      - "127.0.0.1:8080:8080"
+
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/retail
+      SPRING_DATASOURCE_USERNAME: ${DB_USERNAME:?DB_USERNAME is required}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://127.0.0.1:4444
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://hydra:4444/.well-known/jwks.json
+      KRATOS_ADMIN_URL: http://kratos:4434
+      HYDRA_ADMIN_URL: http://hydra:4445
+      OAUTH_SERVICE_CLIENT_ID: ${OAUTH_SERVICE_CLIENT_ID:?OAUTH_SERVICE_CLIENT_ID is required}
+      MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED: "true"
+
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/actuator/health/readiness"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+    restart: unless-stopped
 
   # TODO:
   # Angular service
 
   # Single-node KRaft broker (no Zookeeper) for backend<->Payment Service
   # asynchronous communication. Two listeners, same reasoning as Postgres:
-  # Spring runs on the host (not in this compose file), so it needs
-  # localhost:9092; every other container reaches it via kafka:29092.
+  # containers use kafka:29092; localhost:9092 remains available to host tools.
   kafka:
     image: apache/kafka:3.9.1 # 3.9.0 has a real KRaft bug (KAFKA-18281) - do not downgrade.
     container_name: kafka
@@ -322,10 +352,7 @@ networks:
   default:
     ipam:
       config:
-        # Pinned so the Docker->host firewall rule (see README "Local
-        # development architecture") targets a stable subnet instead of
-        # whatever Docker happens to auto-assign this project on network
-        # recreation.
+        # Preserve the existing development network across this migration.
         - subnet: 172.28.88.0/24
 
 volumes:

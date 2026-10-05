@@ -1,8 +1,8 @@
 # Hive Router configuration — local development.
 #
 # Spring/DGS `retail` is the only subgraph; its routing_url is baked into
-# supergraph.graphql by scripts/compose-supergraph.sh (host.docker.internal,
-# since Spring runs on the host, not in this Compose network).
+# supergraph.graphql by scripts/compose-supergraph.sh (backend:8080 on the
+# Compose network).
 supergraph:
   source: file
   path: ./supergraph.graphql

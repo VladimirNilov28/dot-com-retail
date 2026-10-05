@@ -1,19 +1,21 @@
 COMPOSE = docker compose -f infrastructure/compose.yml --env-file .env
+COMPOSE_DEBUG = $(COMPOSE) -f infrastructure/compose.debug.yml
 GRADLE  = cd backend && ./gradlew
-DEV_SUBNET = 172.28.88.0/24
+WAIT_TIMEOUT ?= 180
 
 GREEN  = \033[0;32m
 YELLOW = \033[0;33m
 CYAN   = \033[0;36m
 RESET  = \033[0m
 
-.PHONY: dev dev-clean debug debug-clean test test-unit test-graphql test-integration test-e2e \
+.PHONY: dev front-dev dev-clean debug debug-clean test test-unit test-graphql test-integration test-e2e \
 	coverage format format-check build status logs down clean help restart config doctor firewall-check \
-	seed-test-data
+	seed-test-data check-env
 
 help:
 	@echo "$(CYAN)Available commands:$(RESET)"
-	@echo "  $(GREEN)make dev$(RESET)             🚀 start docker containers and run the backend"
+	@echo "  $(GREEN)make dev$(RESET)             🚀 build/start the Docker stack including Spring and wait for readiness"
+	@echo "  $(GREEN)make front-dev$(RESET)       start the Next.js frontend on http://localhost:3000"
 	@echo "  $(GREEN)make dev-clean$(RESET)       🚀🧹 clean start: tear down containers/volumes first, then start docker containers and run the backend"
 	@echo "  $(GREEN)make debug$(RESET)           🐞 start docker containers and run the backend with a debug port open (5005)"
 	@echo "  $(GREEN)make debug-clean$(RESET)     🐞🧹 clean start, then start the backend with a debug port open (5005)"
@@ -32,37 +34,33 @@ help:
 	@echo "  $(GREEN)make restart$(RESET)         🔁 restart docker containers (e.g. to re-run oauth-service bootstrap)"
 	@echo "  $(GREEN)make clean$(RESET)           🧹 stop docker containers and delete their volumes (fresh Postgres/Hydra/Kratos state)"
 	@echo "  $(GREEN)make config$(RESET)          🔎 print the effective (resolved) docker compose config"
-	@echo "  $(GREEN)make doctor$(RESET)          🩺 diagnose the local dev infrastructure (env, network, firewall, ports)"
-	@echo "  $(GREEN)make firewall-check$(RESET)  🔥 verify (without changing) the host firewall rule oauth-service needs"
+	@echo "  $(GREEN)make doctor$(RESET)          🩺 diagnose the local dev stack (env, network, ports, health)"
+	@echo "  $(GREEN)make firewall-check$(RESET)  ℹ️ legacy target: no Docker-to-host Spring rule is needed"
 	@echo "  $(GREEN)make seed-test-data$(RESET)  🌱 wipe and repopulate the dev database with test data"
 
-dev:
+check-env:
 	@test -f .env || { echo "$(YELLOW)✗ .env not found — run: cp .env.example .env$(RESET)"; exit 1; }
 	@$(COMPOSE) config >/dev/null || { echo "$(YELLOW)✗ docker compose config failed — check .env for missing values above$(RESET)"; exit 1; }
-	@echo "$(CYAN)🐳 starting docker containers...$(RESET)"
-	@$(COMPOSE) up -d
-	@echo "$(YELLOW)⚠ Spring will start below on host :8080 — do not start a second instance$(RESET)"
-	@echo "$(CYAN)🔌 checking oauth-service -> host Spring:8080 (best-effort, 15s)...$(RESET)"
-	@for i in $$(seq 1 5); do \
-		$(COMPOSE) exec -T oauth-service python3 -c "import socket; socket.create_connection(('host.docker.internal', 8080), timeout=2)" 2>/dev/null && { echo "$(GREEN)✓ oauth-service can reach host:8080$(RESET)"; break; }; \
-		[ "$$i" = 5 ] && echo "$(YELLOW)⚠ oauth-service cannot reach host:8080 yet — normal if Spring just started; run 'make doctor' once it's up$(RESET)"; \
-		sleep 3; \
-	done
-	@echo "$(GREEN)🚀 starting backend...$(RESET)"
-	@$(GRADLE) bootRun
 
-dev-clean:
+dev: check-env
+	@echo "$(CYAN)🐳 building and starting the stack, including Spring...$(RESET)"
+	@$(COMPOSE) up -d --build --wait --wait-timeout $(WAIT_TIMEOUT)
+	@echo "$(GREEN)✓ stack ready; backend: http://localhost:8080 — logs: make logs$(RESET)"
+
+front-dev:
+	@echo "$(CYAN)Starting the frontend on http://localhost:3000...$(RESET)"
+	@cd frontend && bun dev
+
+dev-clean: check-env
 	@echo "$(YELLOW)🧹 clean start requested — removing existing containers and volumes...$(RESET)"
 	@$(COMPOSE) down -v
 	@$(MAKE) dev
 
-debug:
-	@echo "$(CYAN)🐳 starting docker containers...$(RESET)"
-	@$(COMPOSE) up -d
-	@echo "$(YELLOW)🐞 starting backend in debug mode (port 5005)...$(RESET)"
-	@$(GRADLE) bootRun --debug-jvm
+debug: check-env
+	@echo "$(CYAN)🐞 starting the stack with Spring remote debugging on 127.0.0.1:5005...$(RESET)"
+	@$(COMPOSE_DEBUG) up -d --build --wait --wait-timeout $(WAIT_TIMEOUT)
 
-debug-clean:
+debug-clean: check-env
 	@echo "$(YELLOW)🧹 clean start requested — removing existing containers and volumes...$(RESET)"
 	@$(COMPOSE) down -v
 	@$(MAKE) debug
@@ -130,10 +128,7 @@ doctor:
 	@./infrastructure/scripts/dev-doctor.sh
 
 firewall-check:
-	@echo "$(CYAN)🔥 checking firewall rule for $(DEV_SUBNET) -> host:8080...$(RESET)"
-	@sudo -n iptables -C ufw-user-input -p tcp -s $(DEV_SUBNET) --dport 8080 -j ACCEPT 2>/dev/null \
-		&& echo "$(GREEN)✓ rule present$(RESET)" \
-		|| echo "$(YELLOW)✗ rule missing or sudo needs a password — run: sudo ufw allow from $(DEV_SUBNET) to any port 8080 proto tcp comment 'bytecore-dev: oauth-service -> Spring'$(RESET)"
+	@echo "$(CYAN)Spring and oauth-service now share the Compose network; no Docker-to-host firewall rule is required.$(RESET)"
 
 seed-test-data:
 	@echo "$(CYAN)🌱 seeding dev database with test data...$(RESET)"

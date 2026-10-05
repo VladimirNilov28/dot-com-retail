@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Read-only diagnostic for the local dev infrastructure (Postgres, Hydra,
-# Kratos, oauth-service, and the Docker->host:8080 path to a manually-run
-# Spring). Prints PASS/WARN/FAIL per check; never prints secret values.
+# Kratos, oauth-service, and containerized Spring). Prints PASS/WARN/FAIL
+# per check; never prints secret values.
 #
 # Usage: ./infrastructure/scripts/dev-doctor.sh   (or: make doctor)
 
@@ -58,18 +58,18 @@ else
   warn "network $NETWORK_NAME subnet is $ACTUAL_SUBNET, expected $DEV_SUBNET — recreate it: make down && make dev"
 fi
 
-# 6. oauth-service resolves host.docker.internal
-if "${COMPOSE[@]}" exec -T oauth-service python3 -c "import socket; socket.gethostbyname('host.docker.internal')" >/dev/null 2>&1; then
-  pass "oauth-service resolves host.docker.internal"
+# 6. oauth-service resolves the Spring service
+if "${COMPOSE[@]}" exec -T oauth-service python3 -c "import socket; socket.gethostbyname('backend')" >/dev/null 2>&1; then
+  pass "oauth-service resolves backend"
 else
-  warn "oauth-service cannot resolve host.docker.internal (is it running? make dev)"
+  warn "oauth-service cannot resolve backend (is the stack running? make dev)"
 fi
 
-# 7. oauth-service -> host:8080 (Spring)
-if "${COMPOSE[@]}" exec -T oauth-service python3 -c "import socket; socket.create_connection(('host.docker.internal', 8080), timeout=3)" >/dev/null 2>&1; then
-  pass "oauth-service can reach host.docker.internal:8080 (Spring)"
+# 7. oauth-service -> containerized Spring readiness
+if "${COMPOSE[@]}" exec -T oauth-service python3 -c "import urllib.request; urllib.request.urlopen('http://backend:8080/actuator/health/readiness', timeout=3)" >/dev/null 2>&1; then
+  pass "oauth-service can reach ready Spring at backend:8080"
 else
-  fail "oauth-service cannot reach host.docker.internal:8080 — is Spring running? is the firewall rule in place? (make firewall-check)"
+  fail "oauth-service cannot reach ready Spring at backend:8080 — check: docker compose -f infrastructure/compose.yml --env-file .env logs backend"
 fi
 
 # 8. Hydra admin + public
@@ -116,11 +116,11 @@ else
   fail "port 4447 does not show a 127.0.0.1 host_ip in effective compose config — check compose.yml"
 fi
 
-# 12. Firewall rule for the dev subnet -> host:8080 (best-effort, no sudo prompt)
-if sudo -n iptables -C ufw-user-input -p tcp -s "$DEV_SUBNET" --dport 8080 -j ACCEPT 2>/dev/null; then
-  pass "firewall rule allowing $DEV_SUBNET -> host:8080 is present"
+# 12. Published Spring readiness
+if curl -sf --max-time 3 http://127.0.0.1:8080/actuator/health/readiness >/dev/null 2>&1; then
+  pass "Spring readiness (127.0.0.1:8080) is UP"
 else
-  warn "cannot confirm firewall rule without sudo — verify manually: sudo iptables -C ufw-user-input -p tcp -s $DEV_SUBNET --dport 8080 -j ACCEPT (if missing: sudo ufw allow from $DEV_SUBNET to any port 8080 proto tcp comment 'bytecore-dev: oauth-service -> Spring')"
+  fail "Spring readiness (127.0.0.1:8080) failed — run: make dev"
 fi
 
 echo "=============================="

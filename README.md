@@ -6,8 +6,9 @@ no backend services. Full-stack Docker reviewer setup remains separate work.
 
 ## Local development architecture
 
-- **Spring Boot** runs manually on the host (usually from your IDE), on
-  `:8080`. It is never containerized in dev. It is the Federation-compatible
+- **Spring Boot** runs as the Compose service `backend`, published on
+  `127.0.0.1:8080`. Its multi-stage image builds with Java 21 and the Gradle
+  wrapper; no host JDK is needed to start it. It is the Federation-compatible
   `retail` subgraph — the only GraphQL subgraph today.
 - **Hive Router** (`infrastructure/hive/`, Docker Compose service
   `hive-router`) is the single external GraphQL entry point, on `:4002`. It
@@ -19,16 +20,19 @@ no backend services. Full-stack Docker reviewer setup remains separate work.
   canonical local GraphQL editor; **Spring/DGS GraphiQL is disabled**.
 - **Docker Compose** (`infrastructure/compose.yml`) runs the supporting
   infrastructure: PostgreSQL, Ory Hydra, Ory Kratos, `oauth-service` (a
-  small Python service), and Hive Router. Jenkins, if present, is unrelated
+  small Python service), Spring, Hive Router, Kafka and the Go Payment Service.
+  Jenkins, if present, is unrelated
   infra on a separate Compose project.
 - `oauth-service` exposes a login/consent bridge on `:4446` and a
   loopback-only internal dev-token endpoint on `127.0.0.1:4447`.
-- Flow: `oauth-service` (in Docker) → `http://host.docker.internal:8080` →
-  Spring (on the host). Hive Router reaches Spring the same way, via
-  `host.docker.internal:8080`. The Compose network is pinned to
+- Flow: `oauth-service` → `http://backend:8080` → Spring.
+  Hive Router also reaches Spring at `http://backend:8080/graphql`.
+  Spring reaches PostgreSQL, Kafka, Hydra and Kratos by their Compose service
+  names. Hydra JWTs retain their public issuer (`http://127.0.0.1:4444`);
+  Spring fetches their signing keys internally from `hydra:4444`.
+  The Compose network remains pinned to
   `172.28.88.0/24` (see `infrastructure/compose.yml`'s `networks.default.ipam`
-  block) so this path is deterministic across machines and network
-  recreations.
+  block). No Docker-to-host Spring connection or firewall exception is needed.
 - The future Payment Service is **not** a Hive subgraph and Hive Router is
   not involved in reaching it. It integrates asynchronously via Kafka
   (`PaymentEventPublisher` seam, not yet wired) — Hive Router is
@@ -40,29 +44,33 @@ no backend services. Full-stack Docker reviewer setup remains separate work.
 cp .env.example .env
 ```
 
-### One-time firewall setup
-
-The host firewall (`ufw`) defaults to dropping all inbound traffic, which
-also blocks Docker containers from reaching Spring on the host. Allow only
-the pinned dev subnet, on only port 8080:
-
-```bash
-sudo ufw allow from 172.28.88.0/24 to any port 8080 proto tcp comment 'bytecore-dev: oauth-service -> Spring'
-```
-
-This is scoped to the dev Docker subnet and port 8080 only — it does not
-open Spring to the LAN/Internet, and does not touch any other firewall
-rule. Verify it any time with `make firewall-check` or `make doctor`.
+Existing `.env` files do not need their old host-oriented DB, Kafka or Spring
+URLs rewritten: Compose sets the internal service addresses explicitly and
+passes `DB_USERNAME` / `DB_PASSWORD` to Spring. If `HYDRA_PUBLIC_URL` is missing,
+add `HYDRA_PUBLIC_URL=http://hydra:4444`. Stop any manually running Spring
+instance before starting the container, so port 8080 is free.
 
 ### Day to day
 
 ```bash
-make dev             # start Docker infra, then run Spring (blocks in this terminal)
-make doctor           # diagnose the whole stack (env, network, firewall, ports, health)
+make dev             # build/start the stack, including Spring; wait for readiness
+make front-dev        # run the Next.js frontend on :3000 (separate terminal)
+make debug            # same stack, with Spring JDWP on 127.0.0.1:5005
+make doctor           # diagnose the stack (env, network, ports, health)
+make logs             # follow container logs
 make restart          # restart Docker infra (e.g. to re-run oauth-service's bootstrap)
 make down             # stop Docker infra
 make config           # print the effective (resolved) docker compose config
 ```
+
+`make dev` returns after readiness; `WAIT_TIMEOUT=300 make dev` increases the
+default 180-second wait. Source changes require another `make dev` to rebuild
+the backend image. `make debug` starts Spring without suspending startup;
+attach your IDE to localhost:5005. Normal `make dev` removes the debug override.
+Ordinary startup/restart preserves database and Kafka volumes; only the explicit
+`make clean`, `make dev-clean`, and `make debug-clean` targets delete them.
+Gradle build/test/format/seed targets remain host-development tools requiring
+their existing JDK/psql dependencies.
 
 ### Obtaining a dev JWT
 
@@ -153,9 +161,9 @@ cart/login page or second authentication system is included.
 
 | Symptom | Likely cause |
 |---|---|
-| `oauth-service` times out reaching `host.docker.internal:8080` | Firewall rule missing/stale, or the Compose subnet drifted from `172.28.88.0/24` — run `make doctor` |
+| `oauth-service` cannot reach `backend:8080` | Check backend readiness and `docker compose -f infrastructure/compose.yml --env-file .env logs backend`; run `make doctor` |
 | `401` from Spring's `/internal/users` | Usually a stale Hydra client secret from a prior broken bootstrap run; self-heals on the next `oauth-service` restart (`make restart`) via its idempotent reconciliation |
 | `docker compose config` fails naming a variable | A required value is missing from `.env` — copy from `.env.example` |
-| `oauth-service` crash-looping right after `make dev` | Expected transiently: Spring isn't up yet. Bounded retries + container restart recover automatically once Spring starts |
+| `make dev` reports an unhealthy service | Inspect that service's logs; Spring must complete Flyway/schema validation before OAuth bootstrap starts |
 | `127.0.0.1:4447` refuses connections | `oauth-service` is still bootstrapping or crash-looping — `docker logs oauth-service` |
-| Docker subnet/firewall mismatch | `make doctor` checks 5 and 12 |
+| Port 8080 is already allocated | Stop the manually started Spring instance before running `make dev` |

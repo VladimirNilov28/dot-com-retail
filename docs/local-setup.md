@@ -6,10 +6,10 @@ This guide walks through setting up the ByteCore e-commerce application for loca
 
 | Tool | Version | Notes |
 |---|---|---|
-| JDK | 21 | Required by the backend toolchain |
+| JDK | 21 | Only for host Gradle build/tests; Spring startup builds/runs in Docker |
 | Node.js | 22+ | Required for Next.js 16 / TypeScript 5 |
 | bun | 1.4.2 | Frontend package manager (see `frontend/package.json#packageManager`) |
-| Docker | Latest | PostgreSQL container + Testcontainers |
+| Docker + Compose | Current | Spring and supporting services; Testcontainers for host integration tests |
 | Git | Latest | Version control |
 
 ## Project Structure
@@ -38,7 +38,20 @@ Spring MVC (blocking) and Gradle as the build system.
 - **Apache Kafka** for messaging (plain `spring-kafka` `@KafkaListener`s)
 - **SpringDoc OpenAPI** for REST API documentation
 
-### Setup
+### Container startup
+
+```bash
+cp .env.example .env # first run only; do not overwrite an existing .env
+make dev
+```
+
+Spring runs as the `backend` service on <http://localhost:8080>. The image uses
+Java 21 and builds `bytecore-backend.jar` with the repository Gradle wrapper.
+Flyway runs before application readiness; OAuth bootstrap waits for Spring.
+Use `make debug` and attach an IDE to `127.0.0.1:5005` for container debugging.
+Stop any manually started Spring instance first.
+
+### Host build and tests
 
 ```bash
 cd backend
@@ -55,13 +68,13 @@ The shared `infrastructure/compose.yml` defines PostgreSQL and the auth stack:
 |---|---|
 | Database | `retail` |
 | Container credentials | `DB_USERNAME` / `DB_PASSWORD` from the root `.env` |
-| Spring connection | Host `127.0.0.1:5432`, configured in `application-dev.yaml` |
+| Spring container connection | `postgres:5432`, credentials passed from root `.env` by Compose |
 
-Spring's Docker Compose auto-management is disabled. Start infrastructure explicitly
-and keep Spring's datasource credentials consistent with the root `.env`:
+Spring's Docker Compose auto-management is disabled. Compose owns startup,
+including Spring, and sets its internal database/auth/Kafka addresses explicitly:
 
 ```bash
-docker compose -f infrastructure/compose.yml --env-file .env up -d
+docker compose -f infrastructure/compose.yml --env-file .env up -d --build --wait
 ```
 
 ### Configuration
@@ -72,7 +85,8 @@ Application properties live in `backend/src/main/resources/application.yaml`. As
 
 | Command | What it does |
 |---|---|
-| `./gradlew bootRun` | Start the backend server |
+| `make dev` (repository root) | Build/start the containerized stack and wait for readiness |
+| `make debug` (repository root) | Start the stack with loopback-only Spring remote debugging |
 | `./gradlew build` | Full build (format, compile, test, coverage) |
 | `./gradlew test` | Run unit and integration tests |
 | `./gradlew jacocoTestReport` | Generate coverage report |
@@ -129,28 +143,22 @@ that separate work remains tracked in #59/#94.
 
 ## Running the Full Stack
 
-1. **Start the shared development infrastructure** (PostgreSQL, Kratos,
-   Hydra, oauth-service, Hive, Kafka and Mailpit):
+1. **Start Spring and the shared infrastructure** (PostgreSQL, Kratos,
+   Hydra, oauth-service, Hive, Kafka, Go Payment Service and Mailpit):
    ```bash
-   docker compose -f infrastructure/compose.yml --env-file .env up -d
+   make dev
    ```
 
-2. **Start the backend** (in one terminal):
+2. **Start the frontend** (in another terminal):
    ```bash
-   cd backend
-   ./gradlew bootRun
+   make front-dev
    ```
 
-3. **Start the frontend** (in another terminal):
-   ```bash
-   cd frontend
-   bun dev
-   ```
+3. Open `http://localhost:3000/` in your browser.
 
-4. Open `http://localhost:3000/` in your browser.
-
-Alternatively, `make dev` starts infrastructure and runs Spring in its own
-terminal. Do not also launch a second Spring process on port 8080.
+`make dev` returns after readiness. Use `make logs` for container output.
+Do not launch a second Spring process on port 8080. Normal restart/down retains
+volumes; the explicitly named clean targets are destructive.
 
 For a production-style run, build then start instead:
 ```bash
@@ -281,7 +289,7 @@ validation error propagates with its original message (not masked).
 | Symptom | Likely cause |
 |---|---|
 | `readiness` returns non-200 | `supergraph.graphql` missing/stale — run `compose-supergraph.sh` |
-| Query returns `SUBREQUEST_HTTP_ERROR` / `Connect` | Spring isn't running on `:8080`, or the firewall rule from "One-time firewall setup" is missing (router reaches Spring via `host.docker.internal`, same path as `oauth-service`) |
+| Query returns `SUBREQUEST_HTTP_ERROR` / `Connect` | Check readiness/logs of the Compose `backend` service; Hive and OAuth use `backend:8080`, not a host gateway |
 | `401`/`Unexpected error` on every operation | No `Authorization` header set in the IDE, or the dev JWT expired — fetch a new one |
 | IDE loads but Docs panel is empty | Router's local `supergraph.graphql` is out of date — regenerate it |
 
@@ -304,17 +312,20 @@ cd frontend && bun run lint && bun run build
 
 ### Environment variables
 
-No `.env.example` exists yet. As the project matures, create one at the project root (`.gitignore` already excludes `.env*` files except `.env.example`). Typical variables to expect:
-
-- `DATABASE_URL` — PostgreSQL connection string
-- `KAFKA_BOOTSTRAP_SERVERS` — Kafka broker addresses
-- `OAUTH2_CLIENT_ID` / `OAUTH2_CLIENT_SECRET` — OAuth2 credentials
+Copy the committed root `.env.example` to `.env` on first setup. Compose passes
+database credentials to Spring and sets internal service URLs; it does not
+automatically source `.env` into optional host Gradle processes. Do not commit
+real secrets. Existing `.env` files need `HYDRA_PUBLIC_URL=http://hydra:4444` if
+that variable is missing. `DB_URL` and `KAFKA_BOOTSTRAP_SERVERS` host values do
+not override Spring's explicitly configured Compose addresses.
 
 ## Troubleshooting
 
 ### Docker isn't running
 
-The backend will fail to start if Docker isn't available (the `spring-boot-docker-compose` module tries to start the PostgreSQL container). Start Docker and try again.
+`make dev` uses Docker Compose to build/start Spring and its dependencies.
+Start the Docker daemon and try again; Spring's own Compose auto-management
+is disabled.
 
 ### Port conflicts
 
@@ -322,8 +333,10 @@ The backend will fail to start if Docker isn't available (the `spring-boot-docke
 |---|---|
 | 3000 | Next.js dev/prod server |
 | 4002 | Hive Router (GraphQL entry point + IDE) |
+| 8080 | Spring backend (loopback-only publication) |
+| 5005 | Spring remote debugger (`make debug` only; loopback-only) |
 | 5432 | PostgreSQL |
-| 9092 | Kafka (via Testcontainers) |
+| 9092 | Compose Kafka's host listener |
 
 ### GraphQL IDE
 

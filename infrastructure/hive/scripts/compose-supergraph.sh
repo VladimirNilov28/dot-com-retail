@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Reproducible local supergraph generation:
-#   retail subgraph (Spring/DGS, running on the host) -> SDL -> rover compose -> supergraph.graphql
+#   retail subgraph (Spring/DGS, published on host :8080) -> SDL -> rover compose -> supergraph.graphql
 #
 # Requires: Spring backend running on :8080, oauth-service running (docker compose, :4447),
 # and Rover CLI installed (https://rover.apollo.dev/nix/latest).

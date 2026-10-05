@@ -18,6 +18,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.SupplierJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
@@ -45,15 +46,26 @@ public class SecurityConfig {
     // failing clearly. Rebuild the same lazy-supplier + issuer-discovery
     // decoder explicitly, with bounded timeouts on the discovery call.
     @Bean
-    JwtDecoder jwtDecoder(@Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}") String issuerUri) {
+    JwtDecoder jwtDecoder(
+            @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}") String issuerUri,
+            @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri:}") String jwkSetUri) {
         var requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(DISCOVERY_TIMEOUT);
         requestFactory.setReadTimeout(DISCOVERY_TIMEOUT);
         var restTemplate = new RestTemplate(requestFactory);
 
-        Supplier<JwtDecoder> decoderSupplier = SingletonSupplier.of(() -> NimbusJwtDecoder.withIssuerLocation(issuerUri)
-                .restOperations(restTemplate)
-                .build());
+        Supplier<JwtDecoder> decoderSupplier = SingletonSupplier.of(() -> {
+            // Containers fetch keys internally while validating the public issuer.
+            NimbusJwtDecoder decoder = jwkSetUri.isBlank()
+                    ? NimbusJwtDecoder.withIssuerLocation(issuerUri)
+                            .restOperations(restTemplate)
+                            .build()
+                    : NimbusJwtDecoder.withJwkSetUri(jwkSetUri)
+                            .restOperations(restTemplate)
+                            .build();
+            decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(issuerUri));
+            return decoder;
+        });
 
         return new SupplierJwtDecoder(decoderSupplier);
     }
@@ -113,7 +125,12 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .oauth2ResourceServer(
                         oauth2 -> oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)))
-                .authorizeHttpRequests(auth -> auth
+                .authorizeHttpRequests(auth -> auth.requestMatchers(
+                                HttpMethod.GET,
+                                "/actuator/health",
+                                "/actuator/health/liveness",
+                                "/actuator/health/readiness")
+                        .permitAll()
                         // The one intentionally public entry point: normal
                         // end-user self-registration. Scoped to this exact
                         // path/method only — every other REST and GraphQL

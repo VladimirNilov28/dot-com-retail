@@ -63,6 +63,9 @@ bun install --frozen-lockfile
 bun dev
 ```
 
+After installing dependencies, `make front-dev` from the repository root runs
+the same development server in the foreground.
+
 Open <http://localhost:3000>. No backend, database, Docker services, environment
 variables, or secrets are needed for this demonstration. There is therefore no
 frontend `.env.example` for this ticket. The repository root `.env` configures
@@ -98,7 +101,7 @@ These are standalone host-development commands. The Docker-only, one-command
 full-stack reviewer workflow is tracked separately in #59/#94; this foundation
 does not implement or claim completion of it. See
 [`docs/local-setup.md`](../docs/local-setup.md) for existing infrastructure and
-host Spring instructions; do not start a second Spring process.
+containerized Spring instructions; do not start a second Spring process.
 
 ## Rendering and design conventions
 

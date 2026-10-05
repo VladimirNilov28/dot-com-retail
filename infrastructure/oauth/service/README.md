@@ -108,19 +108,18 @@ and `offline_access`, but never receives the machine scope.
 From the repository root:
 
 ```bash
-docker compose -f infrastructure/compose.yml --env-file .env up -d --build
-# Separate terminal; do not also run make dev:
-cd backend && ./gradlew bootRun
+make dev
 ```
 
-`make dev` is the single-terminal alternative: it starts infrastructure **and**
-Spring. Do not reset shared volumes. Readiness:
+Spring is the Compose `backend` service; OAuth reaches it at `backend:8080`.
+Do not start a separate host Spring process or reset shared volumes. Readiness:
 
 ```bash
 curl --fail http://127.0.0.1:4434/health/ready
 curl --fail http://127.0.0.1:4445/health/ready
 curl --fail http://127.0.0.1:4446/healthz
 curl --fail http://127.0.0.1:4002/readiness
+curl --fail http://127.0.0.1:8080/actuator/health/readiness
 ```
 
 Hydra admin `:4445`, Kratos admin `:4434`, Mailpit UI `:8025` and SMTP `:1025`

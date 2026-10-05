@@ -32,7 +32,7 @@ enum link__Purpose {
 scalar link__Import
 
 enum join__Graph {
-  RETAIL @join__graph(name: "retail", url: "http://host.docker.internal:8080/graphql")
+  RETAIL @join__graph(name: "retail", url: "http://backend:8080/graphql")
 }
 
 scalar join__FieldSet
