@@ -392,6 +392,7 @@ class OrderDataFetcherTest {
     @WithMockUser(username = "1")
     void shouldSubscribeToOrderStatusChangesTest() {
         Long id = order.getId();
+        when(orderRepository.findById(id)).thenReturn(Optional.of(order));
         order.setStatus(OrderStatus.PAID);
         when(orderRepository.findByIdForUpdate(id)).thenReturn(Optional.of(order));
         when(orderRepository.save(order)).thenReturn(order);

@@ -1,6 +1,7 @@
 package ee.bytecore.backend.graphql.datafetchers.order;
 
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import ee.bytecore.backend.enums.OrderStatus;
 import ee.bytecore.backend.graphql.mappers.OrderMapper;
@@ -14,6 +15,7 @@ import com.netflix.graphql.dgs.DgsComponent;
 import com.netflix.graphql.dgs.DgsMutation;
 import com.netflix.graphql.dgs.DgsSubscription;
 import com.netflix.graphql.dgs.InputArgument;
+import jakarta.persistence.EntityNotFoundException;
 import org.reactivestreams.Publisher;
 
 @DgsComponent
@@ -52,6 +54,12 @@ public class OrderMutation {
     @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).ORDER_READ)")
     public Publisher<Order> orderStatusChanged(@InputArgument String orderId) {
         long id = parseId(orderId, "order");
+        ee.bytecore.backend.entities.payment.Order order =
+                orderService.findById(id).orElseThrow(() -> new EntityNotFoundException("Order not found"));
+        boolean isStaff = SecurityContextHolder.getContext().getAuthentication().getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals("ROLE_ORDER_MANAGER")
+                        || authority.getAuthority().equals("ROLE_ADMIN"));
+        orderService.requireReadable(order, currentUserProvider.getCurrentUserId(), isStaff);
         return orderStatusPublisher.subscribeTo(id).map(OrderMapper::toGraphQlType);
     }
 
