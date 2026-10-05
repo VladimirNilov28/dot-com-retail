@@ -5,13 +5,16 @@ import java.util.UUID;
 
 import ee.bytecore.backend.entities.inventory.Inventory;
 import ee.bytecore.backend.entities.product.ProductVariant;
+import ee.bytecore.backend.services.CheckoutValues;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UuidGenerator;
+import org.hibernate.type.SqlTypes;
 
 @Getter
 @Setter
@@ -51,6 +54,16 @@ public class OrderItem {
 
     @PositiveOrZero @Column(name = "price_at_purchase", nullable = false, precision = 10, scale = 2)
     private BigDecimal priceAtPurchase;
+
+    @Setter(lombok.AccessLevel.NONE)
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "checkout_snapshot", updatable = false)
+    private CheckoutValues.Line checkoutSnapshot;
+
+    public void initializeCheckout(CheckoutValues.Line snapshot) {
+        if (checkoutSnapshot != null) throw new IllegalStateException("Checkout snapshot already exists");
+        checkoutSnapshot = snapshot;
+    }
 
     public static OrderItem create(
             Order order,

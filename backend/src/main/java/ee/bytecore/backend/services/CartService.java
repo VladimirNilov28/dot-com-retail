@@ -337,6 +337,21 @@ public class CartService {
         return cart;
     }
 
+    @Transactional
+    public Cart getGuestCartForUpdate(String credential) {
+        return snapshot(lockGuest(credential));
+    }
+
+    @Transactional
+    public void consumeCheckoutCart(Cart cart) {
+        cartItemRepository.deleteAll(cartItemRepository.findAllByCartId(cart.getId()));
+        cartItemRepository.flush();
+        if (cart.getUser() == null) {
+            cartRepository.delete(cart);
+            cartRepository.flush();
+        }
+    }
+
     private void requireLiveGuest(Cart cart) {
         if (cart.getUser() != null
                 || cart.getGuestExpiresAt() == null

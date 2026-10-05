@@ -8,6 +8,7 @@ import java.util.UUID;
 
 import ee.bytecore.backend.entities.user.User;
 import ee.bytecore.backend.enums.OrderStatus;
+import ee.bytecore.backend.services.CheckoutValues;
 
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -35,7 +36,7 @@ public class Order {
     private UUID publicId;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
+    @JoinColumn(name = "user_id")
     private User user;
 
     @OneToMany(mappedBy = "order", fetch = FetchType.LAZY)
@@ -48,6 +49,16 @@ public class Order {
 
     @Column(name = "total_amount", nullable = false, precision = 10, scale = 2)
     private BigDecimal totalAmount;
+
+    @Setter(lombok.AccessLevel.NONE)
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "checkout_snapshot", updatable = false)
+    private CheckoutValues.Snapshot checkoutSnapshot;
+
+    public void initializeCheckout(CheckoutValues.Snapshot snapshot) {
+        if (checkoutSnapshot != null) throw new IllegalStateException("Checkout snapshot already exists");
+        checkoutSnapshot = snapshot;
+    }
 
     @Column(name = "cancellation_reason")
     private String cancellationReason;

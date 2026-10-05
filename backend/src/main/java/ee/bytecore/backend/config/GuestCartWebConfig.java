@@ -40,8 +40,8 @@ public class GuestCartWebConfig {
                     (input, builder) -> builder.graphQLContext(values -> values.put(GuestCartContext.KEY, guest))
                             .build());
             return chain.next(request).doOnNext(response -> {
-                if (guest.responseCookie() != null)
-                    response.getResponseHeaders().add(HttpHeaders.SET_COOKIE, guest.responseCookie());
+                for (String cookie : guest.responseCookies())
+                    response.getResponseHeaders().add(HttpHeaders.SET_COOKIE, cookie);
                 response.getResponseHeaders().set(HttpHeaders.CACHE_CONTROL, "private, no-store");
             });
         };

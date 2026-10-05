@@ -28,8 +28,16 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 public class GuestCartHttpFilter extends OncePerRequestFilter {
-    private static final Set<String> PUBLIC_FIELDS =
-            Set.of("guestCart", "startGuestCart", "addGuestCartItem", "updateGuestCartItem", "removeGuestCartItem");
+    private static final Set<String> PUBLIC_FIELDS = Set.of(
+            "guestCart",
+            "startGuestCart",
+            "addGuestCartItem",
+            "updateGuestCartItem",
+            "removeGuestCartItem",
+            "checkoutShippingOptions",
+            "guestCheckoutPreview",
+            "createGuestOrder",
+            "guestOrder");
     private final GuestCartSettings settings;
     private final JsonMapper mapper;
 
@@ -69,6 +77,7 @@ public class GuestCartHttpFilter extends OncePerRequestFilter {
                 return;
             }
             String credential = null;
+            String orderCredential = null;
             for (String header : java.util.Collections.list(request.getHeaders("Cookie"))) {
                 for (String entry : header.split(";")) {
                     String[] pair = entry.trim().split("=", 2);
@@ -79,11 +88,21 @@ public class GuestCartHttpFilter extends OncePerRequestFilter {
                         }
                         credential = pair[1];
                     }
+                    if (pair.length == 2 && GuestCartContext.ORDER_COOKIE.equals(pair[0])) {
+                        if (orderCredential != null) {
+                            reject(response, 403, "Ambiguous guest order cookie");
+                            return;
+                        }
+                        orderCredential = pair[1];
+                    }
                 }
             }
-            replay.setAttribute(GuestCartContext.KEY, new GuestCartContext(credential, settings));
+            replay.setAttribute(GuestCartContext.KEY, new GuestCartContext(credential, orderCredential, settings));
             response.setHeader("Cache-Control", "private, no-store");
         }
+        if (roots.stream()
+                .anyMatch(field -> Set.of("checkoutPreview", "createOrder", "checkoutOrder", "order", "myOrders")
+                        .contains(field))) response.setHeader("Cache-Control", "private, no-store");
         chain.doFilter(replay, response);
     }
 

@@ -4,6 +4,7 @@ import org.springframework.graphql.execution.DataFetcherExceptionResolverAdapter
 import org.springframework.graphql.execution.ErrorType;
 import org.springframework.stereotype.Component;
 
+import ee.bytecore.backend.exceptions.CheckoutException;
 import ee.bytecore.backend.exceptions.GuestCartUnavailableException;
 import ee.bytecore.backend.exceptions.InsufficientStockException;
 import ee.bytecore.backend.exceptions.UserAlreadyExistsException;
@@ -26,6 +27,13 @@ public class GraphQlExceptionResolver extends DataFetcherExceptionResolverAdapte
 
     @Override
     protected GraphQLError resolveToSingleError(Throwable exception, DataFetchingEnvironment env) {
+        if (exception instanceof CheckoutException checkout) {
+            return GraphqlErrorBuilder.newError(env)
+                    .errorType(ErrorClassification.errorClassification(checkout.getCode()))
+                    .extensions(java.util.Map.of("errorType", checkout.getCode()))
+                    .message(checkout.getMessage())
+                    .build();
+        }
         if (exception instanceof GuestCartUnavailableException) {
             return GraphqlErrorBuilder.newError(env)
                     .errorType(ErrorClassification.errorClassification("GUEST_CART_UNAVAILABLE"))

@@ -191,13 +191,18 @@ class OrderMutationAuthorizationTest {
 
     @Test
     void shouldRejectCreateOrderMissingWriteScopeTest() throws Exception {
-        mockMvc.perform(post("/graphql")
-                        .with(asAuthenticatedJwt(jwtAuthenticationConverter, "1", "USER"))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .accept(MediaType.APPLICATION_JSON)
-                        .content("{\"query\":\"mutation { createOrder { id } }\"}"))
+        mockMvc.perform(
+                        post("/graphql")
+                                .with(asAuthenticatedJwt(jwtAuthenticationConverter, "1", "USER"))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .accept(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                            {"query":"mutation { createOrder(input: {requestId: \\"00000000-0000-0000-0000-000000000001\\", acceptedQuoteVersion: \\"0000000000000000000000000000000000000000000000000000000000000000\\", checkout: {shippingMethod: PICKUP}}) { id } }"}
+                            """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.errors").isNotEmpty());
+                .andExpect(jsonPath("$.errors").isNotEmpty())
+                .andExpect(jsonPath("$.errors[0].extensions.errorType").value("PERMISSION_DENIED"));
     }
 
     @Test

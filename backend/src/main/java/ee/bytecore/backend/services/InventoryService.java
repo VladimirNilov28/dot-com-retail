@@ -2,6 +2,8 @@ package ee.bytecore.backend.services;
 
 import java.util.List;
 
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,10 +15,14 @@ import ee.bytecore.backend.repositories.inventory.InventoryRepository;
 import ee.bytecore.backend.repositories.inventory.WarehouseRepository;
 import ee.bytecore.backend.repositories.product.ProductVariantRepository;
 
+import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityNotFoundException;
 
 @Service
 public class InventoryService {
+
+    @Autowired
+    private ObjectProvider<EntityManager> entityManager;
 
     private final InventoryRepository inventoryRepository;
     private final ProductVariantRepository productVariantRepository;
@@ -74,6 +80,9 @@ public class InventoryService {
     @Transactional
     public Inventory allocateAndDecrement(Long productVariantId, int quantity) {
         List<Inventory> candidates = inventoryRepository.lockAllByProductVariantIdOrderByIdAsc(productVariantId);
+        // Preview may already have loaded these rows before a lock wait.
+        // Refresh under the acquired locks rather than decrement stale managed quantities.
+        candidates.forEach(entityManager.getObject()::refresh);
         int bestAvailable =
                 candidates.stream().mapToInt(Inventory::getQuantity).max().orElse(0);
         Inventory chosen = candidates.stream()

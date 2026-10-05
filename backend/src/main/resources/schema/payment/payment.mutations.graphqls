@@ -3,6 +3,6 @@ input UpdateOrderStatusInput {
 }
 
 extend type Mutation {
-  createOrder: Order!
+  createOrder(input: PlaceOrderInput!): Order!
   updateOrderStatus(orderId: ID!, input: UpdateOrderStatusInput!): Order!
 }

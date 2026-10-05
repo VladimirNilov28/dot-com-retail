@@ -82,4 +82,22 @@ public class OrderQuery {
                 .anyMatch(a -> a.getAuthority().equals("ROLE_ORDER_MANAGER")
                         || a.getAuthority().equals("ROLE_ADMIN"));
     }
+
+    @DgsData(parentType = "Order", field = "checkout")
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).ORDER_READ)")
+    public ee.bytecore.backend.services.CheckoutValues.Confirmation checkout(DgsDataFetchingEnvironment environment) {
+        Order source = environment.getSource();
+        var order = orderService.findById(Long.valueOf(source.getId())).orElseThrow();
+        orderService.requireReadable(order, currentUserProvider.getCurrentUserId(), isStaff());
+        return OrderService.confirmation(order);
+    }
+
+    @DgsData(parentType = "OrderItem", field = "snapshot")
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).ORDER_READ)")
+    public ee.bytecore.backend.services.CheckoutValues.Line snapshot(DgsDataFetchingEnvironment environment) {
+        OrderItem source = environment.getSource();
+        return orderService
+                .getOwnedOrderItem(Long.valueOf(source.getId()), currentUserProvider.getCurrentUserId(), isStaff())
+                .getCheckoutSnapshot();
+    }
 }

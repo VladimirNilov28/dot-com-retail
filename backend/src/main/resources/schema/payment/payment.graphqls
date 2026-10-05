@@ -17,7 +17,9 @@ enum PaymentMethodType {
 type Order {
   id: ID!
   publicId: UUID!
-  user: User!
+  user: User
+  # Null for legacy orders with unavailable historical checkout information.
+  checkout: CheckoutOrder
   items: [OrderItem!]!
   status: OrderStatus!
   totalAmount: BigDecimal!
@@ -36,4 +38,5 @@ type OrderItem {
   productVariant: ProductVariant!
   quantity: Int!
   priceAtPurchase: BigDecimal!
+  snapshot: CheckoutLine
 }

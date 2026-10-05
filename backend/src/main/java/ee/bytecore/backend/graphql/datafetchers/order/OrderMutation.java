@@ -4,12 +4,14 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import ee.bytecore.backend.enums.OrderStatus;
+import ee.bytecore.backend.graphql.mappers.CheckoutMapper;
 import ee.bytecore.backend.graphql.mappers.OrderMapper;
 import ee.bytecore.backend.security.CurrentUserProvider;
 import ee.bytecore.backend.services.OrderService;
 import ee.bytecore.backend.services.OrderStatusPublisher;
 
 import com.netflix.dgs.codegen.generated.types.Order;
+import com.netflix.dgs.codegen.generated.types.PlaceOrderInput;
 import com.netflix.dgs.codegen.generated.types.UpdateOrderStatusInput;
 import com.netflix.graphql.dgs.DgsComponent;
 import com.netflix.graphql.dgs.DgsMutation;
@@ -36,9 +38,12 @@ public class OrderMutation {
 
     @DgsMutation
     @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).ORDER_WRITE)")
-    public Order createOrder() {
+    public Order createOrder(@InputArgument PlaceOrderInput input) {
         Long userId = currentUserProvider.getCurrentUserId();
-        return OrderMapper.toGraphQlType(orderService.createOrder(userId));
+        if (userId == null)
+            throw new org.springframework.security.access.AccessDeniedException("Active account is required");
+        return OrderMapper.toGraphQlType(
+                orderService.placeCheckout(userId, null, null, CheckoutMapper.placement(input)));
     }
 
     @DgsMutation

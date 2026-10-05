@@ -57,3 +57,11 @@ cart:
     cleanup-interval: PT1H
     merge-receipt-ttl: PT720H
     cleanup-batch-size: 100
+
+# Development catalog, not a carrier or a production pickup integration.
+checkout:
+  standard-charge: 4.99
+  express-charge: 9.99
+  pickup-charge: 0.00
+  supported-countries: [EE]
+  guest-order-ttl: PT720H

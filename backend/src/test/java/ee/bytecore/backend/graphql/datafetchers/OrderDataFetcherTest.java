@@ -51,6 +51,7 @@ import reactor.test.StepVerifier;
             LocalDateScalar.class,
             InstantScalar.class,
             ee.bytecore.backend.services.OrderService.class,
+            ee.bytecore.backend.config.CheckoutSettings.class,
             ee.bytecore.backend.services.OrderStatusPublisher.class,
             ee.bytecore.backend.services.CartService.class,
             ee.bytecore.backend.services.InventoryService.class,
@@ -60,6 +61,18 @@ import reactor.test.StepVerifier;
 @AutoConfigureHttpGraphQlTester
 @Tag("graphql")
 class OrderDataFetcherTest {
+
+    @Autowired
+    ee.bytecore.backend.services.OrderService checkoutOrderService;
+
+    @MockitoBean
+    ee.bytecore.backend.repositories.payment.CheckoutRequestRepository checkoutRequests;
+
+    @MockitoBean
+    org.springframework.jdbc.core.JdbcTemplate checkoutJdbc;
+
+    @MockitoBean
+    jakarta.persistence.EntityManager checkoutEntityManager;
 
     @MockitoBean
     OrderRepository orderRepository;
@@ -105,6 +118,7 @@ class OrderDataFetcherTest {
         order.setId(1L);
         order.setPublicId(UUID.randomUUID());
         when(userRepository.findActiveByIdForUpdate(user.getId())).thenReturn(Optional.of(user));
+        when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
     }
 
     @Test
@@ -319,12 +333,25 @@ class OrderDataFetcherTest {
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(orderRepository.save(org.mockito.ArgumentMatchers.any(Order.class)))
                 .thenReturn(order);
+        when(cartRepository.findByUserId(user.getId())).thenReturn(Optional.of(cart));
+        when(inventoryRepository.findAllByProductVariantId(variant.getId())).thenReturn(List.of(inventory));
+        String quote = checkoutOrderService
+                .previewCheckout(
+                        user.getId(),
+                        null,
+                        new ee.bytecore.backend.services.CheckoutValues.Selection(
+                                null, null, "PICKUP", null, null, null, null, false, "SIMULATED", null))
+                .quoteVersion();
 
         @Language("GraphQl")
         var mutation =
                 """
-            mutation {
-              createOrder {
+            mutation($quote: String!) {
+              createOrder(input: {
+                requestId: "00000000-0000-0000-0000-000000000001"
+                acceptedQuoteVersion: $quote
+                checkout: {shippingMethod: PICKUP}
+              }) {
                 status
                 totalAmount
               }
@@ -333,6 +360,7 @@ class OrderDataFetcherTest {
 
         graphQlTester
                 .document(mutation)
+                .variable("quote", quote)
                 .execute()
                 .path("createOrder.status")
                 .entity(String.class)
@@ -352,7 +380,11 @@ class OrderDataFetcherTest {
         var mutation =
                 """
             mutation {
-              createOrder {
+              createOrder(input: {
+                requestId: "00000000-0000-0000-0000-000000000001"
+                acceptedQuoteVersion: "0000000000000000000000000000000000000000000000000000000000000000"
+                checkout: {shippingMethod: PICKUP}
+              }) {
                 status
               }
             }
