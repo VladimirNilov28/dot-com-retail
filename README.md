@@ -1,5 +1,9 @@
 # Backend development
 
+For the standalone HeroUI v3 dark frontend foundation, see
+[`frontend/README.md`](frontend/README.md). Its component demonstration needs
+no backend services. Full-stack Docker reviewer setup remains separate work.
+
 ## Local development architecture
 
 - **Spring Boot** runs manually on the host (usually from your IDE), on

@@ -93,21 +93,29 @@ Tests use JUnit 5 with Testcontainers. The `TestcontainersConfiguration` class s
 
 ## Frontend
 
-The frontend is a Next.js 16 application (App Router, React 19) with
-Tailwind CSS 4. It's currently a minimal scaffold — see `frontend/AGENTS.md`.
+The frontend is a minimal Next.js App Router foundation with HeroUI v3,
+a fixed dark theme, and a working component demonstration. It does not yet
+implement storefront or authentication flows. See
+[`frontend/README.md`](../frontend/README.md) for setup, design conventions,
+and browser smoke checks, and `frontend/AGENTS.md` before changing Next.js APIs.
 
 ### Key dependencies
 
-- **Next.js 16** (App Router) with **React 19**
-- **Tailwind CSS 4.x** via PostCSS
-- **ESLint** for linting
+- **Next.js 16.3.6** (App Router) with **React 19.2.8** and React Compiler
+- **HeroUI 3.2.6**, fixed dark server/client rendering
+- **Tailwind CSS 4.3.3** via PostCSS, **TypeScript 5.9.3**, **ESLint 9.39.5**
+- **Bun 1.4.2** and a committed `bun.lock`
 
 ### Setup
 
 ```bash
 cd frontend
-bun install
+bun install --frozen-lockfile
 ```
+
+The #60 demonstration needs no environment variables or backend services.
+These host-development commands are not the Docker-only reviewer workflow;
+that separate work remains tracked in #59/#94.
 
 ### Common commands
 
@@ -117,6 +125,7 @@ bun install
 | `bun run build` | Production build |
 | `bun start` | Serve the production build |
 | `bun run lint` | Run ESLint |
+| `bun run typecheck` | Generate route types and run TypeScript without emitting files |
 
 ## Running the Full Stack
 
