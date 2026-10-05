@@ -25,7 +25,7 @@ import org.junit.jupiter.api.Test;
  * runs for real. Needs a real Postgres/Hibernate context — see
  * "Repository testing" in CLAUDE.md.
  */
-@SpringBootTest
+@SpringBootTest(properties = {"spring.kafka.bootstrap-servers=127.0.0.1:1", "spring.kafka.listener.auto-startup=false"})
 @Import(PostgresTestConfiguration.class)
 @Tag("integration")
 class UserPaymentMethodServiceIntegrationTest {
