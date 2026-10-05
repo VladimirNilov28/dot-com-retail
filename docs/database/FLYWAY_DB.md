@@ -148,6 +148,15 @@ entire operation commits. Thus overlapping additions merge quantities and
 checkout cannot erase an addition that serialized after its snapshot.
 
 ### orders / order_items / payment_details
+Checkout migration V13 adds nullable guest ownership, immutable JSONB
+order/item snapshots and globally unique `checkout_requests`. Source-cart
+coordinates intentionally have no FK because consumed guest carts are deleted.
+Guest grants store only hashed independent credentials and absolute expiry;
+request identities remain durable after access expires. Legacy missing
+addresses/shipping/product details remain unknown, never backfilled from live
+data. See [Checkout API](../api/checkout.md) for transaction/lock and deployment
+rules.
+
 `orders.cart_id` is a nullable, non-unique reference to the cart it
 originated from — informational only. The actual purchased items are
 snapshotted into `order_items` (quantity + `price_at_purchase`) at checkout

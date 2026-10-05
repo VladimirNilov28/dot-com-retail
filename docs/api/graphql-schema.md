@@ -20,6 +20,13 @@ per domain, split by convention into:
 `schema.graphqls` declares the three empty root types (`Query`, `Mutation`,
 `Subscription`) that every domain file extends.
 
+The [Checkout API](checkout.md) documents the current authenticated/guest
+checkout contract in `payment/checkout.graphqls`. Public `createOrder` now
+requires `PlaceOrderInput`; no-input placement is intentionally unavailable.
+`Order.checkout`/`OrderItem.snapshot` expose historical snapshots where known;
+`Order.user` is nullable for guest orders. Guest confirmation uses a separate
+snapshot-only projection and protected HttpOnly credential.
+
 ## Scalars
 
 Defined in `scalars.graphqls`, realized by `graphql-java-extended-scalars`

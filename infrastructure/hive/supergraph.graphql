@@ -79,6 +79,88 @@ type CategoryFacet @join__type(graph: RETAIL) {
   name: String!
 }
 
+type CheckoutAddress @join__type(graph: RETAIL) {
+  addressLine1: String!
+  addressLine2: String
+  city: String!
+  countryCode: String!
+  firstName: String!
+  lastName: String!
+  phone: String
+  postalCode: String!
+}
+
+type CheckoutDetails @join__type(graph: RETAIL) {
+  billingAddress: CheckoutAddress
+  contactEmail: String!
+  contactPhone: String
+  " Non-secret historical description, never a gateway credential."
+  paymentMethodType: PaymentMethodType
+  paymentSelection: CheckoutPaymentSelection!
+  shipping: CheckoutShippingOption!
+  shippingAddress: CheckoutAddress
+}
+
+type CheckoutIssue @join__type(graph: RETAIL) {
+  code: String!
+  message: String!
+  productVariantId: ID
+}
+
+type CheckoutLine @join__type(graph: RETAIL) {
+  attributes: JSON!
+  productName: String!
+  productVariantId: ID!
+  quantity: Int!
+  sku: String!
+  subtotal: BigDecimal!
+  unitPrice: BigDecimal!
+}
+
+" Snapshot-only projection: no User, OrderItem.order or live catalog traversal."
+type CheckoutOrder @join__type(graph: RETAIL) {
+  cancellationReason: String
+  createdAt: Instant!
+  details: CheckoutDetails!
+  lines: [CheckoutLine!]!
+  paymentInteraction: String!
+  publicId: UUID!
+  requestId: UUID!
+  status: OrderStatus!
+  totals: CheckoutTotals!
+}
+
+type CheckoutPickupLocation @join__type(graph: RETAIL) {
+  address: CheckoutAddress!
+  name: String!
+}
+
+type CheckoutPreview @join__type(graph: RETAIL) {
+  availableShippingOptions: [CheckoutShippingOption!]!
+  details: CheckoutDetails!
+  issues: [CheckoutIssue!]!
+  lines: [CheckoutLine!]!
+  placeable: Boolean!
+  quoteVersion: String!
+  totals: CheckoutTotals!
+}
+
+type CheckoutShippingOption @join__type(graph: RETAIL) {
+  charge: BigDecimal!
+  currency: String!
+  estimate: String!
+  method: CheckoutShippingMethod!
+  pickupLocation: CheckoutPickupLocation
+  supportedCountries: [String!]!
+}
+
+type CheckoutTotals @join__type(graph: RETAIL) {
+  currency: String!
+  merchandiseSubtotal: BigDecimal!
+  shippingCharge: BigDecimal!
+  total: BigDecimal!
+}
+
 type GuestCart @join__type(graph: RETAIL) {
   createdAt: Instant!
   expiresAt: Instant!
@@ -135,7 +217,8 @@ type Mutation @join__type(graph: RETAIL) {
   addWishlistItem(input: AddWishlistItemInput!): WishlistItem!
   clearCart: Boolean!
   createCategory(input: CreateCategoryInput!): Category!
-  createOrder: Order!
+  createGuestOrder(input: PlaceOrderInput!): CheckoutOrder!
+  createOrder(input: PlaceOrderInput!): Order!
   createProduct(input: CreateProductInput!): Product!
   createProductVariant(input: CreateProductVariantInput!): ProductVariant!
   createWarehouse(input: CreateWarehouseInput!): Warehouse!
@@ -173,6 +256,8 @@ type Order @join__type(graph: RETAIL) {
   otherwise.
   """
   cancellationReason: String
+  " Null for legacy orders with unavailable historical checkout information."
+  checkout: CheckoutOrder
   createdAt: Instant!
   id: ID!
   items: [OrderItem!]!
@@ -180,7 +265,7 @@ type Order @join__type(graph: RETAIL) {
   status: OrderStatus!
   totalAmount: BigDecimal!
   updatedAt: Instant!
-  user: User!
+  user: User
 }
 
 type OrderItem @join__type(graph: RETAIL) {
@@ -190,6 +275,7 @@ type OrderItem @join__type(graph: RETAIL) {
   productVariant: ProductVariant!
   publicId: UUID!
   quantity: Int!
+  snapshot: CheckoutLine
 }
 
 type PriceFacet @join__type(graph: RETAIL) {
@@ -248,7 +334,12 @@ type ProductVariant @join__type(graph: RETAIL) {
 type Query @join__type(graph: RETAIL) {
   categories: [Category!]!
   category(id: ID, slug: String): Category
+  checkoutOrder(requestId: UUID!): CheckoutOrder
+  checkoutPreview(input: CheckoutInput!): CheckoutPreview!
+  checkoutShippingOptions(countryCode: String): [CheckoutShippingOption!]!
   guestCart: GuestCart
+  guestCheckoutPreview(input: CheckoutInput!): CheckoutPreview!
+  guestOrder(publicId: UUID, requestId: UUID): CheckoutOrder
   me: User!
   myCart: Cart!
   myOrders: [Order!]!
@@ -334,6 +425,16 @@ type WishlistItem @join__type(graph: RETAIL) {
   id: ID!
   productVariant: ProductVariant!
   wishlist: Wishlist!
+}
+
+enum CheckoutPaymentSelection @join__type(graph: RETAIL) {
+  SIMULATED @join__enumValue(graph: RETAIL)
+}
+
+enum CheckoutShippingMethod @join__type(graph: RETAIL) {
+  EXPRESS @join__enumValue(graph: RETAIL)
+  PICKUP @join__enumValue(graph: RETAIL)
+  STANDARD @join__enumValue(graph: RETAIL)
 }
 
 enum ErrorDetail @join__type(graph: RETAIL) {
@@ -650,6 +751,30 @@ input AddWishlistItemInput @join__type(graph: RETAIL) {
   productVariantId: ID!
 }
 
+input CheckoutAddressInput @join__type(graph: RETAIL) {
+  addressLine1: String!
+  addressLine2: String
+  city: String!
+  countryCode: String!
+  firstName: String!
+  lastName: String!
+  phone: String
+  postalCode: String!
+}
+
+input CheckoutInput @join__type(graph: RETAIL) {
+  billingAddress: CheckoutAddressInput
+  billingAddressId: ID
+  billingSameAsShipping: Boolean! = false
+  contactEmail: String
+  contactPhone: String
+  paymentMethodId: ID
+  paymentSelection: CheckoutPaymentSelection! = SIMULATED
+  shippingAddress: CheckoutAddressInput
+  shippingAddressId: ID
+  shippingMethod: CheckoutShippingMethod!
+}
+
 input CreateAddressInput @join__type(graph: RETAIL) {
   addressLine1: String
   addressLine2: String
@@ -691,6 +816,12 @@ input CreateProductVariantInput @join__type(graph: RETAIL) {
 input CreateWarehouseInput @join__type(graph: RETAIL) {
   location: String
   name: String!
+}
+
+input PlaceOrderInput @join__type(graph: RETAIL) {
+  acceptedQuoteVersion: String!
+  checkout: CheckoutInput!
+  requestId: UUID!
 }
 
 input ProductAttributeFilterInput @join__type(graph: RETAIL) {

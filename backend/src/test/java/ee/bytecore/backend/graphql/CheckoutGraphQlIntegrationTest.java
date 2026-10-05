@@ -195,14 +195,14 @@ class CheckoutGraphQlIntegrationTest {
         Session guest = guest();
         UUID requestId = UUID.randomUUID();
         Map<String, Object> input = placement(guest, requestId);
-        assertThat(guest.cookies).containsKeys("retail_guest_cart", "retail_guest_orders");
+        assertThat(guest.cookies.keySet()).contains("retail_guest_cart", "retail_guest_orders");
         Session old = new Session();
         old.cookies.putAll(guest.cookies);
         Reply placed = post(PLACE, Map.of("input", input), guest, null);
         JsonNode order = success(placed).at("/data/createGuestOrder");
         assertThat(order.at("/status").asString()).isEqualTo("PENDING");
         assertThat(order.at("/paymentInteraction").asString()).isEqualTo("NONE");
-        assertThat(guest.cookies).containsKey("retail_guest_orders").doesNotContainKey("retail_guest_cart");
+        assertThat(guest.cookies.keySet()).contains("retail_guest_orders").doesNotContain("retail_guest_cart");
         assertThat(placed.http().headers().firstValue("Cache-Control").orElse(""))
                 .contains("no-store");
         var recovery = success(post(CONFIRM, Map.of("id", requestId.toString()), old, null))
@@ -345,7 +345,7 @@ class CheckoutGraphQlIntegrationTest {
         guest.cookies.remove("retail_guest_orders");
         assertThat(post(PLACE, Map.of("input", input), guest, null).body().has("errors"))
                 .isTrue();
-        assertThat(guest.cookies).containsKey("retail_guest_cart");
+        assertThat(guest.cookies.keySet()).contains("retail_guest_cart");
         assertThat(jdbc.queryForObject(
                         "SELECT count(*) FROM checkout_requests WHERE request_id=?",
                         Integer.class,

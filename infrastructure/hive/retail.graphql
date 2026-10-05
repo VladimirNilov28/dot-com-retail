@@ -46,6 +46,88 @@ type CategoryFacet {
   name: String!
 }
 
+type CheckoutAddress {
+  addressLine1: String!
+  addressLine2: String
+  city: String!
+  countryCode: String!
+  firstName: String!
+  lastName: String!
+  phone: String
+  postalCode: String!
+}
+
+type CheckoutDetails {
+  billingAddress: CheckoutAddress
+  contactEmail: String!
+  contactPhone: String
+  " Non-secret historical description, never a gateway credential."
+  paymentMethodType: PaymentMethodType
+  paymentSelection: CheckoutPaymentSelection!
+  shipping: CheckoutShippingOption!
+  shippingAddress: CheckoutAddress
+}
+
+type CheckoutIssue {
+  code: String!
+  message: String!
+  productVariantId: ID
+}
+
+type CheckoutLine {
+  attributes: JSON!
+  productName: String!
+  productVariantId: ID!
+  quantity: Int!
+  sku: String!
+  subtotal: BigDecimal!
+  unitPrice: BigDecimal!
+}
+
+" Snapshot-only projection: no User, OrderItem.order or live catalog traversal."
+type CheckoutOrder {
+  cancellationReason: String
+  createdAt: Instant!
+  details: CheckoutDetails!
+  lines: [CheckoutLine!]!
+  paymentInteraction: String!
+  publicId: UUID!
+  requestId: UUID!
+  status: OrderStatus!
+  totals: CheckoutTotals!
+}
+
+type CheckoutPickupLocation {
+  address: CheckoutAddress!
+  name: String!
+}
+
+type CheckoutPreview {
+  availableShippingOptions: [CheckoutShippingOption!]!
+  details: CheckoutDetails!
+  issues: [CheckoutIssue!]!
+  lines: [CheckoutLine!]!
+  placeable: Boolean!
+  quoteVersion: String!
+  totals: CheckoutTotals!
+}
+
+type CheckoutShippingOption {
+  charge: BigDecimal!
+  currency: String!
+  estimate: String!
+  method: CheckoutShippingMethod!
+  pickupLocation: CheckoutPickupLocation
+  supportedCountries: [String!]!
+}
+
+type CheckoutTotals {
+  currency: String!
+  merchandiseSubtotal: BigDecimal!
+  shippingCharge: BigDecimal!
+  total: BigDecimal!
+}
+
 type GuestCart {
   createdAt: Instant!
   expiresAt: Instant!
@@ -102,7 +184,8 @@ type Mutation {
   addWishlistItem(input: AddWishlistItemInput!): WishlistItem!
   clearCart: Boolean!
   createCategory(input: CreateCategoryInput!): Category!
-  createOrder: Order!
+  createGuestOrder(input: PlaceOrderInput!): CheckoutOrder!
+  createOrder(input: PlaceOrderInput!): Order!
   createProduct(input: CreateProductInput!): Product!
   createProductVariant(input: CreateProductVariantInput!): ProductVariant!
   createWarehouse(input: CreateWarehouseInput!): Warehouse!
@@ -140,6 +223,8 @@ type Order {
    otherwise.
   """
   cancellationReason: String
+  " Null for legacy orders with unavailable historical checkout information."
+  checkout: CheckoutOrder
   createdAt: Instant!
   id: ID!
   items: [OrderItem!]!
@@ -147,7 +232,7 @@ type Order {
   status: OrderStatus!
   totalAmount: BigDecimal!
   updatedAt: Instant!
-  user: User!
+  user: User
 }
 
 type OrderItem {
@@ -157,6 +242,7 @@ type OrderItem {
   productVariant: ProductVariant!
   publicId: UUID!
   quantity: Int!
+  snapshot: CheckoutLine
 }
 
 type PriceFacet {
@@ -215,7 +301,12 @@ type ProductVariant {
 type Query {
   categories: [Category!]!
   category(id: ID, slug: String): Category
+  checkoutOrder(requestId: UUID!): CheckoutOrder
+  checkoutPreview(input: CheckoutInput!): CheckoutPreview!
+  checkoutShippingOptions(countryCode: String): [CheckoutShippingOption!]!
   guestCart: GuestCart
+  guestCheckoutPreview(input: CheckoutInput!): CheckoutPreview!
+  guestOrder(publicId: UUID, requestId: UUID): CheckoutOrder
   me: User!
   myCart: Cart!
   myOrders: [Order!]!
@@ -301,6 +392,16 @@ type WishlistItem {
   id: ID!
   productVariant: ProductVariant!
   wishlist: Wishlist!
+}
+
+enum CheckoutPaymentSelection {
+  SIMULATED
+}
+
+enum CheckoutShippingMethod {
+  EXPRESS
+  PICKUP
+  STANDARD
 }
 
 enum ErrorDetail {
@@ -617,6 +718,30 @@ input AddWishlistItemInput {
   productVariantId: ID!
 }
 
+input CheckoutAddressInput {
+  addressLine1: String!
+  addressLine2: String
+  city: String!
+  countryCode: String!
+  firstName: String!
+  lastName: String!
+  phone: String
+  postalCode: String!
+}
+
+input CheckoutInput {
+  billingAddress: CheckoutAddressInput
+  billingAddressId: ID
+  billingSameAsShipping: Boolean! = false
+  contactEmail: String
+  contactPhone: String
+  paymentMethodId: ID
+  paymentSelection: CheckoutPaymentSelection! = SIMULATED
+  shippingAddress: CheckoutAddressInput
+  shippingAddressId: ID
+  shippingMethod: CheckoutShippingMethod!
+}
+
 input CreateAddressInput {
   addressLine1: String
   addressLine2: String
@@ -658,6 +783,12 @@ input CreateProductVariantInput {
 input CreateWarehouseInput {
   location: String
   name: String!
+}
+
+input PlaceOrderInput {
+  acceptedQuoteVersion: String!
+  checkout: CheckoutInput!
+  requestId: UUID!
 }
 
 input ProductAttributeFilterInput {

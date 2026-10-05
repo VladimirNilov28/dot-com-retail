@@ -19,6 +19,18 @@ def root_fields(text):
 
 
 class SchemaContractTest(unittest.TestCase):
+    def test_checkout_snapshots_and_required_placement_input_are_composed(self):
+        for filename in ("retail.graphql", "supergraph.graphql"):
+            text = (ROOT / "infrastructure/hive" / filename).read_text()
+            with self.subTest(schema=filename):
+                self.assertIn("createOrder(input: PlaceOrderInput!): Order!", text)
+                self.assertIn("acceptedQuoteVersion: String!", text)
+                self.assertIn("guestCheckoutPreview(input: CheckoutInput!): CheckoutPreview!", text)
+                self.assertIn("guestOrder(publicId: UUID, requestId: UUID): CheckoutOrder", text)
+                projection = re.search(r"type CheckoutOrder[^{]*\{([^}]+)\}", text).group(1)
+                self.assertNotIn("user:", projection)
+                self.assertNotIn("credential", projection.lower())
+
     def test_committed_router_schemas_expose_every_application_root_field(self):
         expected = {}
         for path in (ROOT / "backend/src/main/resources/schema").rglob("*.graphqls"):

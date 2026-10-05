@@ -127,6 +127,13 @@ Health/readiness: `curl http://localhost:4002/health` (liveness),
 
 ### Guest shopping
 
+[Checkout API](docs/api/checkout.md) adds server quotes, authenticated/guest
+placement, development shipping and immutable confirmations. Public
+`createOrder` now requires accepted checkout input and a stable request UUID.
+Guest confirmation uses a separate HttpOnly cookie established before placement
+to support lost-response recovery. Deploy nullable guest ownership in the Go
+Payment Service before enabling guest checkout; no real gateway is integrated.
+
 [Guest Cart API and security guide](docs/api/guest-cart.md) documents anonymous
 server-persisted carts, cookie transport, origin/preflight requirements, live
 server totals, expiration and all-or-nothing login merge with durable retries.

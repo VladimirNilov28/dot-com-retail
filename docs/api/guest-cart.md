@@ -3,7 +3,8 @@
 Guest Cart is a server-persisted anonymous cart in the existing retail subgraph.
 Hive remains the client-facing endpoint (`http://localhost:4002/graphql` in dev);
 Spring remains the JWT, scope, ownership and guest-credential authority.
-No checkout, payment, frontend page, or new authentication flow is included.
+The [Checkout API](checkout.md) adds guest placement and secure confirmation
+using a separate order cookie. No frontend page or new login flow is included.
 
 ## Transport and security
 
@@ -300,4 +301,8 @@ No shared service was manually restarted (Spring's existing development watcher
 picked up compiled changes). For subsequent runtime regeneration, use the existing authenticated
 `infrastructure/hive/scripts/compose-supergraph.sh` against the updated app.
 
-Next checklist item: **Checkout API**.
+Guest checkout consumes a cart atomically with its PENDING order, inventory
+decrement, payment outbox and durable checkout receipt. Confirmation/replay use
+the independently pre-issued `retail_guest_orders` cookie, not an order ID,
+email or unrelated cart credential. See [Checkout API](checkout.md) for quote,
+shipping, snapshot, expiration and lost-response behavior.
