@@ -14,7 +14,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
+import ee.bytecore.backend.config.KafkaTestConfiguration;
 import ee.bytecore.backend.config.PostgresTestConfiguration;
 import ee.bytecore.backend.entities.cart.Cart;
 import ee.bytecore.backend.entities.inventory.Warehouse;
@@ -23,7 +25,9 @@ import ee.bytecore.backend.entities.payment.PaymentOutboxEvent;
 import ee.bytecore.backend.entities.product.Product;
 import ee.bytecore.backend.entities.product.ProductVariant;
 import ee.bytecore.backend.entities.user.User;
+import ee.bytecore.backend.enums.OrderStatus;
 import ee.bytecore.backend.repositories.cart.CartRepository;
+import ee.bytecore.backend.repositories.payment.OrderRepository;
 import ee.bytecore.backend.repositories.payment.PaymentOutboxEventRepository;
 import ee.bytecore.backend.repositories.user.UserRepository;
 import ee.bytecore.backend.services.CartService;
@@ -45,9 +49,14 @@ import org.junit.jupiter.api.Test;
  * Kafka directly.
  */
 @SpringBootTest
-@Import(PostgresTestConfiguration.class)
+@Import({PostgresTestConfiguration.class, KafkaTestConfiguration.class})
 @Tag("integration")
 class PaymentOutboxIntegrationTest {
+    @MockitoBean
+    PaymentOutboxPublisher outboxPublisher;
+
+    @Autowired
+    OrderRepository orderRepository;
 
     @Autowired
     UserRepository userRepository;
@@ -132,6 +141,9 @@ class PaymentOutboxIntegrationTest {
 
         Order order = orderService.createOrder(user.getId());
         createdOrderIds.add(order.getId());
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);
+        assertThat(orderRepository.findById(order.getId()).orElseThrow().getStatus())
+                .isEqualTo(OrderStatus.PENDING);
 
         List<PaymentOutboxEvent> outboxRows = paymentOutboxEventRepository.findAllByPublishedFalseOrderByCreatedAtAsc();
         PaymentOutboxEvent event = outboxRows.stream()
