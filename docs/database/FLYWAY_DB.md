@@ -19,13 +19,15 @@ schema changes must be new `V{n}__...sql` files instead.
 | `V1__create_users.sql` | `users`, `user_address`, `user_payment_methods` | `V0` (trigger function) |
 | `V2__create_products.sql` | `products`, `product_variants` | `V0` |
 | `V3__create_carts.sql` | `carts`, `cart_items` | `V1` (users), `V2` (product_variants) |
-| `V4__create_payments.sql` | `orders`, `order_items`, `payment_details` | `V1` (users), `V2` (product_variants), `V3` (carts) |
+| `V4__create_payments.sql` | `orders`, `order_items` | `V1` (users), `V2` (product_variants) |
 | `V5__create_categories.sql` | `categories`, `product_categories` | `V2` (products) |
 | `V6__create_inventory.sql` | `warehouses`, `inventory` | `V2` (product_variants) |
 | `V7__create_wishlist.sql` | `wishlists`, `wishlist_items` | `V1` (users), `V2` (product_variants) |
 | `V10__account_deletion.sql` | `users` deletion retry/completion flags | `V1` (users) |
 | `V11__payment_result_correlation.sql` | `payment_result_receipts` | `V4` (orders), `V9` (payment_outbox) |
 | `V12__guest_carts.sql` | guest cart fields/constraints and `guest_cart_merge_receipts` | `V3` (carts), `V1` (users) |
+| `V13__checkout_orders.sql` | checkout requests, guest orders and immutable snapshots | `V4`, `V12` |
+| `V14__order_cancellation_refunds.sql` | financial/release markers, cancellation receipts, order refunds | `V4`, `V9`, `V11`, `V13` |
 
 Every foreign key either points to a table created in an earlier migration
 file, or to a table created earlier within the same file. There are no
@@ -50,7 +52,7 @@ erDiagram
     product_variants ||--o{ cart_items : "referenced by"
 
     orders ||--o{ order_items : contains
-    orders ||--o{ payment_details : "paid via"
+    orders ||--o| order_refunds : "full refund"
     product_variants ||--o{ order_items : "referenced by"
     carts |o--o| orders : "checked out into"
 
@@ -147,7 +149,7 @@ Add/update/remove/clear and checkout acquire the owning cart's
 entire operation commits. Thus overlapping additions merge quantities and
 checkout cannot erase an addition that serialized after its snapshot.
 
-### orders / order_items / payment_details
+### orders / order_items / order_refunds
 Checkout migration V13 adds nullable guest ownership, immutable JSONB
 order/item snapshots and globally unique `checkout_requests`. Source-cart
 coordinates intentionally have no FK because consumed guest carts are deleted.
@@ -157,16 +159,24 @@ addresses/shipping/product details remain unknown, never backfilled from live
 data. See [Checkout API](../api/checkout.md) for transaction/lock and deployment
 rules.
 
-`orders.cart_id` is a nullable, non-unique reference to the cart it
-originated from — informational only. The actual purchased items are
-snapshotted into `order_items` (quantity + `price_at_purchase`) at checkout
+The actual purchased items are snapshotted into `order_items`
+(quantity + `price_at_purchase` and original inventory allocation) at checkout
 time, so later price changes on `product_variants` never affect order
 history. `orders.total_amount` is stored directly rather than derived via
 `SUM(order_items)`, since order total is an immutable historical fact and
 this avoids a join on every order-list query.
 
-`payment_details` records one or more payment attempts against an order
-(`payment_status`: `SUCCESS` / `FAILED` / `PENDING`).
+Payments are owned by the Go service. V14's `orders.payment_status` is a
+correlated projection (PENDING/UNRESOLVED/SUCCEEDED/FAILED/UNKNOWN), not authority
+to invent or assign a provider outcome. Cancellation receipts bind request UUID,
+target and authorized actor/grant. `inventory_released_at` is irreversible and
+commits with original-allocation restoration. `order_refunds` binds one immutable
+full refund to the original successful payment/request, with a stable refund
+UUID and correlated result. Database triggers protect release markers, payment
+identity/finality, cancelled-order terminality and refund parameters/finality.
+Paid historical cancellations with proven receipts enqueue one refund; missing
+financial evidence remains UNKNOWN. See [Order cancellation](../api/order-cancellation.md)
+for rollout and original-result replay.
 
 Status transitions lock the order row before validating its current state.
 Cancellation and exact-warehouse restoration commit or roll back together;
@@ -174,7 +184,7 @@ duplicate/late cancellation cannot restore inventory twice. Subscription
 notifications are emitted only after the transition transaction commits.
 
 Payment results must match the persisted `payment.requested` event id and
-order id. Processing locks that outbox request and records a
+order id. Processing locks the order first, then that outbox request, and records a
 `payment_result_receipts` row in the same transaction as the order transition
 and any restoration. Each request has one immutable outcome/payment binding;
 payment ids and result event ids cannot be reused for another request.

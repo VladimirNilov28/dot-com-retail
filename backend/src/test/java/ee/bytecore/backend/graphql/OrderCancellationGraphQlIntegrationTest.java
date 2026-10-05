@@ -478,6 +478,86 @@ class OrderCancellationGraphQlIntegrationTest extends CheckoutGraphQlIntegration
     }
 
     @Test
+    void cancellationTransportUsesSelectedAliasedFragmentAndRejectsUnsafeEnvelopes() throws Exception {
+        var order = placedGuest();
+        var input = Map.of(
+                "requestId",
+                UUID.randomUUID().toString(),
+                "publicId",
+                order.publicId().toString());
+        String mixed = "mutation($input:CancelOrderInput!){cancelGuestOrder(input:$input){requestId}"
+                + "cancelOrder(input:$input){requestId}}";
+        String selected = "query Private{myOrders{publicId}} "
+                + "mutation Selected($input:CancelOrderInput!){...CancellationRoot} "
+                + "fragment CancellationRoot on Mutation{answer:cancelGuestOrder(input:$input){order{status}}}";
+        var envelope = Map.of("query", selected, "operationName", "Selected", "variables", Map.of("input", input));
+        for (Object body : List.of(
+                Map.of("query", mixed, "variables", Map.of("input", input)),
+                Map.of("query", selected, "operationName", "Private"),
+                Map.of("query", selected, "variables", Map.of("input", input)),
+                List.of(envelope))) {
+            var request = HttpRequest.newBuilder(endpoint())
+                    .header("Content-Type", "application/json")
+                    .header("Origin", "http://localhost:3000")
+                    .header("X-Guest-Cart-Request", "1")
+                    .header("Cookie", order.session().cookieHeader())
+                    .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(body)))
+                    .build();
+            var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            assertThat(mapper.readTree(response.body()).has("errors")).isTrue();
+            if (body instanceof List<?> && subgraphRejectionStatus(403) == 200) {
+                assertThat(response.statusCode()).isEqualTo(400);
+                assertThat(mapper.readTree(response.body()).has("data")).isFalse();
+            } else {
+                assertThat(response.headers().firstValue("Cache-Control").orElse(""))
+                        .contains("no-store");
+            }
+        }
+        var duplicateCookie = HttpRequest.newBuilder(endpoint())
+                .header("Content-Type", "application/json")
+                .header("Origin", "http://localhost:3000")
+                .header("X-Guest-Cart-Request", "1")
+                .header(
+                        "Cookie",
+                        order.session().cookieHeader() + "; retail_guest_orders="
+                                + order.session().cookies.get("retail_guest_orders"))
+                .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(envelope)))
+                .build();
+        assertThat(mapper.readTree(client.send(duplicateCookie, HttpResponse.BodyHandlers.ofString())
+                                .body())
+                        .has("errors"))
+                .isTrue();
+        String literal = "mutation{cancelGuestOrder(input:{requestId:\"" + input.get("requestId") + "\",publicId:\""
+                + order.publicId() + "\"}){requestId}}";
+        var get = HttpRequest.newBuilder(java.net.URI.create(endpoint() + "?query="
+                        + java.net.URLEncoder.encode(literal, java.nio.charset.StandardCharsets.UTF_8)))
+                .header("Origin", "http://localhost:3000")
+                .header("X-Guest-Cart-Request", "1")
+                .header("Cookie", order.session().cookieHeader())
+                .GET()
+                .build();
+        var getResponse = client.send(get, HttpResponse.BodyHandlers.ofString());
+        assertThat(getResponse.statusCode() >= 400
+                        || mapper.readTree(getResponse.body()).has("errors"))
+                .isTrue();
+        assertThat(stock()).isEqualTo(18);
+        var accepted = HttpRequest.newBuilder(endpoint())
+                .header("Content-Type", "application/json")
+                .header("Origin", "http://localhost:3000")
+                .header("X-Guest-Cart-Request", "1")
+                .header("Cookie", order.session().cookieHeader())
+                .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(envelope)))
+                .build();
+        var response = client.send(accepted, HttpResponse.BodyHandlers.ofString());
+        assertThat(mapper.readTree(response.body())
+                        .at("/data/answer/order/status")
+                        .asString())
+                .isEqualTo("CANCELLED");
+        assertThat(response.headers().firstValue("Cache-Control").orElse("")).contains("no-store");
+        assertThat(stock()).isEqualTo(20);
+    }
+
+    @Test
     void outboxFailureRollsBackAlreadyInsertedRefundAndCancellationReceipt() throws Exception {
         var order = placedGuest();
         successPayment(order, UUID.randomUUID());

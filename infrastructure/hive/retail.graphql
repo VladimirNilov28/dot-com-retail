@@ -9,6 +9,15 @@ type AttributeValueFacet {
   value: String!
 }
 
+type CancellationOrder {
+  cancellation: OrderCancellation
+  cancellationEligibility: OrderCancellationEligibility!
+  payment: OrderPayment!
+  publicId: UUID!
+  refund: OrderRefund!
+  status: OrderStatus!
+}
+
 type Cart {
   createdAt: Instant!
   id: ID!
@@ -84,14 +93,18 @@ type CheckoutLine {
   unitPrice: BigDecimal!
 }
 
-" Snapshot-only projection: no User, OrderItem.order or live catalog traversal."
+" Immutable checkout facts plus live recovery state; no User or live catalog traversal."
 type CheckoutOrder {
+  cancellation: OrderCancellation
+  cancellationEligibility: OrderCancellationEligibility!
   cancellationReason: String
   createdAt: Instant!
   details: CheckoutDetails!
   lines: [CheckoutLine!]!
+  payment: OrderPayment!
   paymentInteraction: String!
   publicId: UUID!
+  refund: OrderRefund!
   requestId: UUID!
   status: OrderStatus!
   totals: CheckoutTotals!
@@ -182,6 +195,9 @@ type Mutation {
   addMyPaymentMethod(input: CreatePaymentMethodInput!): UserPaymentMethod!
   addUserPaymentMethod(input: CreatePaymentMethodInput!, userId: ID!): UserPaymentMethod!
   addWishlistItem(input: AddWishlistItemInput!): WishlistItem!
+  cancelGuestOrder(input: CancelOrderInput!): OrderCancellationPayload!
+  cancelOrder(input: CancelOrderInput!): OrderCancellationPayload!
+  cancelOrderAsStaff(input: CancelOrderInput!): OrderCancellationPayload!
   clearCart: Boolean!
   createCategory(input: CreateCategoryInput!): Category!
   createGuestOrder(input: PlaceOrderInput!): CheckoutOrder!
@@ -217,9 +233,11 @@ type Mutation {
 }
 
 type Order {
+  cancellation: OrderCancellation
+  cancellationEligibility: OrderCancellationEligibility!
   """
    Only set when status is CANCELLED; distinguishes an automatic
-   payment-failure cancellation from a manual admin cancellation. Null
+   payment-failure cancellation from a customer/staff cancellation. Null
    otherwise.
   """
   cancellationReason: String
@@ -228,11 +246,29 @@ type Order {
   createdAt: Instant!
   id: ID!
   items: [OrderItem!]!
+  payment: OrderPayment!
   publicId: UUID!
+  refund: OrderRefund!
   status: OrderStatus!
   totalAmount: BigDecimal!
   updatedAt: Instant!
   user: User
+}
+
+type OrderCancellation {
+  awaitingPaymentOutcome: Boolean!
+  cancelledAt: Instant!
+  source: String!
+}
+
+type OrderCancellationEligibility {
+  allowed: Boolean!
+  reason: String
+}
+
+type OrderCancellationPayload {
+  order: CancellationOrder!
+  requestId: UUID!
 }
 
 type OrderItem {
@@ -243,6 +279,17 @@ type OrderItem {
   publicId: UUID!
   quantity: Int!
   snapshot: CheckoutLine
+}
+
+type OrderPayment {
+  status: OrderPaymentStatus!
+}
+
+type OrderRefund {
+  amount: BigDecimal
+  currency: String
+  failureReason: String
+  status: OrderRefundStatus!
 }
 
 type PriceFacet {
@@ -662,6 +709,22 @@ enum GuestCartMergeStatus {
   REPLAYED
 }
 
+enum OrderPaymentStatus {
+  FAILED
+  PENDING
+  SUCCEEDED
+  UNKNOWN
+  UNRESOLVED
+}
+
+enum OrderRefundStatus {
+  FAILED
+  NONE
+  PENDING
+  SUCCEEDED
+  UNRESOLVED
+}
+
 enum OrderStatus {
   CANCELLED
   COMPLETED
@@ -716,6 +779,11 @@ input AddCartItemInput {
 
 input AddWishlistItemInput {
   productVariantId: ID!
+}
+
+input CancelOrderInput {
+  publicId: UUID!
+  requestId: UUID!
 }
 
 input CheckoutAddressInput {

@@ -31,6 +31,18 @@ class SchemaContractTest(unittest.TestCase):
                 self.assertNotIn("user:", projection)
                 self.assertNotIn("credential", projection.lower())
 
+    def test_cancellation_and_financial_states_are_composed(self):
+        for filename in ("retail.graphql", "supergraph.graphql"):
+            text = (ROOT / "infrastructure/hive" / filename).read_text()
+            with self.subTest(schema=filename):
+                for operation in ("cancelOrder", "cancelGuestOrder", "cancelOrderAsStaff"):
+                    self.assertIn(f"{operation}(input: CancelOrderInput!): OrderCancellationPayload!", text)
+                for typename in ("CheckoutOrder", "Order", "CancellationOrder"):
+                    projection = re.search(rf"type {typename}[^\{{]*\{{([^}}]+)\}}", text).group(1)
+                    self.assertIn("cancellationEligibility: OrderCancellationEligibility!", projection)
+                    self.assertIn("payment: OrderPayment!", projection)
+                    self.assertIn("refund: OrderRefund!", projection)
+
     def test_committed_router_schemas_expose_every_application_root_field(self):
         expected = {}
         for path in (ROOT / "backend/src/main/resources/schema").rglob("*.graphqls"):

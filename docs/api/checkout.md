@@ -3,6 +3,8 @@
 Checkout is served by the existing retail GraphQL subgraph through Hive at
 `http://localhost:4002/graphql`. No frontend, carrier, production gateway or
 email recovery is implemented. Guest carts are described in [Guest Cart](guest-cart.md).
+Cancellation eligibility, customer/guest cancellation, late-payment recovery
+and asynchronous full refunds are described in [Order cancellation](order-cancellation.md).
 
 ## Operations and compatibility
 

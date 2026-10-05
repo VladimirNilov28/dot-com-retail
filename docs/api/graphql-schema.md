@@ -186,8 +186,10 @@ reached only via `myWishlist`.
 
 ### Payment (`payment/`)
 
-Types: `Order`, `OrderItem`, `PaymentDetails`, enums `OrderStatus`,
-`PaymentStatus`, `PaymentMethodType`.
+Types: `Order`, `OrderItem`, `CheckoutOrder`, `OrderCancellationPayload`,
+`OrderPayment`, `OrderRefund`; enums `OrderStatus`, `OrderPaymentStatus`,
+`OrderRefundStatus`, `PaymentMethodType`. Payment processing belongs to the Go
+service, not client-assigned GraphQL payment records.
 
 | Query | Returns |
 |---|---|
@@ -196,10 +198,18 @@ Types: `Order`, `OrderItem`, `PaymentDetails`, enums `OrderStatus`,
 
 | Mutation | Returns |
 |---|---|
-| `createOrder` | `Order!` — checks out the caller's current cart, no input needed |
-| `updateOrderStatus(orderId, input: UpdateOrderStatusInput!)` | `Order!` |
-| `createPayment(input: CreatePaymentInput!)` | `PaymentDetails!` |
-| `updatePaymentStatus(paymentId, input: UpdatePaymentStatusInput!)` | `PaymentDetails!` |
+| `createOrder(input: PlaceOrderInput!)` | `Order!` - quoted atomic authenticated checkout |
+| `createGuestOrder(input: PlaceOrderInput!)` | `CheckoutOrder!` - protected guest checkout |
+| `cancelOrder(input: CancelOrderInput!)` | `OrderCancellationPayload!` - active owner and order:write |
+| `cancelGuestOrder(input: CancelOrderInput!)` | `OrderCancellationPayload!` - protected unexpired guest order grant |
+| `cancelOrderAsStaff(input: CancelOrderInput!)` | `OrderCancellationPayload!` - staff role and order:manage-status |
+| `updateOrderStatus(orderId, input: UpdateOrderStatusInput!)` | `Order!` - confirmed-payment SHIPPING/COMPLETED only |
+
+`Order` and `CheckoutOrder` expose cancellation eligibility, committed
+cancellation metadata, payment outcome and asynchronous refund status.
+See [Order cancellation](order-cancellation.md) for scopes, state transitions,
+request UUID retries, cookie transport, financial uncertainty and full-refund
+examples. No createPayment/updatePaymentStatus mutation exists.
 
 | Subscription | Returns |
 |---|---|
@@ -241,7 +251,7 @@ erDiagram
     ProductVariant ||--o{ CartItem : "referenced by"
 
     Order ||--o{ OrderItem : contains
-    Order ||--o{ PaymentDetails : "paid via"
+    Order ||--o| OrderRefund : "full refund projection"
     ProductVariant ||--o{ OrderItem : "referenced by"
 
     Warehouse ||--o{ Inventory : stocks
