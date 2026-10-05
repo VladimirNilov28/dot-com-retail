@@ -5,6 +5,7 @@ from clients.hydra import HydraClient
 from clients.kratos import KratosClient, KratosSecondFactorRequiredError
 from clients.spring_auth import SpringAuthClient
 from config import Config
+from services.bootstrap import ADMIN_WILDCARD, load_and_validate_spec
 
 
 class BridgeError(RuntimeError):
@@ -63,20 +64,36 @@ def handle_login(
 
 
 def handle_consent(config: Config, hydra_client: HydraClient, consent_challenge: str) -> str:
-    """Returns the URL the browser should be redirected to next. Auto-accepts
-    every scope Hydra reports as requested — Hydra itself already restricts
-    requested_scope to whatever the client was registered with in
-    access-control.yml, so no additional scope filtering is needed here."""
+    """Grant only requested scopes allowed by both the client and Spring role,
+    including on remembered consent. Machine scopes are never human grants."""
     consent_request = hydra_client.get_consent_request(consent_challenge)
+    spec = load_and_validate_spec(config.access_control_file)
 
     role = (consent_request.get("context") or {}).get("role")
-    access_token_claims = {"role": role} if role else None
+    role_spec = next((entry for entry in spec.roles if entry.name == role), None)
+    if not isinstance(role, str) or role_spec is None:
+        raise BridgeError("Consent requires a known application role")
+
+    client = consent_request.get("client") or {}
+    client_spec = next((entry for entry in spec.clients if entry.client_id == client.get("client_id")), None)
+    if client_spec is None or "authorization_code" not in client_spec.grant_types:
+        raise BridgeError("Consent requires a registered human OAuth client")
+    if not isinstance(client.get("scope"), str):
+        raise BridgeError("Consent client scope allow-list is missing")
+
+    declared = {scope.name for scope in spec.scopes}
+    role_scopes = declared if role_spec.scopes == ADMIN_WILDCARD else set(role_spec.scopes)
+    client_scopes = declared if client_spec.scopes is None else set(client_spec.scopes)
+    allowed = (role_scopes & client_scopes) | set(client_spec.additional_scopes)
+    allowed &= set(client["scope"].split())
+    allowed.discard("internal:provision-user")
+    granted = sorted(set(consent_request.get("requested_scope") or []) & allowed)
 
     accepted = hydra_client.accept_consent_request(
         consent_challenge,
-        grant_scope=consent_request.get("requested_scope", []),
+        grant_scope=granted,
         grant_access_token_audience=consent_request.get("requested_access_token_audience", []),
-        access_token_claims=access_token_claims,
+        access_token_claims={"role": role},
     )
     return accepted["redirect_to"]
 

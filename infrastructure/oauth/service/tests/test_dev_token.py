@@ -2,6 +2,7 @@ import os
 import sys
 import unittest
 from unittest.mock import Mock, patch
+from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
@@ -40,7 +41,9 @@ def make_config(**overrides) -> Config:
 
 class IssueDevTokenTest(unittest.TestCase):
     def setUp(self):
-        self.config = make_config()
+        self.config = make_config(
+            access_control_file=str(Path(__file__).resolve().parents[2] / "access-control.yml")
+        )
         self.hydra_client = Mock()
         self.kratos_client = Mock()
         self.spring_auth_client = Mock()
@@ -74,6 +77,7 @@ class IssueDevTokenTest(unittest.TestCase):
             "http://localhost:4200/auth/callback?code=auth-code&state=xyz",
         ]
         self.hydra_client.get_consent_request.return_value = {
+            "client": {"client_id": "bytecore-web", "scope": "user:read user:write offline_access product:write"},
             "requested_scope": ["user:read", "user:write", "offline_access"],
             "requested_access_token_audience": [],
             "context": {"role": "USER"},
@@ -103,6 +107,18 @@ class IssueDevTokenTest(unittest.TestCase):
         )
 
         self.assertEqual(response.refresh_token, "refresh-token-value")
+
+    def test_dev_token_uses_role_constrained_consent_with_offline_access(self):
+        self.hydra_client.get_consent_request.return_value["requested_scope"].append("product:write")
+        issue_dev_token(
+            self.config, self.hydra_client, self.kratos_client, self.spring_auth_client, "jane@example.com", "pw"
+        )
+        self.hydra_client.accept_consent_request.assert_called_once_with(
+            "consent-chal",
+            grant_scope=["offline_access", "user:read", "user:write"],
+            grant_access_token_audience=[],
+            access_token_claims={"role": "USER"},
+        )
 
     def test_response_includes_kratos_session_token_for_later_logout(self):
         response = issue_dev_token(

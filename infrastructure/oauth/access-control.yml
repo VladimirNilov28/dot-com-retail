@@ -3,18 +3,14 @@
 # This file is the source of truth for:
 #   - application roles (owned by the Spring/retail domain, never stored in Hydra/Kratos)
 #   - OAuth2 scopes exposed by the API
-#   - role -> scope mapping (forward-looking metadata; not yet consumed by any
-#     runtime enforcement — no Spring authorization reads this today)
+#   - role -> scope mapping, enforced by oauth-service at human consent
 #   - OAuth2 client desired state, reconciled into Ory Hydra by the
 #     infrastructure/hydra/bootstrap mini-service
 #
-# The `roles[].scopes` mapping has no runtime consumer yet. It exists purely as
-# forward-looking documentation for a future Spring-side authorization task
-# (role -> GrantedAuthority mapping, @PreAuthorize, GraphQL authorization, etc).
-#
-# The Hydra bootstrap service does NOT filter client scopes by role. Clients
-# declare their allowed scopes explicitly; machine-only provisioning is never
-# available to the web client.
+# Clients declare a maximum allow-list, not automatic grants to every user.
+# oauth-service intersects requested scopes, client allow-lists, and the current
+# Spring role mapping. Spring still enforces roles, scopes and resource ownership.
+# Human consent always excludes machine-only provisioning, including ADMIN "*".
 
 version: 1
 
@@ -96,8 +92,10 @@ scopes:
 
 roles:
   - name: ADMIN
-    description: Full administrative access to every declared capability.
-    scopes: "*" # Sentinel: expands to every scope declared above. Tooling
+    description: Full administrative access to every application capability.
+    scopes: "*" # Sentinel: expands to declared application scopes for human grants.
+    # Machine-only internal:provision-user is always excluded from human consent.
+    # Tooling
     # MUST expand this to a concrete scope list before using it for
     # anything; it is never sent to Hydra as a literal "*" scope string.
 
