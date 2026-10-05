@@ -42,8 +42,11 @@ Spring backend (OrderService.createOrder, same DB tx)
   row is loaded and, if already resolved (`SUCCEEDED`/`FAILED`), the message
   is treated as a safe no-op instead of triggering a second charge. If the
   row exists but is still `REQUESTED` (a crash between recording the
-  request and recording the result), it resumes/completes it - never a
-  double charge.
+  request and recording the result), it resumes/completes it using the
+  same payment ID. A real provider must use this stable ID as its
+  idempotency key: the provider call can repeat after an uncertain charge
+  or failed result transaction. The development FakeProvider has no
+  external charging side effects.
 - Result events (`payment.succeeded`/`payment.failed`) are **never**
   published directly from the request-processing transaction. Instead the
   status update and the outbox row are written in one DB transaction
@@ -69,11 +72,26 @@ field to store or log, by design.
 
 - **Malformed/invalid messages** (unparsable JSON, missing `eventId`/
   `orderId`, unparsable amount) are routed to `payment.requested.dlq` and
-  committed immediately - they can never succeed on retry, so they are not
-  retried.
+  committed only after the synchronous DLQ write receives acknowledgements
+  from all in-sync replicas (`RequireAll`). Failed DLQ writes retry the
+  same source record; they never acknowledge it without a durable copy.
 - **Transient failures** (DB unavailable, provider error) are *not*
-  committed; the message is redelivered by Kafka on the next fetch, with a
+  committed; the **same fetched record** is retried in memory, with a
   bounded 500ms backoff between attempts to avoid a tight retry loop.
+  Withholding a commit does not rewind Kafka's running reader. The
+  sequential consumer does not fetch another record until the current one
+  is durably handled and its offset successfully committed, preventing
+  later offsets from acknowledging unresolved work. Commit failures retry
+  only the acknowledgement, not the charge or DLQ write.
+- **Persistent failures** are logged on each bounded retry with the source
+  topic, partition and offset (plus payment/request IDs where available).
+  An unresolved record intentionally blocks this consumer, including its
+  other assigned partitions, until recovery or shutdown.
+- **Cancellation/shutdown** interrupts retries and context-aware dependency
+  calls without acknowledging unresolved work. `Close` also cancels the
+  running consumer before releasing Kafka resources. Kafka redelivers
+  uncommitted records on restart; an uncertain DLQ acknowledgement can
+  produce duplicate DLQ copies (at-least-once delivery).
 - **Restart safety**: because migrations, idempotent inserts, and the
   transactional outbox are all durable (Postgres, not in-memory), a Payment
   Service restart at any point resumes correctly - in-flight requests are
@@ -120,6 +138,9 @@ go test ./internal/eventtime/... ./internal/provider/...
 # Integration tests (require Docker - real Postgres/Kafka via testcontainers-go)
 go test ./internal/store/...
 go test ./internal/kafka/...
+
+# Consumer retry/offset/shutdown regressions (real Kafka/Postgres, isolated fixtures)
+GOMAXPROCS=2 go test -p 2 ./internal/kafka -run '^TestRequestConsumer'
 
 # Everything
 go test ./...

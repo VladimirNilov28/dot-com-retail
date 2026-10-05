@@ -26,7 +26,7 @@ import (
 // "payment.requested" -> "payment.requested.dlq". A message only ever goes
 // here when it is permanently unprocessable (malformed JSON, missing
 // required fields) - never for a transient DB/broker failure, which instead
-// is retried via non-commit + redelivery.
+// is retried in place without acknowledging the source record.
 const DLQSuffix = ".dlq"
 
 // transientRetryDelay bounds how fast the consumer loop can spin when a
@@ -40,11 +40,19 @@ const transientRetryDelay = 500 * time.Millisecond
 // result via the transactional outbox (never publishing to Kafka directly
 // from here).
 type RequestConsumer struct {
-	reader    *kafkago.Reader
+	reader    requestReader
 	dlqWriter *kafkago.Writer
 	store     *store.Store
 	provider  provider.Provider
 	logger    *slog.Logger
+	closed    context.Context
+	cancel    context.CancelFunc
+}
+
+type requestReader interface {
+	FetchMessage(context.Context) (kafkago.Message, error)
+	CommitMessages(context.Context, ...kafkago.Message) error
+	Close() error
 }
 
 // NewRequestConsumer builds a RequestConsumer subscribed to
@@ -68,13 +76,19 @@ func NewRequestConsumer(
 		Addr:                   kafkago.TCP(brokers...),
 		Topic:                  events.PaymentRequested + DLQSuffix,
 		Balancer:               &kafkago.LeastBytes{},
+		RequiredAcks:           kafkago.RequireAll,
 		AllowAutoTopicCreation: true,
 	}
-	return &RequestConsumer{reader: reader, dlqWriter: dlqWriter, store: s, provider: p, logger: logger}
+	closed, cancel := context.WithCancel(context.Background())
+	return &RequestConsumer{
+		reader: reader, dlqWriter: dlqWriter, store: s, provider: p, logger: logger,
+		closed: closed, cancel: cancel,
+	}
 }
 
 // Close releases the underlying Kafka reader/writer.
 func (c *RequestConsumer) Close() error {
+	c.cancel()
 	err1 := c.reader.Close()
 	err2 := c.dlqWriter.Close()
 	return errors.Join(err1, err2)
@@ -84,31 +98,54 @@ func (c *RequestConsumer) Close() error {
 // error for message-level problems (those are logged/DLQ'd/retried
 // internally) - only for a fatal reader-level failure.
 func (c *RequestConsumer) Run(ctx context.Context) error {
-	for {
+	if c.closed.Err() != nil {
+		return nil
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	stop := context.AfterFunc(c.closed, cancel)
+	defer stop()
+
+	for ctx.Err() == nil {
 		msg, err := c.reader.FetchMessage(ctx)
 		if err != nil {
-			if errors.Is(err, context.Canceled) {
+			if ctx.Err() != nil || c.closed.Err() != nil {
 				return nil
 			}
 			return fmt.Errorf("kafka: fetch message: %w", err)
 		}
 
-		outcome := c.handle(ctx, msg)
-		switch outcome {
-		case outcomeCommit:
-			if err := c.reader.CommitMessages(ctx, msg); err != nil {
-				c.logger.Error("failed to commit message offset", "error", err)
-			}
-		case outcomeRetry:
-			// Deliberately do not commit: the same message will be
-			// redelivered (at-least-once). Bounded backoff avoids a tight
-			// retry loop against an unavailable dependency.
-			select {
-			case <-ctx.Done():
+		// FetchMessage advances the live reader even without a commit.
+		// Keep this record until both durable handling and acknowledgement
+		// succeed; fetching a later same-partition offset could lose it.
+		for ctx.Err() == nil && c.handle(ctx, msg) == outcomeRetry {
+			if !waitForRetry(ctx) {
 				return nil
-			case <-time.After(transientRetryDelay):
 			}
 		}
+		for ctx.Err() == nil {
+			if err := c.reader.CommitMessages(ctx, msg); err != nil {
+				c.logger.Error("failed to commit message offset, will retry",
+					"error", err, "topic", msg.Topic, "partition", msg.Partition, "offset", msg.Offset)
+				if !waitForRetry(ctx) {
+					return nil
+				}
+				continue
+			}
+			break
+		}
+	}
+	return nil
+}
+
+func waitForRetry(ctx context.Context) bool {
+	timer := time.NewTimer(transientRetryDelay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
 	}
 }
 
@@ -124,25 +161,23 @@ func (c *RequestConsumer) handle(ctx context.Context, msg kafkago.Message) outco
 	if err := json.Unmarshal(msg.Value, &req); err != nil {
 		c.logger.Warn("malformed payment.requested message, routing to DLQ",
 			"error", err, "offset", msg.Offset, "partition", msg.Partition)
-		c.sendToDLQ(ctx, msg, "malformed_json: "+err.Error())
-		return outcomeCommit
+		return c.sendToDLQ(ctx, msg, "malformed_json: "+err.Error())
 	}
 	if req.EventID == uuid.Nil || req.OrderID == 0 {
 		c.logger.Warn("invalid payment.requested message (missing eventId/orderId), routing to DLQ",
 			"offset", msg.Offset, "partition", msg.Partition)
-		c.sendToDLQ(ctx, msg, "missing_required_fields")
-		return outcomeCommit
+		return c.sendToDLQ(ctx, msg, "missing_required_fields")
 	}
 
 	amountCents, err := money.ParseCents(req.Amount.String())
 	if err != nil {
 		c.logger.Warn("invalid amount in payment.requested message, routing to DLQ",
 			"error", err, "eventId", req.EventID, "orderId", req.OrderID)
-		c.sendToDLQ(ctx, msg, "invalid_amount: "+err.Error())
-		return outcomeCommit
+		return c.sendToDLQ(ctx, msg, "invalid_amount: "+err.Error())
 	}
 
-	logger := c.logger.With("eventId", req.EventID, "orderId", req.OrderID)
+	logger := c.logger.With("eventId", req.EventID, "orderId", req.OrderID,
+		"topic", msg.Topic, "partition", msg.Partition, "offset", msg.Offset)
 
 	saveResult, err := c.store.SaveRequested(ctx, domain.Payment{
 		ID:             uuid.New(),
@@ -230,7 +265,7 @@ func (c *RequestConsumer) recordResult(
 	return c.store.RecordResultAndEnqueue(ctx, payment.ID, domain.StatusFailed, result.Reason, events.PaymentFailed, payload)
 }
 
-func (c *RequestConsumer) sendToDLQ(ctx context.Context, msg kafkago.Message, reason string) {
+func (c *RequestConsumer) sendToDLQ(ctx context.Context, msg kafkago.Message, reason string) outcome {
 	err := c.dlqWriter.WriteMessages(ctx, kafkago.Message{
 		Key:   msg.Key,
 		Value: msg.Value,
@@ -240,6 +275,9 @@ func (c *RequestConsumer) sendToDLQ(ctx context.Context, msg kafkago.Message, re
 		},
 	})
 	if err != nil {
-		c.logger.Error("failed to publish message to DLQ", "error", err, "reason", reason)
+		c.logger.Error("failed to publish message to DLQ, will retry",
+			"error", err, "reason", reason, "topic", msg.Topic, "partition", msg.Partition, "offset", msg.Offset)
+		return outcomeRetry
 	}
+	return outcomeCommit
 }
