@@ -98,9 +98,23 @@ see `infrastructure/hive/scripts/compose-supergraph.sh` — no Hive Cloud
 account or registry is used. Regenerate it after a schema change:
 
 ```bash
-cd infrastructure/hive && ./scripts/compose-supergraph.sh
+./infrastructure/hive/scripts/compose-supergraph.sh
 docker compose -f infrastructure/compose.yml --env-file .env restart hive-router
 ```
+
+For a TOTP-enrolled account, complete the AAL2 flow in the TOTP runbook first,
+then supply its access token privately through the environment, not an argument:
+
+```bash
+read -rsp "AAL2 access token: " HIVE_BEARER_TOKEN; echo
+export HIVE_BEARER_TOKEN
+./infrastructure/hive/scripts/compose-supergraph.sh
+unset HIVE_BEARER_TOKEN
+```
+
+This skips password login, not backend authentication. Without this variable,
+the existing `DEV_EMAIL`/`DEV_PASSWORD` password flow remains available for
+non-enrolled accounts. Failed authentication leaves the previous SDL intact.
 
 Health/readiness: `curl http://localhost:4002/health` (liveness),
 `curl http://localhost:4002/readiness` (supergraph loaded).
