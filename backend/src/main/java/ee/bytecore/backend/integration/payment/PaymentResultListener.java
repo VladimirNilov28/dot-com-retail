@@ -13,6 +13,7 @@ import ee.bytecore.backend.enums.OrderStatus;
 import ee.bytecore.backend.integration.payment.event.PaymentFailedEvent;
 import ee.bytecore.backend.integration.payment.event.PaymentRequestedEvent;
 import ee.bytecore.backend.integration.payment.event.PaymentSucceededEvent;
+import ee.bytecore.backend.integration.payment.event.PaymentUnresolvedEvent;
 import ee.bytecore.backend.repositories.payment.PaymentOutboxEventRepository;
 import ee.bytecore.backend.services.OrderService;
 
@@ -51,7 +52,13 @@ public class PaymentResultListener {
         PaymentSucceededEvent event = parse(payload, PaymentSucceededEvent.class);
         validateResult(event.eventId(), event.requestEventId(), event.orderId(), event.paymentId(), event.occurredAt());
         applyResult(
-                event.orderId(), OrderStatus.PAID, null, event.eventId(), event.requestEventId(), event.paymentId());
+                event.orderId(),
+                OrderStatus.PAID,
+                null,
+                event.eventId(),
+                event.requestEventId(),
+                event.paymentId(),
+                event.providerTransactionId());
     }
 
     @KafkaListener(topics = PaymentTopics.PAYMENT_FAILED)
@@ -67,7 +74,24 @@ public class PaymentResultListener {
                 "PAYMENT_FAILED: " + event.reason(),
                 event.eventId(),
                 event.requestEventId(),
-                event.paymentId());
+                event.paymentId(),
+                null);
+    }
+
+    @KafkaListener(topics = PaymentTopics.PAYMENT_UNRESOLVED)
+    public void onPaymentUnresolved(String payload) {
+        var event = parse(payload, PaymentUnresolvedEvent.class);
+        validateResult(event.eventId(), event.requestEventId(), event.orderId(), event.paymentId(), event.occurredAt());
+        if (event.reason() == null || event.reason().isBlank())
+            throw new IllegalStateException("Malformed unresolved payment result: reason is required");
+        applyResult(
+                event.orderId(),
+                null,
+                event.reason(),
+                event.eventId(),
+                event.requestEventId(),
+                event.paymentId(),
+                null);
     }
 
     private <T> T parse(String payload, Class<T> type) {
@@ -101,9 +125,11 @@ public class PaymentResultListener {
             String cancellationReason,
             UUID eventId,
             UUID requestEventId,
-            UUID paymentId) {
+            UUID paymentId,
+            String providerTransactionId) {
         try {
             transaction.executeWithoutResult(status -> {
+                var order = orderService.lockForFinancialResult(orderId);
                 var persisted = paymentRequests
                         .findRequestForUpdate(requestEventId)
                         .orElseThrow(() -> new IllegalArgumentException("Unknown payment requestEventId"));
@@ -118,18 +144,32 @@ public class PaymentResultListener {
                     var previous = receipt.get();
                     if (!Objects.equals(previous.getPaymentId(), paymentId)
                             || !Objects.equals(previous.getOrderId(), orderId)
-                            || !Objects.equals(previous.getResultStatus(), target.name())) {
+                            || (target != null && !Objects.equals(previous.getResultStatus(), target.name()))) {
                         throw new IllegalArgumentException(
                                 "Payment result conflicts with the previously recorded payment/outcome");
                     }
                     return;
                 }
+                if (target == null) {
+                    orderService.applyPaymentOutcome(
+                            order, requested, paymentId, "UNRESOLVED", cancellationReason, null);
+                    return;
+                }
+                if (providerTransactionId != null
+                        && (providerTransactionId.isBlank() || providerTransactionId.length() > 255))
+                    throw new IllegalArgumentException("Provider transaction reference is invalid");
                 if (paymentRequests.recordResult(
                                 requestEventId, persisted.getId(), orderId, paymentId, eventId, target.name())
                         != 1) {
                     throw new IllegalArgumentException("Payment/result identity is already bound to another request");
                 }
-                orderService.updateStatus(orderId, target, cancellationReason);
+                orderService.applyPaymentOutcome(
+                        order,
+                        requested,
+                        paymentId,
+                        target == OrderStatus.PAID ? "SUCCEEDED" : "FAILED",
+                        cancellationReason == null ? null : cancellationReason.substring("PAYMENT_FAILED: ".length()),
+                        providerTransactionId);
             });
             log.info(
                     "Applied payment result eventId={} orderId={} paymentId={} status={}",

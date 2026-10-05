@@ -27,15 +27,19 @@ import ee.bytecore.backend.entities.inventory.Inventory;
 import ee.bytecore.backend.entities.payment.CheckoutRequest;
 import ee.bytecore.backend.entities.payment.Order;
 import ee.bytecore.backend.entities.payment.OrderItem;
+import ee.bytecore.backend.entities.payment.OrderRefund;
 import ee.bytecore.backend.entities.product.ProductVariant;
 import ee.bytecore.backend.entities.user.UserAddress;
 import ee.bytecore.backend.enums.OrderStatus;
 import ee.bytecore.backend.exceptions.CheckoutException;
 import ee.bytecore.backend.integration.payment.PaymentEventPublisher;
 import ee.bytecore.backend.integration.payment.event.PaymentRequestedEvent;
+import ee.bytecore.backend.integration.payment.event.RefundRequestedEvent;
 import ee.bytecore.backend.repositories.payment.CheckoutRequestRepository;
 import ee.bytecore.backend.repositories.payment.OrderItemRepository;
+import ee.bytecore.backend.repositories.payment.OrderRefundRepository;
 import ee.bytecore.backend.repositories.payment.OrderRepository;
+import ee.bytecore.backend.repositories.payment.PaymentOutboxEventRepository;
 import ee.bytecore.backend.repositories.user.UserPaymentMethodRepository;
 import ee.bytecore.backend.repositories.user.UserRepository;
 import ee.bytecore.backend.security.GuestCartCredentials;
@@ -81,6 +85,12 @@ public class OrderService {
 
     @Autowired
     private ObjectProvider<EntityManager> checkoutEntityManager;
+
+    @Autowired
+    private ObjectProvider<OrderRefundRepository> refunds;
+
+    @Autowired
+    private ObjectProvider<PaymentOutboxEventRepository> financialRequests;
 
     public OrderService(
             OrderRepository orderRepository,
@@ -161,6 +171,7 @@ public class OrderService {
 
         if (snapshot != null) totalAmount = snapshot.totals().total();
         Order order = Order.create(cart.getUser(), OrderStatus.PENDING, totalAmount);
+        order.setPaymentStatus("PENDING");
         if (snapshot != null) order.initializeCheckout(snapshot);
         Order saved = orderRepository.save(order);
 
@@ -299,7 +310,7 @@ public class OrderService {
         return confirmation(receipt.getOrder());
     }
 
-    public static Confirmation confirmation(Order order) {
+    public Confirmation confirmation(Order order) {
         Snapshot snapshot = order.getCheckoutSnapshot();
         if (snapshot == null) return null;
         return new Confirmation(
@@ -311,7 +322,201 @@ public class OrderService {
                 snapshot.details(),
                 snapshot.totals(),
                 order.getCreatedAt(),
-                "NONE");
+                "NONE",
+                recovery(order));
+    }
+
+    private OrderRecoveryValues.Summary recovery(Order order) {
+        return OrderRecoveryValues.summary(
+                order, refunds.getObject().findByOrderId(order.getId()).orElse(null));
+    }
+
+    @Transactional(readOnly = true)
+    public OrderRecoveryValues.Summary recovery(Long id, Long userId, boolean staff) {
+        Order order = orderRepository.findById(id).orElseThrow(() -> new EntityNotFoundException("Order not found"));
+        requireReadable(order, userId, staff);
+        return recovery(order);
+    }
+
+    @Transactional
+    public OrderRecoveryValues.Payload cancelOrder(
+            UUID requestId, UUID publicId, Long userId, String guestCredential, boolean staff) {
+        if (requestId == null || publicId == null)
+            throw new IllegalArgumentException("Cancellation request UUID and order reference are required");
+        checkoutJdbc
+                .getObject()
+                .query(
+                        "SELECT pg_advisory_xact_lock(?)",
+                        row -> {},
+                        requestId.getMostSignificantBits() ^ requestId.getLeastSignificantBits());
+        String actor;
+        if (userId != null) {
+            checkoutUsers
+                    .getObject()
+                    .findActiveByIdForUpdate(userId)
+                    .orElseThrow(() -> new AccessDeniedException("Active account is required"));
+            actor = (staff ? "staff:" : "user:") + userId;
+        } else {
+            if (staff) throw new AccessDeniedException("Active staff account is required");
+            actor = "guest:" + guestOrderHash(guestCredential);
+        }
+        Order found = orderRepository
+                .findByPublicId(publicId)
+                .orElseThrow(() -> userId == null
+                        ? CheckoutSupport.unavailable()
+                        : new EntityNotFoundException("Order not found"));
+        Order order = lockForFinancialResult(found.getId());
+        if (userId == null) {
+            var receipt = checkoutRequests
+                    .getObject()
+                    .findByOrderPublicId(publicId)
+                    .orElseThrow(CheckoutSupport::unavailable);
+            authorizeReceipt(receipt, null, guestOrderHash(guestCredential));
+        } else {
+            requireReadable(order, userId, staff);
+        }
+        record CancellationReceipt(Long orderId, String actor) {}
+        var previous = checkoutJdbc
+                .getObject()
+                .query(
+                        "SELECT order_id,actor FROM order_cancellation_requests WHERE request_id=?",
+                        (rs, row) -> new CancellationReceipt(rs.getLong("order_id"), rs.getString("actor")),
+                        requestId);
+        if (!previous.isEmpty()
+                && (!previous.getFirst().orderId().equals(order.getId())
+                        || !previous.getFirst().actor().equals(actor))) {
+            throw new CheckoutException(
+                    "CANCELLATION_REQUEST_CONFLICT", "Cancellation request UUID was used for another request");
+        }
+        if (order.getStatus() != OrderStatus.CANCELLED) {
+            var eligibility = OrderRecoveryValues.eligibility(order);
+            if (!eligibility.allowed()) throw new CheckoutException("ORDER_NOT_CANCELLABLE", eligibility.reason());
+            order.setCancellationSource(staff ? "STAFF_REQUESTED" : "CUSTOMER_REQUESTED");
+            updateStatus(order.getId(), OrderStatus.CANCELLED, staff ? "STAFF_REQUESTED" : "CUSTOMER_REQUESTED");
+        } else {
+            ensureRefund(order);
+        }
+        if (previous.isEmpty()) {
+            checkoutJdbc
+                    .getObject()
+                    .update(
+                            "INSERT INTO order_cancellation_requests(request_id,order_id,actor) VALUES (?,?,?)",
+                            requestId,
+                            order.getId(),
+                            actor);
+        }
+        var summary = recovery(order);
+        return new OrderRecoveryValues.Payload(
+                requestId,
+                new OrderRecoveryValues.SummaryOrder(
+                        order.getPublicId(),
+                        order.getStatus().name(),
+                        summary.cancellationEligibility(),
+                        summary.cancellation(),
+                        summary.payment(),
+                        summary.refund()));
+    }
+
+    @Transactional
+    public Order updateFulfillmentStatus(Long id, OrderStatus target, Long actorId) {
+        if (target != OrderStatus.SHIPPING && target != OrderStatus.COMPLETED)
+            throw new IllegalArgumentException(
+                    "Staff may set SHIPPING/COMPLETED only; use cancelOrderAsStaff for cancellation");
+        checkoutUsers
+                .getObject()
+                .findActiveByIdForUpdate(actorId)
+                .orElseThrow(() -> new AccessDeniedException("Active account is required"));
+        Order order = lockForFinancialResult(id);
+        if (!"SUCCEEDED".equals(order.getPaymentStatus()))
+            throw new IllegalArgumentException("Fulfillment requires a confirmed successful payment");
+        return updateStatus(id, target);
+    }
+
+    @Transactional
+    public Order lockForFinancialResult(Long id) {
+        Order order =
+                orderRepository.findByIdForUpdate(id).orElseThrow(() -> new EntityNotFoundException("Order not found"));
+        EntityManager em = checkoutEntityManager.getIfAvailable();
+        if (em != null) em.refresh(order);
+        return order;
+    }
+
+    public void applyPaymentOutcome(
+            Order order,
+            PaymentRequestedEvent request,
+            UUID paymentId,
+            String status,
+            String reason,
+            String providerTransactionId) {
+        if (order.getPaymentId() != null && !order.getPaymentId().equals(paymentId))
+            throw new IllegalArgumentException("Payment identity conflicts with the observed original payment");
+        if (java.util.Set.of("SUCCEEDED", "FAILED").contains(order.getPaymentStatus())) {
+            if (!order.getPaymentStatus().equals(status) && !"UNRESOLVED".equals(status))
+                throw new IllegalArgumentException("Payment outcome conflicts with the terminal outcome");
+            return;
+        }
+        order.setPaymentId(paymentId);
+        order.setPaymentStatus(status);
+        if ("UNRESOLVED".equals(status)) {
+            orderRepository.save(order);
+            return;
+        }
+        order.setProviderTransactionId(providerTransactionId);
+        if (order.getStatus() == OrderStatus.CANCELLED) {
+            if ("SUCCEEDED".equals(status)) ensureRefund(order);
+        } else if ("SUCCEEDED".equals(status)) {
+            updateStatus(order.getId(), OrderStatus.PAID);
+        } else {
+            order.setCancellationSource("PAYMENT_FAILED");
+            updateStatus(order.getId(), OrderStatus.CANCELLED, "PAYMENT_FAILED: " + reason);
+        }
+        orderRepository.save(order);
+    }
+
+    private void ensureRefund(Order order) {
+        if (!"SUCCEEDED".equals(order.getPaymentStatus()) || order.getStatus() != OrderStatus.CANCELLED) return;
+        if (refunds.getObject().findByOrderId(order.getId()).isPresent()) return;
+        var requests = financialRequests.getObject().findAllByOrderIdAndEventType(order.getId(), "payment.requested");
+        if (requests.size() != 1)
+            throw new IllegalArgumentException("Original payment request requires reconciliation");
+        PaymentRequestedEvent request;
+        try {
+            request = new com.fasterxml.jackson.databind.ObjectMapper()
+                    .findAndRegisterModules()
+                    .readValue(requests.getFirst().getPayload(), PaymentRequestedEvent.class);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
+            throw new IllegalStateException("Persisted original payment request is malformed", exception);
+        }
+        var receipt = financialRequests
+                .getObject()
+                .findResultByRequestEventId(request.eventId())
+                .orElseThrow(() -> new IllegalArgumentException("Successful payment receipt requires reconciliation"));
+        if (!"PAID".equals(receipt.getResultStatus())
+                || !Objects.equals(receipt.getPaymentId(), order.getPaymentId())
+                || !Objects.equals(request.orderId(), order.getId())
+                || request.amount().compareTo(order.getTotalAmount()) != 0)
+            throw new IllegalArgumentException("Original charged payment facts conflict");
+        OrderRefund refund = new OrderRefund();
+        refund.setId(UUID.randomUUID());
+        refund.setRequestEventId(UUID.randomUUID());
+        refund.setPaymentRequestEventId(request.eventId());
+        refund.setOrderId(order.getId());
+        refund.setPaymentId(order.getPaymentId());
+        refund.setAmount(request.amount());
+        refund.setCurrency(request.currency());
+        refund.setProviderTransactionId(order.getProviderTransactionId());
+        refund.setStatus("PENDING");
+        refunds.getObject().saveAndFlush(refund);
+        paymentEventPublisher.publishRefundRequested(new RefundRequestedEvent(
+                refund.getRequestEventId(),
+                refund.getId(),
+                request.eventId(),
+                order.getId(),
+                order.getPaymentId(),
+                request.amount(),
+                request.currency(),
+                order.getProviderTransactionId(),
+                Instant.now()));
     }
 
     private void requireActiveCheckoutUser(Long userId) {
@@ -500,9 +705,8 @@ public class OrderService {
     /**
      * @param cancellationReason only meaningful when {@code status ==
      *     CANCELLED}; distinguishes an automatic payment-failure
-     *     cancellation from a manual one (e.g. via the admin
-     *     {@code updateOrderStatus} mutation, which always passes {@code
-     *     null} here). Ignored for every other status.
+     *     cancellation from a customer/staff cancellation. The public staff
+     *     status mutation handles fulfillment only. Ignored for every other status.
      */
     @Transactional
     public Order updateStatus(Long id, OrderStatus status, String cancellationReason) {
@@ -517,13 +721,28 @@ public class OrderService {
         }
 
         if (status == OrderStatus.CANCELLED) {
-            for (OrderItem item : orderItemRepository.findAllByOrderId(id)) {
-                inventoryService.restore(item.getInventory().getId(), item.getQuantity());
+            if (order.getInventoryReleasedAt() == null) {
+                var items = orderItemRepository.findAllByOrderId(id).stream()
+                        .sorted(Comparator.comparing((OrderItem item) ->
+                                        item.getInventory().getProductVariant().getId())
+                                .thenComparing(item -> item.getInventory().getId()))
+                        .toList();
+                for (OrderItem item : items) {
+                    inventoryService.restore(item.getInventory().getId(), item.getQuantity());
+                }
+                order.setInventoryReleasedAt(Instant.now());
             }
             order.setCancellationReason(cancellationReason);
+            order.setCancelledAt(Instant.now());
+            if (order.getCancellationSource() == null)
+                order.setCancellationSource(
+                        cancellationReason != null && cancellationReason.startsWith("PAYMENT_FAILED:")
+                                ? "PAYMENT_FAILED"
+                                : "STAFF_REQUESTED");
         }
 
         order.setStatus(status);
+        if (status == OrderStatus.CANCELLED) ensureRefund(order);
         Order saved = orderRepository.save(order);
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {

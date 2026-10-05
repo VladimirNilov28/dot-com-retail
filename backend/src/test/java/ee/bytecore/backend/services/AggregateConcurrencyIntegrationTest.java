@@ -255,9 +255,138 @@ class AggregateConcurrencyIntegrationTest {
             race.reached(2);
             assertThat(race.finish().get(1)).isInstanceOf(IllegalArgumentException.class);
         }
+
         assertThat(orders.findById(order.getId()).orElseThrow().getStatus()).isEqualTo(OrderStatus.CANCELLED);
         assertThat(inventories.findById(f.inventory.getId()).orElseThrow().getQuantity())
                 .isEqualTo(10);
+    }
+
+    private Order paidCheckout(Fixture fixture) throws Exception {
+        Order order = orderService.createOrder(fixture.user.getId());
+        UUID request = new JdbcTemplate(dataSource)
+                .queryForObject(
+                        "SELECT CAST(payload->>'eventId' AS uuid) FROM payment_outbox WHERE order_id=? AND event_type='payment.requested'",
+                        UUID.class,
+                        order.getId());
+        paymentResults.onPaymentSucceeded(new ObjectMapper()
+                .findAndRegisterModules()
+                .writeValueAsString(new ee.bytecore.backend.integration.payment.event.PaymentSucceededEvent(
+                        UUID.randomUUID(), request, order.getId(), UUID.randomUUID(), Instant.now())));
+        return order;
+    }
+
+    @Test
+    void authorizedCancellationWinsBeforeProcessingAndProducesOneRefund() throws Exception {
+        Fixture f = fixture();
+        Order order = paidCheckout(f);
+        try (var race = new Interleaving("inventory", f.inventory.getId())) {
+            race.start(() ->
+                    orderService.cancelOrder(UUID.randomUUID(), order.getPublicId(), f.user.getId(), null, false));
+            race.reached(1);
+            race.start(() -> orderService.updateFulfillmentStatus(order.getId(), OrderStatus.SHIPPING, f.user.getId()));
+            race.reached(2);
+            assertThat(race.finish().get(1)).isInstanceOf(IllegalArgumentException.class);
+        }
+        assertThat(orders.findById(order.getId()).orElseThrow().getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        assertThat(inventories.findById(f.inventory.getId()).orElseThrow().getQuantity())
+                .isEqualTo(10);
+        assertThat(new JdbcTemplate(dataSource)
+                        .queryForObject(
+                                "SELECT count(*) FROM order_refunds WHERE order_id=?", Integer.class, order.getId()))
+                .isEqualTo(1);
+    }
+
+    @Test
+    void processingWinsBeforeCancellationAndKeepsStockAllocated() throws Exception {
+        Fixture f = fixture();
+        Order order = paidCheckout(f);
+        try (var race = new Interleaving("orders", order.getId())) {
+            race.start(() -> orderService.updateFulfillmentStatus(order.getId(), OrderStatus.SHIPPING, f.user.getId()));
+            race.reached(1);
+            race.start(() ->
+                    orderService.cancelOrder(UUID.randomUUID(), order.getPublicId(), f.user.getId(), null, false));
+            race.reached(2);
+            assertThat(race.finish().get(1)).isInstanceOf(ee.bytecore.backend.exceptions.CheckoutException.class);
+        }
+        assertThat(orders.findById(order.getId()).orElseThrow().getStatus()).isEqualTo(OrderStatus.SHIPPING);
+        assertThat(inventories.findById(f.inventory.getId()).orElseThrow().getQuantity())
+                .isEqualTo(9);
+        assertThat(new JdbcTemplate(dataSource)
+                        .queryForObject(
+                                "SELECT count(*) FROM order_refunds WHERE order_id=?", Integer.class, order.getId()))
+                .isZero();
+    }
+
+    @Test
+    void concurrentCancellationReplaysShareOneReceipt() throws Exception {
+        Fixture f = fixture();
+        Order order = orderService.createOrder(f.user.getId());
+        UUID request = UUID.randomUUID();
+        try (var race = new Interleaving("inventory", f.inventory.getId())) {
+            race.start(() -> orderService.cancelOrder(request, order.getPublicId(), f.user.getId(), null, false));
+            race.reached(1);
+            race.start(() -> orderService.cancelOrder(request, order.getPublicId(), f.user.getId(), null, false));
+            race.reached(2);
+            assertThat(race.finish()).allMatch(OrderRecoveryValues.Payload.class::isInstance);
+        }
+        assertThat(inventories.findById(f.inventory.getId()).orElseThrow().getQuantity())
+                .isEqualTo(10);
+        assertThat(new JdbcTemplate(dataSource)
+                        .queryForObject(
+                                "SELECT count(*) FROM order_cancellation_requests WHERE request_id=?",
+                                Integer.class,
+                                request))
+                .isEqualTo(1);
+    }
+
+    @Test
+    void cancellationRacingWithCorrelatedSuccessRequestsOneRefund() throws Exception {
+        assertCorrelatedResultAfterCancellation(true);
+    }
+
+    @Test
+    void cancellationRacingWithCorrelatedDeclineNeverReleasesTwice() throws Exception {
+        assertCorrelatedResultAfterCancellation(false);
+    }
+
+    private void assertCorrelatedResultAfterCancellation(boolean succeeded) throws Exception {
+        Fixture f = fixture();
+        Order order = orderService.createOrder(f.user.getId());
+        var jdbc = new JdbcTemplate(dataSource);
+        UUID request = jdbc.queryForObject(
+                "SELECT CAST(payload->>'eventId' AS uuid) FROM payment_outbox WHERE order_id=? AND event_type='payment.requested'",
+                UUID.class,
+                order.getId());
+        UUID payment = UUID.randomUUID();
+        Object event = succeeded
+                ? new ee.bytecore.backend.integration.payment.event.PaymentSucceededEvent(
+                        UUID.randomUUID(), request, order.getId(), payment, Instant.now())
+                : new PaymentFailedEvent(UUID.randomUUID(), request, order.getId(), payment, "declined", Instant.now());
+        String payload = new ObjectMapper().findAndRegisterModules().writeValueAsString(event);
+        try (var race = new Interleaving("inventory", f.inventory.getId())) {
+            race.start(() ->
+                    orderService.cancelOrder(UUID.randomUUID(), order.getPublicId(), f.user.getId(), null, false));
+            race.reached(1);
+            race.startListener(() -> {
+                if (succeeded) paymentResults.onPaymentSucceeded(payload);
+                else paymentResults.onPaymentFailed(payload);
+            });
+            race.reached(2);
+            assertThat(race.finish().get(1)).isEqualTo(true);
+        }
+        var reloaded = orders.findById(order.getId()).orElseThrow();
+        assertThat(reloaded.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        assertThat(reloaded.getPaymentStatus()).isEqualTo(succeeded ? "SUCCEEDED" : "FAILED");
+        assertThat(inventories.findById(f.inventory.getId()).orElseThrow().getQuantity())
+                .isEqualTo(10);
+        assertThat(jdbc.queryForObject(
+                        "SELECT count(*) FROM order_refunds WHERE order_id=?", Integer.class, order.getId()))
+                .isEqualTo(succeeded ? 1 : 0);
+        assertThat(jdbc.queryForObject(
+                        "SELECT count(*) FROM payment_result_receipts WHERE request_event_id=?",
+                        Integer.class,
+                        request))
+                .isEqualTo(1);
     }
 
     @Test

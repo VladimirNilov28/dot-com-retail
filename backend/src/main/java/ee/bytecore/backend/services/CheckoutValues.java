@@ -87,5 +87,22 @@ public final class CheckoutValues {
             Details details,
             Totals totals,
             Instant createdAt,
-            String paymentInteraction) {}
+            String paymentInteraction,
+            OrderRecoveryValues.Summary recovery) {
+        public OrderRecoveryValues.Eligibility getCancellationEligibility() {
+            return recovery.cancellationEligibility();
+        }
+
+        public OrderRecoveryValues.Cancellation getCancellation() {
+            return recovery.cancellation();
+        }
+
+        public OrderRecoveryValues.Payment getPayment() {
+            return recovery.payment();
+        }
+
+        public OrderRecoveryValues.Refund getRefund() {
+            return recovery.refund();
+        }
+    }
 }

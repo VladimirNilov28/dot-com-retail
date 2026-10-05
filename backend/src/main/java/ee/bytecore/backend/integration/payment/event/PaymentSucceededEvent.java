@@ -11,4 +11,13 @@ import java.util.UUID;
  * own payment record id, useful for cross-service debugging.
  */
 public record PaymentSucceededEvent(
-        UUID eventId, UUID requestEventId, Long orderId, UUID paymentId, Instant occurredAt) {}
+        UUID eventId,
+        UUID requestEventId,
+        Long orderId,
+        UUID paymentId,
+        Instant occurredAt,
+        String providerTransactionId) {
+    public PaymentSucceededEvent(UUID eventId, UUID requestEventId, Long orderId, UUID paymentId, Instant occurredAt) {
+        this(eventId, requestEventId, orderId, paymentId, occurredAt, null);
+    }
+}

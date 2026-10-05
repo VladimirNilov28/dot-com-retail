@@ -4,6 +4,7 @@ import org.springframework.stereotype.Component;
 
 import ee.bytecore.backend.entities.payment.PaymentOutboxEvent;
 import ee.bytecore.backend.integration.payment.event.PaymentRequestedEvent;
+import ee.bytecore.backend.integration.payment.event.RefundRequestedEvent;
 import ee.bytecore.backend.repositories.payment.PaymentOutboxEventRepository;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -39,5 +40,16 @@ public class KafkaPaymentEventPublisher implements PaymentEventPublisher {
         }
         paymentOutboxEventRepository.save(
                 PaymentOutboxEvent.create(event.orderId(), PaymentTopics.PAYMENT_REQUESTED, payload));
+    }
+
+    @Override
+    public void publishRefundRequested(RefundRequestedEvent event) {
+        try {
+            paymentOutboxEventRepository.save(PaymentOutboxEvent.create(
+                    event.orderId(), PaymentTopics.REFUND_REQUESTED, OBJECT_MAPPER.writeValueAsString(event)));
+        } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
+            throw new IllegalStateException(
+                    "Failed to serialize refund request for order " + event.orderId(), exception);
+        }
     }
 }

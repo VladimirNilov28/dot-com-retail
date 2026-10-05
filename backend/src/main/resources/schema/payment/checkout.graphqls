@@ -107,12 +107,16 @@ type CheckoutPreview {
   availableShippingOptions: [CheckoutShippingOption!]!
 }
 
-# Snapshot-only projection: no User, OrderItem.order or live catalog traversal.
+# Immutable checkout facts plus live recovery state; no User or live catalog traversal.
 type CheckoutOrder {
   publicId: UUID!
   requestId: UUID!
   status: OrderStatus!
   cancellationReason: String
+  cancellationEligibility: OrderCancellationEligibility!
+  cancellation: OrderCancellation
+  payment: OrderPayment!
+  refund: OrderRefund!
   lines: [CheckoutLine!]!
   details: CheckoutDetails!
   totals: CheckoutTotals!

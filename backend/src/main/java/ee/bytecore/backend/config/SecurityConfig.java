@@ -106,6 +106,10 @@ public class SecurityConfig {
                 // POST (GraphQL queries/mutations, internal API) regardless
                 // of a valid JWT.
                 .csrf(csrf -> csrf.disable())
+                .headers(headers -> headers.addHeaderWriter((request, response) -> {
+                    if ("/graphql".equals(request.getServletPath()))
+                        response.setHeader("Cache-Control", "private, no-store");
+                }))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .oauth2ResourceServer(
                         oauth2 -> oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)))

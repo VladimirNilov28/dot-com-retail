@@ -399,6 +399,8 @@ class OrderDataFetcherTest {
     @WithMockUser(username = "1")
     void shouldUpdateOrderStatusTest() {
         Long id = order.getId();
+        order.setStatus(OrderStatus.PAID);
+        order.setPaymentStatus("SUCCEEDED");
         when(orderRepository.findByIdForUpdate(id)).thenReturn(Optional.of(order));
         when(orderRepository.save(order)).thenReturn(order);
 
@@ -406,7 +408,7 @@ class OrderDataFetcherTest {
         var mutation =
                 """
             mutation($id: ID!) {
-              updateOrderStatus(orderId: $id, input: { status: PAID }) {
+              updateOrderStatus(orderId: $id, input: { status: SHIPPING }) {
                 status
               }
             }
@@ -418,7 +420,7 @@ class OrderDataFetcherTest {
                 .execute()
                 .path("updateOrderStatus.status")
                 .entity(String.class)
-                .isEqualTo(OrderStatus.PAID.name());
+                .isEqualTo(OrderStatus.SHIPPING.name());
     }
 
     @Test
@@ -427,6 +429,7 @@ class OrderDataFetcherTest {
         Long id = order.getId();
         when(orderRepository.findById(id)).thenReturn(Optional.of(order));
         order.setStatus(OrderStatus.PAID);
+        order.setPaymentStatus("SUCCEEDED");
         when(orderRepository.findByIdForUpdate(id)).thenReturn(Optional.of(order));
         when(orderRepository.save(order)).thenReturn(order);
 

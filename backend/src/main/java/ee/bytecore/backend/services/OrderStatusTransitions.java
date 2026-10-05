@@ -12,7 +12,7 @@ import ee.bytecore.backend.enums.OrderStatus;
  * allowed. Same-status, backwards, and arbitrary-skip transitions are denied
  * by omission (they simply aren't in the target set for a given status).
  * Terminal statuses (COMPLETED, CANCELLED) map to an empty set. Cancellation
- * is only reachable from PENDING/PAID, so SHIPPING (and beyond) can never
+ * is only reachable from PENDING/PAID. SHIPPING begins fulfillment processing, so it (and beyond) can never
  * transition to CANCELLED.
  */
 public final class OrderStatusTransitions {

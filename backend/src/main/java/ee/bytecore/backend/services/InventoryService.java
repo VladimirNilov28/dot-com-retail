@@ -103,6 +103,8 @@ public class InventoryService {
                 .lockById(inventoryId)
                 .orElseThrow(() ->
                         new EntityNotFoundException(String.format("Inventory with id %s not found", inventoryId)));
+        EntityManager em = entityManager.getIfAvailable();
+        if (em != null) em.refresh(inventory);
         inventory.setQuantity(inventory.getQuantity() + quantity);
         inventoryRepository.save(inventory);
     }

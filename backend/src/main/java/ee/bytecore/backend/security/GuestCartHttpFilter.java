@@ -37,7 +37,8 @@ public class GuestCartHttpFilter extends OncePerRequestFilter {
             "checkoutShippingOptions",
             "guestCheckoutPreview",
             "createGuestOrder",
-            "guestOrder");
+            "guestOrder",
+            "cancelGuestOrder");
     private final GuestCartSettings settings;
     private final JsonMapper mapper;
 
@@ -102,7 +103,9 @@ public class GuestCartHttpFilter extends OncePerRequestFilter {
         }
         if (roots.stream()
                 .anyMatch(field -> Set.of("checkoutPreview", "createOrder", "checkoutOrder", "order", "myOrders")
-                        .contains(field))) response.setHeader("Cache-Control", "private, no-store");
+                                .contains(field)
+                        || Set.of("cancelOrder", "cancelOrderAsStaff", "updateOrderStatus")
+                                .contains(field))) response.setHeader("Cache-Control", "private, no-store");
         chain.doFilter(replay, response);
     }
 

@@ -52,7 +52,8 @@ public class OrderMutation {
     public Order updateOrderStatus(@InputArgument String orderId, @InputArgument UpdateOrderStatusInput input) {
         long id = parseId(orderId, "order");
         OrderStatus status = OrderStatus.valueOf(input.getStatus().name());
-        return OrderMapper.toGraphQlType(orderService.updateStatus(id, status));
+        return OrderMapper.toGraphQlType(
+                orderService.updateFulfillmentStatus(id, status, currentUserProvider.getCurrentUserId()));
     }
 
     @DgsSubscription

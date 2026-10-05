@@ -89,7 +89,7 @@ public class OrderQuery {
         Order source = environment.getSource();
         var order = orderService.findById(Long.valueOf(source.getId())).orElseThrow();
         orderService.requireReadable(order, currentUserProvider.getCurrentUserId(), isStaff());
-        return OrderService.confirmation(order);
+        return orderService.confirmation(order);
     }
 
     @DgsData(parentType = "OrderItem", field = "snapshot")
@@ -99,5 +99,35 @@ public class OrderQuery {
         return orderService
                 .getOwnedOrderItem(Long.valueOf(source.getId()), currentUserProvider.getCurrentUserId(), isStaff())
                 .getCheckoutSnapshot();
+    }
+
+    @DgsData(parentType = "Order", field = "cancellationEligibility")
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).ORDER_READ)")
+    public ee.bytecore.backend.services.OrderRecoveryValues.Eligibility cancellationEligibility(
+            DgsDataFetchingEnvironment env) {
+        return recovery(env).cancellationEligibility();
+    }
+
+    @DgsData(parentType = "Order", field = "cancellation")
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).ORDER_READ)")
+    public ee.bytecore.backend.services.OrderRecoveryValues.Cancellation cancellation(DgsDataFetchingEnvironment env) {
+        return recovery(env).cancellation();
+    }
+
+    @DgsData(parentType = "Order", field = "payment")
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).ORDER_READ)")
+    public ee.bytecore.backend.services.OrderRecoveryValues.Payment payment(DgsDataFetchingEnvironment env) {
+        return recovery(env).payment();
+    }
+
+    @DgsData(parentType = "Order", field = "refund")
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).ORDER_READ)")
+    public ee.bytecore.backend.services.OrderRecoveryValues.Refund refund(DgsDataFetchingEnvironment env) {
+        return recovery(env).refund();
+    }
+
+    private ee.bytecore.backend.services.OrderRecoveryValues.Summary recovery(DgsDataFetchingEnvironment env) {
+        Order source = env.getSource();
+        return orderService.recovery(Long.valueOf(source.getId()), currentUserProvider.getCurrentUserId(), isStaff());
     }
 }

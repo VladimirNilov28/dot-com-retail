@@ -56,7 +56,7 @@ public class CheckoutDataFetcher {
                 null, context.credential(), context.orderCredential(), CheckoutMapper.placement(input));
         context.clear();
         context.prepareOrderCredential(settings.getGuestOrderTtl());
-        return OrderService.confirmation(order);
+        return orders.confirmation(order);
     }
 
     @DgsQuery

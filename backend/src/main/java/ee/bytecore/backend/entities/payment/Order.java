@@ -63,6 +63,24 @@ public class Order {
     @Column(name = "cancellation_reason")
     private String cancellationReason;
 
+    @Column(name = "payment_status", nullable = false)
+    private String paymentStatus = "UNKNOWN";
+
+    @Column(name = "payment_id", unique = true)
+    private UUID paymentId;
+
+    @Column(name = "provider_transaction_id")
+    private String providerTransactionId;
+
+    @Column(name = "inventory_released_at")
+    private Instant inventoryReleasedAt;
+
+    @Column(name = "cancelled_at")
+    private Instant cancelledAt;
+
+    @Column(name = "cancellation_source")
+    private String cancellationSource;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private Instant createdAt;

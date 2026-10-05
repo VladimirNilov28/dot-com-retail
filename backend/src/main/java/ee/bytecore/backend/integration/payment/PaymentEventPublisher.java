@@ -1,6 +1,7 @@
 package ee.bytecore.backend.integration.payment;
 
 import ee.bytecore.backend.integration.payment.event.PaymentRequestedEvent;
+import ee.bytecore.backend.integration.payment.event.RefundRequestedEvent;
 
 /**
  * Application-level boundary between the monolith and the future Payment Service.
@@ -10,4 +11,6 @@ import ee.bytecore.backend.integration.payment.event.PaymentRequestedEvent;
 public interface PaymentEventPublisher {
 
     void publishPaymentRequested(PaymentRequestedEvent event);
+
+    void publishRefundRequested(RefundRequestedEvent event);
 }

@@ -13,6 +13,8 @@ import ee.bytecore.backend.entities.payment.PaymentOutboxEvent;
 public interface PaymentOutboxEventRepository extends JpaRepository<PaymentOutboxEvent, UUID> {
     List<PaymentOutboxEvent> findAllByPublishedFalseOrderByCreatedAtAsc();
 
+    List<PaymentOutboxEvent> findAllByOrderIdAndEventType(Long orderId, String eventType);
+
     @Query(
             value =
                     """

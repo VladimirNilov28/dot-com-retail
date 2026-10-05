@@ -113,6 +113,9 @@ class OrderMutationAuthorizationTest {
         user.setId(1L);
         order = Order.create(user, OrderStatus.PENDING, new BigDecimal("10.00"));
         order.setId(1L);
+        User staff = User.create("staff", "staff@example.com", LocalDate.of(1990, 1, 1));
+        staff.setId(2L);
+        when(userRepository.findActiveByIdForUpdate(2L)).thenReturn(Optional.of(staff));
     }
 
     @Test
@@ -130,6 +133,8 @@ class OrderMutationAuthorizationTest {
 
     @Test
     void shouldAllowUpdateOrderStatusForOrderManagerTest() throws Exception {
+        order.setStatus(OrderStatus.PAID);
+        order.setPaymentStatus("SUCCEEDED");
         when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
         when(orderRepository.save(order)).thenReturn(order);
 
@@ -140,9 +145,9 @@ class OrderMutationAuthorizationTest {
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .accept(MediaType.APPLICATION_JSON)
                                 .content(
-                                        "{\"query\":\"mutation { updateOrderStatus(orderId: \\\"1\\\", input: { status: PAID }) { status } }\"}"))
+                                        "{\"query\":\"mutation { updateOrderStatus(orderId: \\\"1\\\", input: { status: SHIPPING }) { status } }\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.updateOrderStatus.status").value("PAID"));
+                .andExpect(jsonPath("$.data.updateOrderStatus.status").value("SHIPPING"));
     }
 
     @Test
@@ -174,6 +179,8 @@ class OrderMutationAuthorizationTest {
 
     @Test
     void shouldAllowUpdateOrderStatusForAdminWithScopeTest() throws Exception {
+        order.setStatus(OrderStatus.PAID);
+        order.setPaymentStatus("SUCCEEDED");
         when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
         when(orderRepository.save(order)).thenReturn(order);
 
@@ -184,9 +191,9 @@ class OrderMutationAuthorizationTest {
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .accept(MediaType.APPLICATION_JSON)
                                 .content(
-                                        "{\"query\":\"mutation { updateOrderStatus(orderId: \\\"1\\\", input: { status: PAID }) { status } }\"}"))
+                                        "{\"query\":\"mutation { updateOrderStatus(orderId: \\\"1\\\", input: { status: SHIPPING }) { status } }\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.updateOrderStatus.status").value("PAID"));
+                .andExpect(jsonPath("$.data.updateOrderStatus.status").value("SHIPPING"));
     }
 
     @Test
