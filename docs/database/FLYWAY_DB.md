@@ -174,6 +174,15 @@ stock once multi-warehouse tracking was introduced.
 One wishlist per user (`UNIQUE` on `user_id` is safe here, unlike carts,
 because a wishlist isn't "consumed" by a purchase).
 
+## PostgreSQL test isolation
+
+PostgreSQL-only full-application tests explicitly disable Kafka listener
+auto-startup and use an unreachable bootstrap address, rather than inheriting
+the development broker/group. Actual messaging integration tests import
+`KafkaTestConfiguration` and use its disposable broker. The manual factory
+honors `spring.kafka.listener.auto-startup` (default `true`); that switch affects
+listeners only, not scheduled outbox producers.
+
 ## Known Open Points
 
 - **Native Postgres enums vs JPA**: `user_role`, `payment_status`, and
