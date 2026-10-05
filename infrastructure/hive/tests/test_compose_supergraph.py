@@ -137,6 +137,19 @@ class ComposeSupergraphTest(unittest.TestCase):
         self.assertEqual((self.root / "retail.graphql").read_text(), "previous retail\n")
         self.assert_no_credentials(result)
 
+    def test_normalizes_versioned_snapshots(self):
+        self.graphql_body = {
+            "data": {"_service": {"sdl": "type Query {\n  example: String  \n}\n"}}
+        }
+        (self.bin / "rover").write_text("#!/bin/sh\nprintf 'composed schema\\n\\n'\n")
+        result = self.run_script("aal2-test-token")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            (self.root / "retail.graphql").read_text(),
+            "type Query {\n  example: String\n}\n",
+        )
+        self.assertEqual((self.root / "supergraph.graphql").read_text(), "composed schema\n")
+
 
 if __name__ == "__main__":
     unittest.main()

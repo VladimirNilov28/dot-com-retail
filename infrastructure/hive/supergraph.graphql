@@ -718,4 +718,3 @@ input UpdateWarehouseInput @join__type(graph: RETAIL) {
   location: String
   name: String
 }
-

@@ -68,13 +68,22 @@ service = data.get("_service") if isinstance(data, dict) else None
 sdl = service.get("sdl") if isinstance(service, dict) else None
 if response.get("errors") or not isinstance(sdl, str) or not sdl.strip():
     raise SystemExit("Subgraph SDL request failed; check authentication and access scopes.")
-Path("retail.graphql").write_text(sdl.rstrip() + "\n")
+Path("retail.graphql").write_text(
+    "\n".join(line.rstrip() for line in sdl.splitlines()).rstrip() + "\n"
+)
 PY
 
 echo "==> Composing local supergraph with Rover (Federation v2, no Hive Cloud / registry involved)"
 TEMP_SUPERGRAPH=$(mktemp "./.supergraph.XXXXXX")
 trap 'rm -f "$TEMP_SUPERGRAPH"' EXIT
 rover supergraph compose --config ./supergraph-config.yaml --elv2-license accept > "$TEMP_SUPERGRAPH"
+python3 - "$TEMP_SUPERGRAPH" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+path.write_text("\n".join(line.rstrip() for line in path.read_text().splitlines()).rstrip() + "\n")
+PY
 mv "$TEMP_SUPERGRAPH" supergraph.graphql
 
 echo "==> Wrote $(pwd)/supergraph.graphql"
