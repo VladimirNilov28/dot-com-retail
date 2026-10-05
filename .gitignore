@@ -139,14 +139,6 @@ spring.log
 docker-data/
 
 # =====================================================
-# Hive Router (generated, reproducible — see
-# infrastructure/hive/scripts/compose-supergraph.sh)
-# =====================================================
-
-infrastructure/hive/retail.graphql
-infrastructure/hive/supergraph.graphql
-
-# =====================================================
 # Kubernetes
 # =====================================================
 
@@ -224,4 +216,3 @@ infrastructure/volumes/*
 infrastructure/jenkins/venv/
 __pycache__/
 *.pyc
-

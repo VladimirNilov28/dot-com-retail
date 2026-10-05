@@ -102,6 +102,11 @@ account or registry is used. Regenerate it after a schema change:
 docker compose -f infrastructure/compose.yml --env-file .env restart hive-router
 ```
 
+Both `retail.graphql` and `supergraph.graphql` are versioned snapshots. Include
+their regenerated changes with schema changes. Check their application root
+fields against the source SDL with
+`python3 -m unittest discover -s infrastructure/hive/tests -v`.
+
 For a TOTP-enrolled account, complete the AAL2 flow in the TOTP runbook first,
 then supply its access token privately through the environment, not an argument:
 
