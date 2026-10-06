@@ -1,8 +1,32 @@
 # ByteCore storefront design handoff
 
+> ## ⚠ Correction in force — read §9 before any catalog, search or home work
+>
+> On **2026-10-06** the owner **rejected the catalog composition** shipped at
+> `5ffceb0`/`1d9477c`: category navigation reduced to a row of filter-like
+> buttons, unrelated products shown together as the default browsing entry,
+> oversized image placeholders, a long narrow category dropdown, and a Search
+> control that only navigates instead of offering an input.
+>
+> **[§9 Navigation and discovery requirements](#9-navigation-and-discovery-requirements)**
+> records what replaces it. §9 overrides any earlier statement in this document,
+> in the baseline screenshots and in the tickets. The rest of the design —
+> tokens, surfaces, overlay semantics, honesty rules, the HeroUI v3 dark theme,
+> Lucide and the no-photo-assets placeholder policy — is unchanged and still
+> applies.
+>
+> The screenshots in [`baseline/`](baseline/) still show the **rejected**
+> composition. They are retained as before-evidence and are **not** a standard to
+> match — see the manifest's status column.
+
 The owner approved the storefront appearance at commit `aef4673` (`dev`). This
 document records **why** it looks the way it does so later work extends it
 instead of re-deciding it.
+
+That approval covers the **shell conventions** listed in §1 — the compact single
+row, the wordmark as home link, a single accent catalog entry, restrained
+surfaces and honest unavailable copy. It does **not** cover the catalog pages or
+the category panel's contents, which were built later and are corrected by §9.
 
 Read this before any storefront UI change, together with the baseline
 screenshots in [`baseline/`](baseline/) ([manifest](baseline/README.md)).
@@ -368,38 +392,41 @@ no thumbnails or prices.*
 - **Convention:** results sit directly on the background, separated by borders
   and spacing. A filled card per product will look heavy in this theme.
 - Keep one consistent image area ratio across every card so rows align. The
-  current product-image policy is a shared **"404 / Image unavailable"
+  current product-image policy is a shared **"image unavailable"
   placeholder**; real photos arrive later via admin upload and are stored outside
-  Git. Design for the placeholder as a normal state, not an error.
+  Git. Design for the placeholder as a normal state, not an error — and keep it
+  **subordinate to the name and price** (§9.5).
 - Price is the most prominent element after the product name. Availability is a
   short honest phrase, never a fabricated number.
-- *Example:* a responsive grid with filters in a desktop sidebar and a mobile
-  drawer; a grid/list toggle in a result toolbar beside the result count. The
-  mobile filter drawer should reuse the existing `Drawer` behavior.
+- **Required, not an example:** a desktop left sidebar carrying category
+  navigation and real filters, with a mobile drawer, and one shared results
+  implementation behind both category browsing and search. See §9.3–§9.4.
 - Skeletons must match the real layout's dimensions so nothing reflows.
 
-**#63 composition decision (model-reviewed, not owner-approved):** retain the
-80rem PageContainer and compact one-row shell. Breadcrumbs and a modest heading
-lead into wrapping current-branch category links, one restrained result/view
-toolbar, then a four/three/two/one-column responsive grid or compact list.
-Products sit directly on the background with separators; only the 4:3 placeholder
-uses a quiet surface. Name areas flex to align prices without truncating long names.
-Control/navigation icons retain the shared 20px size. The placeholder's muted
-ImageOff is deliberately 24px as a media illustration rather than an action icon,
-remaining readable within the compact list thumbnail.
-The existing Catalog trigger remains the primary accent; selected view controls
-are quiet and expose pressed semantics, not colour alone.
+**#63 composition decision (superseded 2026-10-06 — see §9):** the composition
+described below was implemented, model-reviewed and then **rejected by the
+owner**. It is kept only so the reasoning behind the parts that survive is not
+re-derived. **Where it conflicts with §9, §9 wins.**
 
-This deliberately omits a permanent category/facet rail, duplicated top navigation
-and filled results panel: current direct-membership browsing does not justify them,
-and facets/search belong to #64. Parent pages explain their scope and link children;
+*Superseded by §9:* the wrapping row of current-branch category links as the
+only category navigation; `/catalog` as a flat all-products grid; the 4:3
+placeholder as the card's dominant element; the absence of a sidebar and of
+filters.
+
+*Still in force:* retain the 80rem PageContainer and the compact shell.
+Breadcrumbs and a modest heading lead the page. Products sit directly on the
+background with separators; only the media placeholder uses a quiet surface.
+Name areas flex to align prices without truncating long names. Control and
+navigation icons retain the shared 20px size. The existing Catalog trigger
+remains the primary accent; selected view controls are quiet and expose pressed
+semantics, not colour alone. Parent pages explain their scope and link children;
 they never imply descendant aggregation. The same fetched flat taxonomy supplies
-breadcrumbs, in-page links and genuine shell root/child links.
+breadcrumbs, in-page navigation and the shell's root/child links.
 
 Prices use exact minimum active-variant EUR values (“From” only for differing
 eligible prices; none means “Price unavailable”). Stock remains “Availability
-unknown”; `isActive` is not stock. Actual media/public stock stay deferred.
-Loading retains route context with matching grid/list skeletons; errors have an
+unknown”; `isActive` is not stock. Actual media stays deferred.
+Loading retains route context with layout-matching skeletons; errors have an
 explicit retry, empty parents direct shoppers to children, and missing slugs have
 the dark category-specific HTTP 404. See `frontend/README.md` for freshness,
 scale and route rules, and the manifest for fixture-backed visual evidence.
@@ -512,6 +539,9 @@ policy pages to link.*
   discounts ahead of real data.
 - Categories are the most useful first row once #63 lands — they are navigation
   the customer actually needs, not merchandising filler.
+- **Required:** meaningful category entry points plus real, accurately labelled
+  product discovery sections. The vocabulary of permitted and forbidden section
+  labels is in §9.2 — a section may only claim what a real query computed.
 
 ### Things that are explicitly not rules
 
@@ -533,17 +563,17 @@ Recorded so they aren't mistaken for bugs or silently "fixed":
   treatment — deliberately, as part of that ticket.
 - **The holding home page leaves large empty space** below the fold at desktop
   heights. Expected; #86 replaces it.
-- **Popover content is intentionally sparse.** Both popovers state what is not
-  available instead of listing invented destinations. Replace the copy when the
-  feature is real — don't pad it. When #63 brings real categories, the Catalog
-  panel will likely need a grouped, wider layout
-  (`arvutitark_products_catalog_dropdown` and `iDeal_top_nav_bar_1`–`_5` in
-  [`docs/references/`](../references/) show two versions of it). **Growing the
-  panel is a layout change and does not by itself change its semantics** — a
-  wider surface, or one with a dimmed backdrop, can still be nonmodal. Keep it
-  nonmodal unless you decide it should contain focus and block background
-  interaction; if you do decide that, make it an explicit choice in that ticket
-  and verify the focus and dismissal behavior that follows.
+- **Popover content was intentionally sparse while there was nothing real to
+  list.** That is no longer the case: real categories exist, and the single
+  narrow column the panel grew into was **rejected by the owner**. §9.1 replaces
+  it with grouped navigation. **Growing the panel is a layout change and does not
+  by itself change its semantics** — a wider surface, or one with a dimmed
+  backdrop, can still be nonmodal. Keep it nonmodal unless you decide it should
+  contain focus and block background interaction; if you do decide that, make it
+  an explicit choice in that ticket and verify the focus and dismissal behavior
+  that follows.
+- **The compact "Search" link was honest while search did not exist.** It is no
+  longer acceptable as a final state — §9.6 requires a real input in the header.
 
 ---
 
@@ -596,8 +626,12 @@ Two distinct states, both recorded in the manifest:
 
 **Passing lint, typecheck, the build or the smoke script does not establish
 owner approval. Neither does taking a screenshot.** Only the owner's explicit
-approval promotes a capture to baseline. The current `issue-61-*` set is
-owner-approved.
+approval promotes a capture to baseline. **No capture in `baseline/` is
+owner-approved today**: the original `issue-61-*` set was approved at `aef4673`,
+but every file was replaced when the shell and catalog changed, and approval is
+not inherited by a replacement. A third status now also applies —
+**Owner-rejected composition** — for captures whose layout the owner has
+explicitly turned down. See the manifest.
 
 ### Recapture — convention
 
@@ -623,6 +657,237 @@ touches every image in the set.
 
 Keep the set small and representative. Add an image only for a genuinely new
 state worth preserving.
+
+---
+
+## 9. Navigation and discovery requirements
+
+**Status:** owner correction, 2026-10-06. These are **Conventions** — binding
+unless the ticket records an explained departure. They deliberately constrain
+*what must be navigable and honest*, not pixel geometry: column counts, exact
+widths, ordering and visual rhythm remain yours to choose.
+
+Owning tickets: **#61** (shell navigation and the search slot), **#63**
+(catalog root, category pages, shared results), **#64** (search input behavior,
+facets, suggestions), **#86** (home). §9.8 gives the sequence.
+
+### 9.0 What the backend can actually support
+
+Design only against this. Everything else is forbidden as fabrication.
+
+| Capability | Real API | Honest label |
+|---|---|---|
+| Taxonomy | `categories` — flat list, `parent` only, **no** `children`, description or image | Category names only. Build the tree client-side. |
+| Category filter | `filters.categoryId` — **direct membership only**, never expanded to descendants | A parent page shows only its own direct products and must say so |
+| Price filter | `filters.minPrice` / `maxPrice` (variant-level) | "Price" |
+| Attribute filter | `filters.attributes[{name,value}]` — repeated names **overwrite**, so one value per attribute | The real attribute name |
+| Sorting | `RELEVANCE` (meaningless without a query), `PRICE_ASC`, `PRICE_DESC`, `RATING_DESC` | "Relevance", "Price: low to high", "Price: high to low", "Highest rated" |
+| Facet counts | `facets.categories[{id,name,count}]`, `facets.attributes`, `facets.price` | Counts are over the **already-filtered** population with **no self-exclusion**, and are direct-membership. `facets.price.max` is skewed (open #38 item) — don't present it as an exact bound |
+| Ratings | `Product.averageRating` (nullable), `ratingCount` | Show the real value and count, or nothing |
+| Suggestions | `productSearchSuggestions(query, limit)` → `productId/name/slug` | Product names only — **no** price, image or category comes back |
+
+**Not available, therefore never shown:** stock or availability counts
+(`inStock` exists as a filter but public stock does not — do **not** offer an
+"In stock" facet while cards read "Availability unknown"); a featured/promoted
+flag; popularity, view or sales counts; discounts, campaigns or previous prices;
+personalization or recommendations; a newest-first sort (`createdAt` exists on
+`Product` but there is no `ProductSort` value for it); brand (until #97);
+category descriptions, icons or imagery.
+
+### 9.1 Category navigation panel — replaces the narrow dropdown
+
+The header Catalog panel must present the taxonomy as **informative grouped
+navigation**, not a single narrow column of every category.
+
+- **Grouped.** Each top-level category is a group: its name is a heading **and a
+  link to its own page**; its children are links beneath it. Roots without
+  children still appear as a linked heading.
+- **Wide.** The panel spans a useful fraction of the page — multi-column,
+  bounded by `--page-max-width` and the real viewport, never wider than
+  `calc(100vw - 2rem)`. Columns reflow responsively; a group is never split
+  across columns in a way that separates a heading from its children.
+- **Leave empty space empty.** No promo tiles, no filler, no rebalanced columns
+  when a group is short. (`iDeal_top_nav_bar_1`–`_5` show one template holding
+  steady from one link to fourteen.)
+- **"All products" appears once**, as an explicit entry in the panel — not as the
+  panel's purpose.
+- **Interaction:** click, keyboard and touch must all open, operate and dismiss
+  the panel. Desktop pointer hover **may** open it as an enhancement only when
+  guarded by `@media (hover: hover) and (pointer: fine)`, with a short open
+  intent delay and a close delay so a diagonal cursor path does not dismiss it.
+  Hover-opening must not move focus. Nothing may be reachable by hover alone.
+- **Semantics:** keep it **nonmodal** (§4) unless the ticket explicitly decides
+  and verifies otherwise.
+- **Mobile** uses the existing modal `Drawer` with the same grouping — groups as
+  sections or as accessible disclosures, not a flat list.
+- **No counts** in the panel unless they come from `facets.categories`, in which
+  case they must be labelled as direct-membership counts.
+
+### 9.2 Home — category entry points and real discovery
+
+#86 replaces the holding page with:
+
+1. **Category entry points.** The real top-level categories as the first
+   meaningful region, each linking to its category page; children may appear as
+   quiet secondary links. Names only — the API has no category description or
+   image, so **do not invent one** and do not substitute a product placeholder
+   for a category "tile".
+2. **Product discovery sections**, each backed by one real `searchProducts` call
+   and **labelled with exactly what that call computed**, reusing `ProductCard`.
+
+**Permitted section labels** (examples, choose your own wording as long as it is
+literally true):
+
+- "Laptops — lowest price first" (`filters.categoryId`, `sort: PRICE_ASC`)
+- "Highest-priced workstations" (`sort: PRICE_DESC`)
+- "Highest rated" (`sort: RATING_DESC`) — render **only** if at least one
+  returned product has a non-null `averageRating`, and show that rating and its
+  `ratingCount`. Otherwise omit the section entirely; do not fall back silently
+  to another ordering under a rating heading.
+
+**Forbidden section labels:** *Featured*, *Popular*, *Trending*, *Best sellers*,
+*New arrivals*, *Recommended for you*, *Deals*, *Our picks*, *Staff favourites*
+— none of these corresponds to anything the backend computes.
+
+State each section's selection rule in visible copy or an adjacent note (#86
+already requires a documented selection source). Keep the sections few; with a
+small catalogue the quieter answer is the right one. Remove the temporary
+"Available now" list as the features it names become real.
+
+### 9.3 Catalog root — discovery before a product grid
+
+`/catalog` is a **category and subcategory discovery page**. A flat grid of
+unrelated products is not the default shopping entry.
+
+- Lead with the taxonomy: top-level groups, each heading linking to its category,
+  children listed beneath. This reuses the taxonomy already fetched — no new
+  query.
+- **"All products" stays available as an explicit, visibly secondary option**,
+  labelled plainly, going to the shared results surface with no category filter.
+- Keep the breadcrumb, the heading and the honest copy about direct membership.
+
+### 9.4 Category and results pages — sidebar, filters, one implementation
+
+**Desktop (≥48rem, or a wider breakpoint if you justify it):** two regions.
+
+- A **left sidebar** carrying (a) category navigation *in context* — an "All
+  products" entry, ancestors, the current category marked `aria-current`, and its
+  children or siblings — and (b) the **real filters** from §9.0, with selected
+  values reflected as removable chips and a "Clear all".
+- A **compact product area** to its right. With the sidebar present, prefer
+  three columns at desktop rather than squeezing four.
+
+**Mobile (<48rem):** the same category navigation and filters in an **accessible
+modal drawer**, reusing the existing `Drawer` behavior (focus containment,
+`inert` background, Escape and backdrop dismissal, focus restoration). Its
+trigger states how many filters are active. Do not simply stack the desktop
+sidebar above the results.
+
+**One results implementation.** Category browsing and search render the **same**
+results components — toolbar, result count, grid/list toggle, cards, pagination,
+skeletons, and the empty/error/invalid-URL states — and read the **same
+URL-backed state**: query, filters, sort, view and page. A dedicated search URL
+is fine; a second, differently-behaving shopping interface is not.
+
+- Page resets to 1 when the query or any filter changes; pagination and view
+  changes do not reset the others.
+- Back/forward restores every part of the state.
+- Pagination clicks are immediate — never debounced.
+- Default sort when there is no query stays an explicit deterministic choice
+  (today: price, low to high) and is stated in the toolbar.
+
+**Recommended routes** (an implementer may choose otherwise, but must then
+document it and must still have exactly one results implementation):
+
+| Route | Renders |
+|---|---|
+| `/catalog` | Category discovery (§9.3) |
+| `/catalog/<slug>` | Category results — sidebar + results |
+| `/search?q=…` | Search results — the same sidebar + results |
+| `/search` with no `q` | The same surface as **"All products"** |
+
+### 9.5 Reduce placeholder dominance
+
+The no-photo-assets policy and the code-rendered placeholder **stay**. What
+changes is how much of the page they occupy.
+
+- The media area must **not be the dominant element of a card**. Keep one
+  consistent ratio across cards, but cap it — a shorter ratio and/or a
+  `max-height` — so the name and price carry the card. A quick check: at the
+  desktop grid width, the placeholder should not be taller than the card's text
+  block.
+- Drop the large `404` numeral from product cards. "404" reads as a page error
+  next to a product that loaded correctly. A single quiet line — or the muted
+  `ImageOff` glyph alone with an accessible name on the `role="img"` wrapper — is
+  enough.
+- Keep the placeholder on `--surface` and quiet; it must never compete with the
+  price.
+- Do **not** compensate by inventing content to fill the card. There are no
+  specs, brands or ratings on a card until #97/#79 supply them.
+- The real-media switch (#96) must be able to drop into the same box without
+  relayout.
+
+### 9.6 A real search input in the header
+
+The compact "Search" link that only navigates is replaced by an actual input in
+the existing `quickSearch` slot (§4) — one mounted, responsive control, not a
+parallel one.
+
+- A labelled `role="search"` form with a visible text input and a submit
+  control, sharing `--control-height`. It must work **without JavaScript** by
+  submitting to the shared results route.
+- Desktop: inline in `.store-search-slot`. Mobile: a labelled trigger opening an
+  accessible dialog containing the same form, or an inline field where it fits.
+  Never hover-only.
+- DOM order stays catalog → search → actions → mobile (§4).
+- The ~65px header height is not an acceptance test; the header may legitimately
+  grow (§4).
+
+**Ownership split.** #61's correction owns the input's presence, labelling,
+layout, responsive presentation and plain form submission — it may only ship once
+the shared results route exists, so it is never a dead control. **#64 owns
+debounced suggestions (250–350 ms, a documented minimum query length, stale
+response cancellation), keyboard selection within the suggestion list, the
+enhanced submit path, an explicit "see all results" action, and the suggestion
+loading/empty/error states.** If the owner prefers the whole input to land in
+#64, move the first half — the only hard rule is that a non-functional field
+must never ship.
+
+Suggestions carry `name` and `slug` only. Build the row from those fields;
+do not add prices, images or thumbnails that the API does not return. Matching
+*categories* may be added from the already-fetched taxonomy in a separately
+labelled section (`arvutitark_search_on_main_page` shows that shape) — that is
+local filtering of real data, not a fabricated result.
+
+### 9.7 What this correction does not change
+
+Tokens (§2), surfaces and accent (§3), overlay semantics (§4), component reuse
+(§5), the honesty rules throughout, the HeroUI v3 fixed dark theme, Lucide, the
+80rem container as a starting point, and the screenshot lifecycle (§8).
+
+The references in [`docs/references/`](../references/) remain **alternatives,
+not requirements**. §9 asks for grouped navigation, a sidebar and a real search
+input because ByteCore's own content and the owner's feedback call for them —
+not because arvutitark, iDeal or 1a have them. Do not copy their branding,
+colour, copy or layout, and do not adopt a capability they have and we do not.
+
+### 9.8 Implementation sequence
+
+Small and sequential; each step is independently reviewable.
+
+| # | Step | Ticket | Depends on |
+|---|---|---|---|
+| 1 | Grouped category navigation panel + mobile drawer grouping (§9.1) | #61 | — (taxonomy already fetched) |
+| 2 | `/catalog` becomes category discovery with an explicit "All products" (§9.3) | #63 | 1 for consistent grouping |
+| 3 | Shared results implementation: sidebar, mobile drawer, URL-backed state, compact product area and reduced placeholder (§9.4, §9.5) | #63 | 2 |
+| 4 | Real header search input and plain submission (§9.6) | #61 → #64 | 3 (results route must exist) |
+| 5 | Query results and real facets in the shared sidebar/drawer (§9.0, §9.4) | #64 | 3, 4 |
+| 6 | Debounced suggestions with keyboard selection (§9.6) | #64 | 5 |
+| 7 | Home category entry points and labelled discovery sections (§9.2) | #86 | 3 (shared card), 1 |
+
+Each step recaptures the screenshots it invalidates and updates the manifest in
+the same commit (§8). The manifest's *Planned invalidation* table already records
+which existing captures each step supersedes.
 
 ---
 

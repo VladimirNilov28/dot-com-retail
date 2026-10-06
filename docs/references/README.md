@@ -37,8 +37,9 @@ The approved design itself is described in
 - **Take patterns, not branding.** Never copy colours, wordmarks, imagery or
   copy. The product photography in these captures is other companies' content
   and is **not** a source of runtime assets — ByteCore's product-image policy
-  remains the shared "404 / Image unavailable" placeholder until admin upload
-  exists (#96).
+  remains the shared code-rendered "image unavailable" placeholder until admin
+  upload exists (#96), and `DESIGN.md` §9.5 requires that placeholder to stay
+  subordinate to the product name and price.
 - **They offer alternatives, not requirements.** Nothing here mandates a
   sidebar, a mega-menu, a particular column count, a facet rail or any feature
   beyond what the ticket asks for. Where two references disagree, both are
@@ -140,7 +141,20 @@ light treatment, and at both low and high density.
 ## How these informed the current design
 
 Recorded so the reasoning is not re-derived. The full version is in
-[`DESIGN.md`](../frontend/DESIGN.md) §1.
+[`DESIGN.md`](../frontend/DESIGN.md) §1, and the owner's 2026-10-06 navigation
+correction is in **§9**.
+
+> **After the 2026-10-06 correction.** The owner rejected the catalog
+> composition and asked for grouped category navigation, category discovery
+> ahead of a flat product grid, a results sidebar with real filters and a real
+> header search input. `arvutitark_products_catalog_dropdown`,
+> `iDeal_top_nav_bar_1`–`_5`, `1a_catalog`, `iDeal_product_list`,
+> `1a_product_list`, `iDeal_main_page_2` and `arvutitark_search_on_main_page`
+> are the most useful captures for those jobs. They remain **alternatives, not
+> requirements**: the requirements come from `DESIGN.md` §9 and ByteCore's real
+> data, not from the fact that these stores do it. Do not adopt a capability
+> these sites have and ByteCore does not — no promotions, financing, loyalty,
+> stock counts, popularity ordering or product photography.
 
 - A **compact search affordance is legitimate** — iDeal ships no header search
   field at all, only an icon. That supported ByteCore's labelled Search action
