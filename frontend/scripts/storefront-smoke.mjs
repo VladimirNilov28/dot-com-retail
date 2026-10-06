@@ -12,12 +12,16 @@ const baseURL = process.env.FRONTEND_URL ?? "http://127.0.0.1:3100";
 const artifacts = process.env.BROWSER_ARTIFACTS;
 if (artifacts) await mkdir(artifacts, { recursive: true });
 const routes = [
-  { path: "/", label: "Home", heading: "A small start. A consistent foundation." },
+  { path: "/", label: "Home", heading: "Electronics, clearly connected." },
   { path: "/catalog", label: "Catalog", heading: "Catalog" },
   { path: "/search", label: "Search", heading: "Search" },
   { path: "/account", label: "Account", heading: "Account" },
   { path: "/cart", label: "Cart", heading: "Cart" },
 ];
+// Desktop entries that open a nonmodal popover instead of linking directly.
+const popovers = { Catalog: "Category navigation", Account: "Account navigation" };
+// Shell slots that exist only at the desktop breakpoint.
+const DESKTOP_ONLY = ".store-catalog-slot, .store-actions";
 const errors = [];
 const results = [];
 const browser = await chromium.launch();
@@ -109,9 +113,29 @@ async function inspect(page, route, mobile) {
     }
   }
   for (const label of ["Search", "Cart"]) {
-    const link = page.locator(label === "Search" ? ".store-search-slot" : ".store-desktop-nav")
+    const link = page.locator(label === "Search" ? ".store-search-slot" : ".store-actions")
       .getByRole("link", { name: label, exact: true, includeHidden: true });
     assert.equal(await link.locator(".store-icon").count(), 1);
+  }
+  // The header is a single row: the brand and every control share one baseline.
+  // Below 16rem the deliberate stacking fallback takes over, so skip it there.
+  const row = await page.getByRole("banner").evaluate((banner) => {
+    const header = banner.querySelector(".store-header");
+    const controls = [...header.querySelectorAll(".store-brand, .store-catalog-trigger, .store-search-slot > a, .store-panel-trigger, .store-actions > a, .store-mobile-trigger")]
+      .map((element) => element.getBoundingClientRect())
+      .filter((rect) => rect.width > 0 && rect.height > 0);
+    const centers = controls.map((rect) => rect.y + rect.height / 2);
+    return {
+      stacked: window.innerWidth < 256,
+      height: header.getBoundingClientRect().height,
+      controls: controls.length,
+      spread: Math.max(...centers) - Math.min(...centers),
+    };
+  });
+  assert.ok(row.controls >= 3, `Header renders its controls (${row.controls})`);
+  if (!row.stacked) {
+    assert.ok(row.spread < 1, `Header controls share one row (spread ${row.spread}px)`);
+    assert.ok(row.height < 90, `Header stays compact (${row.height}px)`);
   }
   return metrics;
 }
@@ -137,15 +161,24 @@ async function assertFocus(locator) {
 }
 
 async function assertActive(page, route) {
+  // The wordmark is the home link, so Home is not duplicated in the navigation.
+  const brand = page.getByRole("banner").locator(".store-brand");
+  assert.equal(await brand.getAttribute("aria-current"), route.path === "/" ? "page" : null,
+    "The wordmark marks the home route");
   const drawer = page.getByRole("dialog", { name: "ByteCore navigation" });
   const navigation = await drawer.count()
     ? drawer.getByRole("navigation", { name: "Primary", exact: true })
     : page.locator(".store-navigation");
   assert.equal(await navigation.count(), 1);
   const active = navigation.locator('[aria-current="page"]');
+  if (route.path === "/") {
+    assert.equal(await active.count(), 0, "Primary navigation does not repeat the home link");
+    return;
+  }
   assert.equal(await active.count(), 1);
-  if (route.path === "/account" && await active.evaluate((element) => element.tagName === "BUTTON")) {
+  if (await active.evaluate((element) => element.tagName === "BUTTON")) {
     assert.equal(await active.getAttribute("aria-haspopup"), "dialog");
+    assert.ok(popovers[route.label], `${route.label} is a known popover entry`);
   } else {
     assert.equal(await active.getAttribute("href"), route.path);
   }
@@ -164,9 +197,9 @@ async function checkMobile(page, route) {
   assert.equal(await page.locator("main").evaluate((element) => element.closest('[inert], [aria-hidden="true"]') !== null), true,
     "Modal hides background content from assistive technology");
   await assertActive(page, route);
-  const home = dialog.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Home", exact: true });
-  await home.focus();
-  await assertFocus(home);
+  const first = dialog.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Catalog", exact: true });
+  await first.focus();
+  await assertFocus(first);
   for (let i = 0; i < 9; i++) {
     await page.keyboard.press("Tab");
     assert.equal(await dialog.evaluate((element) => element.contains(document.activeElement)), true, "Focus stays in drawer");
@@ -185,11 +218,24 @@ async function checkMobile(page, route) {
   assert.equal(await menu.getAttribute("aria-expanded"), "false");
   await assertFocused(menu);
   await menu.press("Enter");
-  const current = dialog.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: route.label, exact: true });
-  await current.click();
-  await dialog.waitFor({ state: "hidden" });
-  assert.equal(await menu.getAttribute("aria-expanded"), "false", "Same-route navigation closes the menu");
-  await assertFocused(menu);
+  const panel = dialog.getByRole("navigation", { name: "Primary" });
+  if (route.path === "/") {
+    // Home has no drawer entry; verify a destination link closes the drawer and
+    // that the wordmark is the way back home.
+    await panel.getByRole("link", { name: "Catalog", exact: true }).click();
+    await dialog.waitFor({ state: "hidden" });
+    assert.equal(await menu.getAttribute("aria-expanded"), "false", "Navigation closes the menu");
+    await page.waitForURL(`${baseURL}/catalog`);
+    await page.locator(".store-brand").click();
+    await page.waitForURL(`${baseURL}/`);
+    await page.getByRole("heading", { level: 1, name: route.heading, exact: true }).waitFor();
+  } else {
+    const current = panel.getByRole("link", { name: route.label, exact: true });
+    await current.click();
+    await dialog.waitFor({ state: "hidden" });
+    assert.equal(await menu.getAttribute("aria-expanded"), "false", "Same-route navigation closes the menu");
+    await assertFocused(menu);
+  }
   await menu.press("Enter");
   await dialog.waitFor();
   const backdrop = page.locator(".store-drawer-backdrop");
@@ -201,11 +247,22 @@ async function checkMobile(page, route) {
   await inspect(page, route, true);
 }
 
+async function dismissOutside(page) {
+  const point = await page.evaluate(() => {
+    const main = document.querySelector("main").getBoundingClientRect();
+    const popover = document.querySelector(".store-popover")?.getBoundingClientRect();
+    const x = Math.min(innerWidth - 5, Math.max(5, main.right - 5));
+    let y = Math.max(main.top + 5, Math.min(innerHeight - 5, main.bottom - 5));
+    if (popover && x >= popover.left && x <= popover.right && y >= popover.top && y <= popover.bottom) {
+      y = Math.min(innerHeight - 5, popover.bottom + 20);
+    }
+    return { x, y };
+  });
+  await page.mouse.click(point.x, point.y);
+}
+
 async function checkDesktopPopovers(page) {
-  for (const [buttonName, dialogName, linkName] of [
-    ["Categories", "Category navigation", "Catalog"],
-    ["Account", "Account navigation", "Account"],
-  ]) {
+  for (const [buttonName, dialogName] of Object.entries(popovers)) {
     const button = page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: buttonName, exact: true });
     await button.focus();
     await button.press("Enter");
@@ -213,7 +270,7 @@ async function checkDesktopPopovers(page) {
     await dialog.waitFor();
     assert.notEqual(await dialog.getAttribute("aria-modal"), "true");
     assert.equal(await page.getByRole("main").count(), 1, "Nonmodal popover leaves background exposed");
-    const link = dialog.getByRole("link", { name: linkName, exact: true });
+    const link = dialog.getByRole("link", { name: buttonName, exact: true });
     await link.focus();
     await assertFocus(link);
     await page.keyboard.press("Escape");
@@ -221,7 +278,7 @@ async function checkDesktopPopovers(page) {
     await assertFocus(button);
     await button.press("Space");
     await dialog.waitFor();
-    await page.locator("h1").click();
+    await dismissOutside(page);
     await dialog.waitFor({ state: "hidden" });
   }
   const account = page.getByRole("button", { name: "Account", exact: true });
@@ -232,17 +289,24 @@ async function checkDesktopPopovers(page) {
   await dialog.waitFor({ state: "hidden" });
   await assertFocused(page.locator(".store-mobile-trigger"));
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.waitForFunction(() => document.activeElement?.closest(".store-desktop-nav") !== null);
+  await page.waitForFunction((selector) => document.activeElement?.closest(selector) !== null, DESKTOP_ONLY);
 }
 
 async function verifyNavigation(page, mobile) {
   for (const route of routes) {
-    if (mobile) await page.getByRole("button", { name: "Menu", exact: true }).click();
-    if (!mobile && route.label === "Account") {
-      await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Account", exact: true }).click();
-      await page.getByRole("dialog", { name: "Account navigation" }).getByRole("link", { name: "Account", exact: true }).click();
+    if (route.path === "/") {
+      await page.locator(".store-brand").click();
+    } else if (mobile) {
+      await page.getByRole("button", { name: "Menu", exact: true }).click();
+      await page.locator(".store-mobile-panel")
+        .getByRole("link", { name: route.label, exact: true }).click();
+    } else if (popovers[route.label]) {
+      await page.locator(".store-navigation")
+        .getByRole("button", { name: route.label, exact: true }).click();
+      await page.getByRole("dialog", { name: popovers[route.label] })
+        .getByRole("link", { name: route.label, exact: true }).click();
     } else {
-      await page.locator(mobile ? ".store-mobile-panel" : ".store-navigation")
+      await page.locator(".store-navigation")
         .getByRole("link", { name: route.label, exact: true }).click();
     }
     await page.waitForURL(`${baseURL}${route.path}`);
@@ -324,11 +388,20 @@ try {
       await page.keyboard.press("Enter");
       assert.equal(await page.evaluate(() => document.activeElement.id), "main-content");
       await page.locator(".store-brand").focus();
+      // Tab order follows the visual left-to-right order of the single header row.
       await page.keyboard.press("Tab");
-      await assertFocus(page.locator(".store-search-slot").getByRole("link", { name: "Search", exact: true }));
-      if (mobile) {
+      if (!mobile) {
+        await assertFocus(page.locator(".store-catalog-slot").getByRole("button", { name: "Catalog", exact: true }));
         await page.keyboard.press("Tab");
+      }
+      await assertFocus(page.locator(".store-search-slot").getByRole("link", { name: "Search", exact: true }));
+      await page.keyboard.press("Tab");
+      if (mobile) {
         await assertFocus(page.getByRole("button", { name: "Menu", exact: true }));
+      } else {
+        await assertFocus(page.locator(".store-actions").getByRole("button", { name: "Account", exact: true }));
+        await page.keyboard.press("Tab");
+        await assertFocus(page.locator(".store-actions").getByRole("link", { name: "Cart", exact: true }));
       }
       if (!mobile) await checkDesktopPopovers(page);
       if (mobile) {
@@ -336,9 +409,9 @@ try {
         await page.getByRole("dialog", { name: "ByteCore navigation" }).getByRole("button", { name: "Close navigation" }).tap();
         await assertFocused(page.locator(".store-mobile-trigger"));
       } else {
-        await page.getByRole("button", { name: "Categories", exact: true }).tap();
+        await page.getByRole("button", { name: "Catalog", exact: true }).tap();
         await page.getByRole("dialog", { name: "Category navigation" }).waitFor();
-        await page.locator("h1").tap();
+        await dismissOutside(page);
         await page.getByRole("dialog", { name: "Category navigation" }).waitFor({ state: "hidden" });
       }
       await verifyNavigation(page, mobile);
@@ -348,7 +421,7 @@ try {
         await page.locator(".store-mobile-panel").getByRole("link", { name: "Catalog", exact: true }).focus();
         if (artifacts) await page.screenshot({ path: join(artifacts, `${width}-${colorScheme}-menu.png`), fullPage: true });
         await page.setViewportSize({ width: 1440, height: 1000 });
-        await page.waitForFunction(() => document.activeElement?.closest(".store-desktop-nav") !== null);
+        await page.waitForFunction((selector) => document.activeElement?.closest(selector) !== null, DESKTOP_ONLY);
         await page.setViewportSize({ width, height: 1000 });
         await page.waitForFunction(() => document.activeElement?.textContent === "Menu");
         assert.equal(await menu.getAttribute("aria-expanded"), "false");
@@ -359,10 +432,17 @@ try {
         assert.equal(style.transition, "none");
         assert.equal(style.animation, "none");
       }
-      await page.goto(baseURL);
+      // The component playground now lives on a noindex development route.
+      await page.goto(`${baseURL}/dev/foundation`);
+      assert.match(await page.locator('meta[name="robots"]').getAttribute("content"), /noindex/);
+      assert.equal(await page.locator(".store-navigation").getByRole("link", { name: "Component playground" }).count(), 0,
+        "The playground is not advertised in storefront navigation");
       const demo = page.getByRole("button", { name: "Show details", exact: true });
       await demo.click();
       assert.equal(await page.getByRole("button", { name: "Hide details", exact: true }).getAttribute("aria-expanded"), "true");
+      await page.goto(baseURL);
+      assert.equal(await page.getByRole("button", { name: "Show details", exact: true }).count(), 0,
+        "The storefront home page no longer renders the component playground");
       if (artifacts) await page.screenshot({ path: join(artifacts, `${width}-${colorScheme}.png`), fullPage: true });
       await page.waitForFunction(() => window.__paintTime !== null);
       const paints = await page.evaluate(() => window.__darkFrames.filter((frame) => frame.time >= window.__paintTime));

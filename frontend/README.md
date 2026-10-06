@@ -14,22 +14,24 @@ retains the single skip link and deterministic dark theme.
 
 | Route | Current behavior |
 |---|---|
-| `/` | Small introduction and existing component playground |
+| `/` | Compact holding composition: intro, catalog action, honest availability list |
 | `/catalog` | Honest unavailable page; no products |
 | `/search` | Honest unavailable page; no search form or quick-search overlay |
 | `/account` | Honest unavailable page; no fake sign-in |
 | `/cart` | Honest unavailable page; no counts, cart contents, preview or checkout |
+| `/dev/foundation` | `noindex, nofollow` component playground; not linked from shell navigation |
 
-Every unavailable page has a working return-home link. Header links use Next.js
-navigation with visible current-route and keyboard-focus states. At widths below
-48rem, a HeroUI **Menu** button opens a modal left navigation Drawer. React Aria
-contains focus, hides/blocks the background and restores trigger focus on dismissal.
-Enter/Space open it; Escape, backdrop, close button and navigation dismiss it.
-Desktop Categories and Account buttons open nonmodal HeroUI popovers on keyboard
-or touch, never on hover alone. Breakpoint changes close
-overlays and move focus out of controls becoming hidden. At very narrow
-CSS widths (including 200% zoom on mobile), branding and the trigger stack and
-long text wraps instead of being clipped.
+Every unavailable page has a working return-home link. The ByteCore wordmark is
+the home link and carries `aria-current` on `/`, so primary navigation does not
+repeat Home. Header links use Next.js navigation with visible current-route and
+keyboard-focus states. At widths below 48rem, a HeroUI **Menu** button opens a
+modal left navigation Drawer. React Aria contains focus, hides/blocks the
+background and restores trigger focus on dismissal. Enter/Space open it; Escape,
+backdrop, close button and navigation dismiss it. Desktop Catalog and Account
+buttons open nonmodal HeroUI popovers on keyboard or touch, never on hover alone.
+Breakpoint changes close overlays and move focus out of controls becoming hidden.
+At very narrow CSS widths (including 200% zoom on mobile), branding and the
+trigger stack and long text wraps instead of being clipped.
 
 `StoreHeader` accepts optional `quickSearch` and `cartPreview` React nodes as
 composition points for #64 and #73. Both are absent today; Search and Cart remain
@@ -38,8 +40,8 @@ ordinary links. Do not add placeholder interactive overlays to those slots.
 ## #61 design follow-up
 
 The shell borrows electronics-store hierarchy, not branding or content, from
-Arvutitark, 1a and C&C: a clear ByteCore identity, prominent discovery area,
-category entry, compact account/cart actions, and grouped footer navigation.
+Arvutitark, 1a and C&C: a clear ByteCore identity, a single catalog entry,
+compact account/cart actions, and grouped footer navigation.
 The Search area is an actual link, not a fake input. Shared slots are mounted
 once (Search in the responsive header; cart preview in the desktop actions).
 Future #64/#73 implementations must supply their own real interaction/state;
@@ -54,13 +56,65 @@ Reduced-motion rules cover portals as well as header controls.
 
 Category names/URLs cannot be populated yet: there is no frontend catalog
 integration and today's backend does not allow anonymous catalog browsing.
-Categories therefore offers only the supported `/catalog` destination with an
-explicit availability note. Account offers only `/account`, not invented login,
-orders or settings actions. No promotional merchandising (#86), live search
+The Catalog popover therefore offers only the supported `/catalog` destination
+with an explicit availability note. Account offers only `/account`, not invented
+login, orders or settings actions. No promotional merchandising (#86), live search
 (#64), cart contents/drawer (#73), product data or authentication is simulated.
 
 Reference access was limited: C&C hierarchy was readable; Arvutitark extraction
 was minimal and 1a returned HTTP 403. These sites are not runtime dependencies.
+
+## #61 visual correction
+
+The first #61 shell was functionally complete but read as assembled parts: a
+136px header whose right-hand side stacked Account/Cart above
+Categories/Home/Catalog, a bordered full-width Search slab in the middle column,
+three navigation items (Home, Catalog, Categories) expressing two destinations,
+and a foundation headline plus component playground on the customer-facing page.
+
+**Composition considered and rejected.** A two-row header (Arvutitark's and 1a's
+literal shape: utility row above a category rail) was rejected because every
+reference secondary row carries real content — services, campaigns, a category
+taxonomy. ByteCore has none until #63, so a second row here could only repeat
+`/catalog` and would be decoration.
+
+**Composition chosen.** One compact ~3.5rem row:
+
+```
+ByteCore │ Catalog ⌄ ·················· Search · Account ⌄ · Cart
+```
+
+- The wordmark is the home link, as all three references do, which removes the
+  redundant `Home` item.
+- `Categories` and `Catalog` are merged into one emphasized Catalog trigger. It
+  keeps the keyboard/touch category panel #61 and #94 require while expressing a
+  single catalog entry, mirroring Arvutitark's `Tooted` and 1a's `Tootevalik`.
+- The right cluster is uniform and muted (C&C's restraint). C&C ships a search
+  icon rather than a field, which is why a compact search action is honest here
+  rather than an input imitation.
+- The flexible middle column is the existing `quickSearch` slot. It is empty
+  today, so the compact Search action sits at its end; when #64 lands, the real
+  field expands into space that already exists.
+- **One accent per viewport.** The solid accent is spent on the Catalog trigger,
+  so in-page actions (`.store-cta`) are quiet bordered controls that only share
+  its `--control-height` metrics.
+- DOM order matches visual order (catalog → search → actions → mobile), so tab
+  order equals reading order (WCAG 2.4.3).
+
+Shared tokens: `--page-max-width` 72rem → 80rem for future catalog rows,
+`--page-gutter` capped at 2.5rem, and a single `--control-height` of 2.5rem
+shared by every shell control and page action. The footer mirrors the header —
+brand anchored left, link groups hugging the right. The home page uses a
+two-column desktop grid so the wide container reads as composition rather than a
+left column floating in empty space.
+
+Mobile is deliberately not the desktop composition: `ByteCore … Search · Menu`,
+with Catalog, Account and Cart inside the drawer. Below 22rem the Search label is
+visually hidden while keeping its accessible name; below 16rem the shell stacks.
+
+Deliberately out of scope: no secondary navigation row, no merchandising (#86),
+no product data, no cart counts, no search results. The component playground
+moved to `/dev/foundation` (`noindex, nofollow`, unlinked from shell navigation).
 
 ## Stack
 
@@ -196,8 +250,9 @@ Check the running production build, not just compilation:
    a dark preference and with JavaScript disabled; static content stays dark.
 2. At desktop width and mobile widths down to **320px**, confirm cards stack
    appropriately, controls remain readable, and there is no horizontal overflow.
-3. Click **Show details**, confirm the details appear and the label becomes
-   **Hide details**, then collapse them again.
+3. Open `/dev/foundation`, click **Show details**, confirm the details appear and
+   the label becomes **Hide details**, then collapse them again. The playground
+   is no longer on `/`.
 4. Reload, use Tab to reach **Skip to content** and the HeroUI button, and verify
    visible focus. Activate the button with Enter and Space. Confirm
    `aria-expanded` tracks the visibility of its `aria-controls` target.
@@ -209,7 +264,9 @@ Also check header/footer and active navigation on every route, direct loading an
 reloads, mobile Menu opening/closing, Escape and focus return, closing after
 navigation (including the current route), browser history, modal focus containment
 and blocked background interaction. Desktop popovers are nonmodal and support
-keyboard/touch opening, Escape/outside dismissal and focus return.
+keyboard/touch opening, Escape/outside dismissal and focus return. The header must
+stay a single row with all controls on one baseline, and the wordmark must be the
+only element marking `/` as the current route.
 Check **1440px, 390px, 320px and 200% browser zoom**, with the menu open and closed.
 Unfinished pages must say they are unavailable and offer a working return link.
 Repeat against both production and development rendering.
