@@ -17,8 +17,11 @@ Paste or reference this in a storefront UI ticket prompt.
 > **Before coding** — read `docs/frontend/DESIGN.md` and look at the baseline
 > screenshots in `docs/frontend/baseline/`. **Check `docs/frontend/baseline/README.md`
 > for which existing captures your change will invalidate** — a shared header,
-> token or component affects screenshots owned by several tickets. Open the
-> closest already-implemented page and reuse its components, classes and tokens.
+> token or component affects screenshots owned by several tickets. If this is a
+> new kind of page with no ByteCore precedent, also study the third-party store
+> references in `.claude/references/` (see its README for what each one shows) —
+> patterns and density only, never branding or layout. Open the closest
+> already-implemented page and reuse its components, classes and tokens.
 >
 > **While coding** — compose the page yourself within the established design.
 > Use existing components (`PageContainer`, `UnavailablePage`, `.store-cta`,
@@ -49,6 +52,10 @@ Paste or reference this in a storefront UI ticket prompt.
 > no console or hydration errors. Update
 > `frontend/scripts/storefront-smoke.mjs` for intentional markup changes without
 > dropping behavioral coverage.
+> **Overlay semantics** — choose modal or nonmodal behavior deliberately.
+> Use focus containment and background blocking only for modal surfaces.
+> Nonmodal popovers allow focus to move to the surrounding page. Preserve
+> HeroUI's appropriate built-in behavior rather than adding a global focus trap.
 >
 > **Report** — in the issue, state what you built, any intentional departure
 > from `DESIGN.md` and why, which checks ran, which screenshots you added or
@@ -64,7 +71,8 @@ Paste or reference this in a storefront UI ticket prompt.
 - [ ] Content uses `PageContainer`; no extra outer vertical padding.
 - [ ] Icons are decorative (`aria-hidden`) and the control has a text accessible name.
 - [ ] Every interactive element is reachable and operable by keyboard with a visible focus ring.
-- [ ] Overlays trap focus, dismiss on Escape and backdrop, and restore focus.
+- [ ] Modal dialogs/drawers contain focus, block background interaction, support Escape and backdrop dismissal where appropriate, and restore focus to the trigger or a logical fallback.
+- [ ] Nonmodal popovers do not trap focus or make the background inert. Verify keyboard access, Escape/outside dismissal and appropriate focus behavior; do not force focus back to the trigger when the user intentionally moves elsewhere.
 - [ ] Checked at 390px and at 200% zoom; no horizontal overflow.
 - [ ] Loading state matches the real layout's dimensions; error state is actionable.
 - [ ] Nothing is simulated; unavailable features say so.
@@ -99,6 +107,9 @@ routine edit.
 > model-reviewed). Judge consistency against the **owner-approved** images.
 > A capture marked "Model-reviewed — awaiting owner approval" is the work under
 > review, not a standard to measure against.
+> `.claude/references/` holds third-party electronics-store captures used as a
+> pattern brief. Use them to judge whether hierarchy and density are plausible
+> for a store — **never** to require that ByteCore resemble them.
 >
 > **Review for, in priority order:**
 > 1. Functional and accessibility defects — unreachable or unlabelled controls,
@@ -125,13 +136,17 @@ routine edit.
 > - Do not propose a redesign, a new design system, extracted abstractions, or
 >   changes to functional requirements the ticket specifies. If the ticket's
 >   requirements seem wrong, say so separately rather than implementing around
->   them.
+>   them. "Does not look like reference site X" is not a defect.
 > - `DESIGN.md` distinguishes **conventions** from **examples**. A different
 >   composition is not a defect. A broken convention is — unless the
 >   implementer explained the departure, in which case judge the explanation.
 > - If you find nothing above Preference level, say so plainly.
 > - Your review does **not** constitute owner approval. Captures stay
 >   "Model-reviewed — awaiting owner approval" until the owner says otherwise.
+> - Judge overlays according to their intended semantics: modal dialogs/drawers
+>  contain focus and block background interaction; nonmodal popovers do neither.
+>  Do not recommend turning a nonmodal popover into a modal solely to satisfy
+>  a generic overlay checklist.
 >
 > **Output:** a short summary verdict, then a table of
 > `Severity | Location | Issue | User impact | Suggested correction`, then any

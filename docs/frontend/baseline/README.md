@@ -8,6 +8,10 @@ product-image assets.
 Read [`../DESIGN.md`](../DESIGN.md) for the design these images record, and its
 *Screenshot lifecycle* section for the rules this manifest implements.
 
+Not to be confused with [`.claude/references/`](../../../.claude/references/),
+which holds third-party electronics-store captures used as a **pattern brief**.
+Those are not ByteCore and are never a baseline.
+
 ## Status vocabulary
 
 | Status | Meaning |

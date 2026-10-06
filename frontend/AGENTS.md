@@ -22,18 +22,25 @@ backend work, GraphQL transport, tooling and config.
    header, token or component affects several tickets' screenshots. Then open
    the closest already-implemented page and reuse its components, shared classes
    and tokens.
-2. **Compose it yourself** within that design. `DESIGN.md` separates
+2. **For a new kind of page** with no ByteCore precedent (listing, product,
+   cart, checkout, auth form), also study the third-party store captures in
+   [`.claude/references/`](../.claude/references/) — its
+   [README](../.claude/references/README.md) says what each one shows and which
+   ticket it suits. Take hierarchy, density and interaction patterns only; never
+   branding, colour, copy or wholesale layout. They cover two stores at opposite
+   densities and neither is a dark theme — they are a brief, not a baseline.
+3. **Compose it yourself** within that design. `DESIGN.md` separates
    conventions from examples — follow the conventions, choose your own layout.
    Don't add wrapper components, a design-system layer or new colour/size values
    when a token exists.
-3. **Capture the running production build with Playwright** at the desktop and
+4. **Capture the running production build with Playwright** at the desktop and
    mobile widths and interaction states your ticket affects — into a temporary
    directory, never straight into `baseline/`.
-4. **Inspect every capture** alongside the working interaction. Fix crowding,
+5. **Inspect every capture** alongside the working interaction. Fix crowding,
    weak hierarchy, panels added to fill space, inconsistent spacing or control
    sizing, then recapture. Never promote a known-broken or uninspected image
    over an accepted baseline.
-5. **Promote and record.** Copy only accepted captures into
+6. **Promote and record.** Copy only accepted captures into
    `docs/frontend/baseline/` as `issue-<ticket>-<route>-<viewport>-<state>.png`,
    replacing existing files in place — no timestamps, `-v2` or numbered copies.
    Recapture anything else your change invalidated, update the manifest rows
@@ -41,12 +48,14 @@ backend work, GraphQL transport, tooling and config.
    delete superseded files, in the same commit. Mark new captures
    **"Model-reviewed — awaiting owner approval"**; only the owner promotes a
    capture to baseline, and passing checks never does.
-6. **Verify:** keyboard reachability and visible focus, overlay dismissal and
-   focus restoration, 390px and 200% zoom, no horizontal overflow, relevant
-   loading and error states, no console or hydration errors. Keep
-   `scripts/storefront-smoke.mjs` passing; update its assertions for intentional
-   markup changes instead of dropping scenarios.
-7. **Report** any intentional departure from `DESIGN.md`, and why, plus which
+7. **Verify:** keyboard reachability and visible focus, overlay dismissal and
+   focus restoration appropriate to the overlay's semantics (modal surfaces
+   contain focus and block the background; nonmodal popovers do neither), 390px
+   and 200% zoom, no horizontal overflow, relevant loading and error states, no
+   console or hydration errors. Keep `scripts/storefront-smoke.mjs` passing;
+   update its assertions for intentional markup changes instead of dropping
+   scenarios.
+8. **Report** any intentional departure from `DESIGN.md`, and why, plus which
    screenshots you added or refreshed, in the issue report.
 
 Missing backend functionality stays visibly missing — never mock data, counts or

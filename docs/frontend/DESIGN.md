@@ -7,6 +7,14 @@ instead of re-deciding it.
 Read this before any storefront UI change, together with the baseline
 screenshots in [`baseline/`](baseline/) ([manifest](baseline/README.md)).
 
+For a **new kind of page** with no implemented ByteCore precedent — a listing, a
+product page, a cart, a checkout step, an auth form — also study the third-party
+store references in [`.claude/references/`](../../.claude/references/)
+([what each one shows](../../.claude/references/README.md)). They are a pattern
+brief, never a baseline: take hierarchy, density and interaction ideas, not
+branding, colour or layout. Neither reference is a dark storefront — the
+structure transfers, the surface treatment does not.
+
 - Narrative history of the correction: [`frontend/README.md`](../../frontend/README.md) → *#61 visual correction*
 - Shared delivery/design contract: issue #94
 - Review checklist and prompt templates: [`REVIEW.md`](REVIEW.md)
@@ -224,12 +232,28 @@ All three overlays come from HeroUI/React Aria:
 
 Behavior that must survive any shell change:
 
-- Escape, backdrop click and route change all dismiss; focus returns to the trigger.
+- Escape, outside/backdrop click and route change all dismiss.
 - Navigating via a link closes the overlay, but modified clicks (⌘/Ctrl/Shift/Alt) don't.
 - Crossing the 48rem breakpoint moves focus between the matching desktop and
   mobile control — see the `matchMedia` effect in
   [`store-navigation.tsx`](../../frontend/src/components/store-navigation.tsx).
 - `prefers-reduced-motion` disables overlay and control transitions.
+
+**Choose modal or nonmodal deliberately, and verify against that choice.** The
+two are not interchangeable, and a generic "overlays trap focus" checklist is
+wrong here:
+
+- **Modal** (the mobile drawer): contains focus, makes the background `inert`,
+  dismisses on Escape and backdrop, and restores focus to the trigger or a
+  logical fallback.
+- **Nonmodal** (the Catalog and Account popovers): does **not** trap focus and
+  does **not** block the background. Focus may legitimately move out to the
+  surrounding page. Verify keyboard access, Escape and outside dismissal, and
+  sensible focus behavior — but don't force focus back to the trigger when the
+  user deliberately moved elsewhere, and don't add a global focus trap.
+
+Preserve HeroUI's built-in behavior for the semantics you chose rather than
+layering your own focus management on top.
 
 > **Gotcha:** CSS selector *lists* cannot share a descendant combinator.
 > `` `${".a, .b"} button` `` parses as `.a, .b button`. This previously broke
@@ -296,7 +320,26 @@ system on top of HeroUI, or wrapper components around HeroUI primitives. HeroUI
 Guidance, not wireframes. Choose your own composition; these are the constraints
 that keep it consistent.
 
+Each section below names the most useful reference captures in
+[`.claude/references/`](../../.claude/references/) — study how those pages
+prioritise and pace information, then design ByteCore's version in this theme.
+Don't reproduce them. The set covers two stores at opposite densities (iDeal
+restrained, 1a.ee dense); ByteCore sits much nearer the restrained end today, so
+when they disagree prefer the quieter solution unless real data justifies the
+density.
+
 ### Catalog and search (#63, #64)
+
+*References: `iDeal_product_list` is where #63 should start — page title above a
+breadcrumb, a category tree shown in context on the left, a light toolbar with
+sort and a grid/list toggle, and **no filters at all**. `1a_product_list` is
+where #64 eventually lands — result count, refining chips, page-size selector,
+and a heavily faceted rail. Build the first, not the second. For the category
+**navigation** itself, `iDeal_top_nav_bar_1–5` show a full-width panel with three
+labelled column groups (a fixed template, plain text links, no icons or promo
+imagery); `1a_catalog` shows the sidebar-plus-flyout alternative that scales to a
+deeper taxonomy. Both references are light themes — take the structure, not the
+white cards.*
 
 - **Convention:** results sit directly on the background, separated by borders
   and spacing. A filled card per product will look heavy in this theme.
@@ -313,6 +356,15 @@ that keep it consistent.
 
 ### Product detail (#65)
 
+*References: `iDeal_product_page` — breadcrumb, SKU above the title, a gallery
+with a thumbnail rail, and a separate purchase panel on the right. Variant
+selection is its own bordered group (colour swatches with labels, storage as
+chips), the closest model for the variant dimensions in #97. Delivery and
+trade-in information sits *below* the purchase decision rather than competing
+with it. `1a_product_page_description` answers "where does all the detail go":
+long specifications as tabbed, three-column label/value tables well below the
+purchase panel.*
+
 - The gallery and the purchase panel are the two anchors; everything else is
   secondary.
 - **This page has a genuine primary action.** *Add to cart* takes primary
@@ -324,6 +376,14 @@ that keep it consistent.
 
 ### Forms (#66–#68, #71, #74)
 
+*References: `iDeal_registration` — one column, grouped into labelled fieldsets
+inside a card, primary action with a quiet secondary beside it. `IDeal_login` —
+a narrow form card next to a visually quieter panel whose only content is the
+secondary "create an account" path. `1a_login` ranks the same two paths the
+other way round, inside one card. All of them rank the paths rather than giving
+them equal weight. `1a_registration` is a warning: its consent and legal text
+outweighs the form itself — keep #66's consent handling honest but far shorter.*
+
 - **Convention:** use HeroUI form components. They carry label association,
   description/error wiring and focus styling already.
 - Single column. Labels above fields. Errors below the field they belong to, in
@@ -333,6 +393,20 @@ that keep it consistent.
 - Respect `--control-height` so fields line up with shell controls.
 
 ### Cart and checkout (#73, #74)
+
+*References: `iDeal_Shopping_Cart` — line items as rows (thumbnail · name ·
+chosen variant attributes as quiet label/value pairs · a small price/quantity/
+subtotal block · a plain remove link), a totals panel on the right with the tax
+breakdown, a primary checkout action with a quiet "return to store" beside it,
+and a separate promo-code box. Note also what makes it heavy: per-item warranty
+and protection-plan radio lists. ByteCore has no such upsell — keep the line
+simple. `1a_shopping_cart_empty` is the more immediately useful one: an **empty
+cart** that keeps the page's structure (column headers, delivery panel, totals
+reading `0,00 €`), says plainly that it is empty, disables the forward action
+and offers a way back to the catalog. `iDeal_main_page_2` shows a cart count
+badge on the header icon, the affordance #73 needs. No capture covers the
+checkout steps themselves; design those from the conventions above and note any
+reference you add in `.claude/references/README.md`.*
 
 - The order summary is reference information — keep it quiet. *Checkout* /
   *Place order* is the emphasis.
@@ -344,6 +418,22 @@ that keep it consistent.
   client-side.
 - *Example:* two columns on desktop (items left, sticky summary right), stacking
   on mobile with the summary and primary action reachable without a long scroll.
+
+### Home and merchandising (#86)
+
+*References: `iDeal_main_page_2` — a horizontally scrollable row of product-type
+entries (image above a plain text label, no cards or borders) acting as the real
+catalog entry point, then a small number of featured products with one action
+each. `iDeal_main_page_1` shows the opposite emphasis: a single full-bleed hero.
+`1a_main_page` shows the cost of the dense approach — four full-width bands
+before any content.*
+
+- The current home page is a **temporary holding composition**, not a design to
+  preserve. #86 replaces it outright.
+- Whatever replaces it must still be honest: no invented products, prices or
+  discounts ahead of real data.
+- Categories are the most useful first row once #63 lands — they are navigation
+  the customer actually needs, not merchandising filler.
 
 ### Things that are explicitly not rules
 
@@ -367,7 +457,12 @@ Recorded so they aren't mistaken for bugs or silently "fixed":
   heights. Expected; #86 replaces it.
 - **Popover content is intentionally sparse.** Both popovers state what is not
   available instead of listing invented destinations. Replace the copy when the
-  feature is real — don't pad it.
+  feature is real — don't pad it. When #63 brings real categories, the Catalog
+  panel will likely need to grow into a grouped, wider layout
+  (`iDeal_top_nav_bar_1–5` in [`.claude/references/`](../../.claude/references/)
+  show the pattern). That is a deliberate change of overlay semantics, not a
+  cosmetic one — re-decide modal vs nonmodal and verify the focus and dismissal
+  behavior that follows.
 
 ---
 
