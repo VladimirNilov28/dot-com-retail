@@ -45,9 +45,13 @@ null, foreign or lookalike origins are rejected with HTTP 403, including request
 with a valid JWT attempting a cookie-authenticated merge. Ordinary bearer-only
 user operations retain their existing behavior, even with a guest cookie present.
 
-Anonymous requests may execute only the selected guest root operations. The
-guard parses operationName, aliases and fragments; mixed protected/guest
-operations are rejected before any resolver or public-mutation side effect.
+Anonymous requests may execute only selected guest root operations using the
+transport ceremony above. The guard parses `operationName`, aliases and
+fragments; anonymous protected/guest mixtures are rejected before any resolver
+or mutation side effect. Public catalog and guest-cart roots cannot be combined
+in one operation. Public catalog discovery is a separate credential-free path;
+see the [GraphQL API](graphql-schema.md#public-catalog-discovery) for its root
+allowlist and cache policy.
 Guest credentials do not authorize myCart, user operations, federation SDL,
 inventory staff fields, internal APIs or subscriptions. An invalid Bearer
 header is not downgraded to anonymous access.

@@ -119,7 +119,9 @@ public class SecurityConfig {
                 // of a valid JWT.
                 .csrf(csrf -> csrf.disable())
                 .headers(headers -> headers.addHeaderWriter((request, response) -> {
-                    if ("/graphql".equals(request.getServletPath()))
+                    if ("/graphql".equals(request.getServletPath())
+                            && !Boolean.TRUE.equals(
+                                    request.getAttribute(GuestCartHttpFilter.PUBLIC_CATALOG_CACHEABLE_ATTRIBUTE)))
                         response.setHeader("Cache-Control", "private, no-store");
                 }))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

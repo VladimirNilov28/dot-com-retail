@@ -28,13 +28,13 @@ public class CatalogSearchQuery {
     }
 
     @DgsQuery
-    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).PRODUCT_READ)")
+    @PreAuthorize("isAnonymous() or hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).PRODUCT_READ)")
     public ProductSearchResult searchProducts(@InputArgument ProductSearchInput input) {
         return CatalogSearchMapper.toGraphQlType(catalogSearchService.search(CatalogSearchMapper.toCriteria(input)));
     }
 
     @DgsQuery
-    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).PRODUCT_READ)")
+    @PreAuthorize("isAnonymous() or hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).PRODUCT_READ)")
     public List<ProductSuggestion> productSearchSuggestions(@InputArgument String query, @InputArgument Integer limit) {
         return catalogSearchService.suggest(query, limit).stream()
                 .map(CatalogSearchMapper::toGraphQlType)

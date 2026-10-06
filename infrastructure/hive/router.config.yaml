@@ -29,7 +29,7 @@ headers:
             named: Set-Cookie
             algorithm: append
         - propagate:
-            named: Cache-Control
+            named: [Cache-Control, Vary]
             algorithm: append
 
 cors:

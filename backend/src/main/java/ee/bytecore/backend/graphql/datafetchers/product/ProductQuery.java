@@ -27,7 +27,7 @@ public class ProductQuery {
     }
 
     @DgsQuery
-    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).PRODUCT_READ)")
+    @PreAuthorize("isAnonymous() or hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).PRODUCT_READ)")
     public Product product(@InputArgument String id, @InputArgument String slug) {
         if (slug != null) {
             return productService
@@ -45,7 +45,7 @@ public class ProductQuery {
     }
 
     @DgsQuery
-    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).PRODUCT_READ)")
+    @PreAuthorize("isAnonymous() or hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).PRODUCT_READ)")
     public List<Product> products() {
         return productService.findAll().stream()
                 .map(ProductMapper::toGraphQlType)

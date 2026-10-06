@@ -28,7 +28,12 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 public class GuestCartHttpFilter extends OncePerRequestFilter {
-    private static final Set<String> PUBLIC_FIELDS = Set.of(
+    public static final String PUBLIC_CATALOG_CACHEABLE_ATTRIBUTE =
+            GuestCartHttpFilter.class.getName() + ".publicCatalogCacheable";
+
+    private static final Set<String> PUBLIC_CATALOG_FIELDS =
+            Set.of("product", "products", "category", "categories", "searchProducts", "productSearchSuggestions");
+    private static final Set<String> GUEST_FIELDS = Set.of(
             "guestCart",
             "startGuestCart",
             "addGuestCartItem",
@@ -39,6 +44,9 @@ public class GuestCartHttpFilter extends OncePerRequestFilter {
             "createGuestOrder",
             "guestOrder",
             "cancelGuestOrder");
+
+    private record OperationSelection(OperationDefinition.Operation operation, Set<String> roots) {}
+
     private final GuestCartSettings settings;
     private final JsonMapper mapper;
 
@@ -61,13 +69,53 @@ public class GuestCartHttpFilter extends OncePerRequestFilter {
         boolean authenticated = authentication != null
                 && authentication.isAuthenticated()
                 && !(authentication instanceof AnonymousAuthenticationToken);
-        Set<String> roots = roots(body);
-        if (!authenticated && (roots.isEmpty() || !PUBLIC_FIELDS.containsAll(roots))) {
+        OperationSelection selection = selectedOperation(body);
+        if (selection == null) {
+            if (!authenticated) {
+                reject(response, 400, "A valid GraphQL operation must be selected");
+                return;
+            }
+            chain.doFilter(replay, response);
+            return;
+        }
+
+        Set<String> roots = selection.roots();
+        boolean publicCatalogRoot = roots.stream().anyMatch(PUBLIC_CATALOG_FIELDS::contains);
+        boolean guestOperation =
+                roots.stream().anyMatch(field -> GUEST_FIELDS.contains(field) || "mergeGuestCart".equals(field));
+        if (publicCatalogRoot && guestOperation) {
+            reject(response, 400, "Public catalog and guest-cart roots cannot be combined in one operation");
+            return;
+        }
+        if (!authenticated
+                && publicCatalogRoot
+                && (selection.operation() != OperationDefinition.Operation.QUERY
+                        || roots.isEmpty()
+                        || !PUBLIC_CATALOG_FIELDS.containsAll(roots))) {
+            reject(response, 400, "Public catalog reads cannot be combined with protected or guest operations");
+            return;
+        }
+        if (!authenticated
+                && !publicCatalogRoot
+                && (roots.isEmpty()
+                        || selection.operation() == OperationDefinition.Operation.SUBSCRIPTION
+                        || !GUEST_FIELDS.containsAll(roots))) {
             reject(response, 401, "Authentication is required");
             return;
         }
-        boolean guestOperation =
-                roots.stream().anyMatch(field -> PUBLIC_FIELDS.contains(field) || "mergeGuestCart".equals(field));
+
+        if (publicCatalogRoot) {
+            boolean credentialFree =
+                    !authenticated && request.getHeader("Authorization") == null && request.getHeader("Cookie") == null;
+            if (credentialFree) {
+                request.setAttribute(PUBLIC_CATALOG_CACHEABLE_ATTRIBUTE, Boolean.TRUE);
+                response.setHeader("Cache-Control", "public, max-age=60");
+                response.addHeader("Vary", "Origin, Authorization, Cookie");
+            } else {
+                response.setHeader("Cache-Control", "private, no-store");
+            }
+        }
+
         if (guestOperation) {
             if (!settings.getAllowedOrigins().contains(request.getHeader("Origin"))
                     || !"1".equals(request.getHeader("X-Guest-Cart-Request"))
@@ -109,10 +157,10 @@ public class GuestCartHttpFilter extends OncePerRequestFilter {
         chain.doFilter(replay, response);
     }
 
-    private Set<String> roots(byte[] body) {
+    private OperationSelection selectedOperation(byte[] body) {
         try {
             JsonNode json = mapper.readTree(body);
-            if (json == null || !json.isObject() || !json.path("query").isString()) return Set.of();
+            if (json == null || !json.isObject() || !json.path("query").isString()) return null;
             Document document = Parser.parse(json.path("query").asString());
             List<OperationDefinition> operations = document.getDefinitionsOfType(OperationDefinition.class);
             String name = json.path("operationName").isString()
@@ -124,17 +172,16 @@ public class GuestCartHttpFilter extends OncePerRequestFilter {
                             .filter(candidate -> name.equals(candidate.getName()))
                             .findFirst()
                             .orElse(null);
-            if (operation == null || operation.getOperation() == OperationDefinition.Operation.SUBSCRIPTION)
-                return Set.of();
+            if (operation == null) return null;
             Map<String, FragmentDefinition> fragments = document.getDefinitionsOfType(FragmentDefinition.class).stream()
                     .collect(Collectors.toMap(
                             FragmentDefinition::getName, fragment -> fragment, (first, second) -> first));
             Set<String> roots = new HashSet<>();
             collect(operation.getSelectionSet(), fragments, new HashSet<>(), roots);
-            return roots;
+            return new OperationSelection(operation.getOperation(), roots);
         } catch (JacksonException | InvalidSyntaxException exception) {
             // Authenticated malformed requests retain Spring's existing error handling.
-            return Set.of();
+            return null;
         }
     }
 

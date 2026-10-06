@@ -58,8 +58,35 @@ Operations come in two shapes:
   — admin/support operations that act on an arbitrary user, gated by
   `Role` (`ADMIN`, `USER`, `SUPPORT`).
 
-Root query/mutation authorization itself (which `Role` may call which
-operation) is not yet implemented — see Known Open Points.
+Root query/mutation access is enforced on data-fetcher methods using the
+existing OAuth scopes; public catalog exceptions are narrowly defined below.
+
+### Public catalog discovery
+
+Credential-free JSON POST queries may select only these catalog discovery roots:
+`product`, `products`, `category`, `categories`, `searchProducts`, and
+`productSearchSuggestions`. They do not require an `Origin` or
+`X-Guest-Cart-Request` header. Public listing clients should use bounded
+`searchProducts`; `products` remains unbounded.
+
+The selected GraphQL operation is classified by its parsed operation AST, including
+`operationName`, aliases, and fragments. A public catalog operation cannot combine
+catalog roots with guest-cart roots; the backend rejects that document with a
+client-visible GraphQL error. Anonymous catalog-plus-protected-root documents are
+also rejected explicitly. Authenticated catalog access continues to require the
+existing `product:read` or `category:read` scope, and catalog writes remain protected.
+
+`Product.variants`, `Product.categories`, `ProductVariant.product`, and
+`Category.parent` are customer-readable. `ProductVariant.inventory`, warehouse roots,
+and inventory-management fields continue to require `warehouse:read`; no warehouse
+quantities or derived availability signal are public. User, cart, and order data keep
+their existing authentication, scope, and ownership protections.
+
+Only a credential- and cookie-free, pure public catalog query is marked
+`Cache-Control: public, max-age=60`, with `Vary: Origin, Authorization, Cookie`.
+Authenticated or cookie-bearing catalog requests, guest operations, and protected
+responses remain private/no-store. Cached catalog prices are display data only;
+cart and checkout continue to use authoritative current prices and validation.
 
 ## Domains
 

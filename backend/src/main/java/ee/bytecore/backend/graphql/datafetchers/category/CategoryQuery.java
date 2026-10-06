@@ -22,7 +22,7 @@ public class CategoryQuery {
     }
 
     @DgsQuery
-    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).CATEGORY_READ)")
+    @PreAuthorize("isAnonymous() or hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).CATEGORY_READ)")
     public Category category(@InputArgument String id, @InputArgument String slug) {
         if (slug != null) {
             return categoryService
@@ -40,7 +40,7 @@ public class CategoryQuery {
     }
 
     @DgsQuery
-    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).CATEGORY_READ)")
+    @PreAuthorize("isAnonymous() or hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).CATEGORY_READ)")
     public List<Category> categories() {
         return categoryService.findAll().stream()
                 .map(CategoryMapper::toGraphQlType)
