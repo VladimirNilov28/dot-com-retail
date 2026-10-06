@@ -13,16 +13,11 @@ export function StoreHeader({
   return (
     <header className="border-b border-separator bg-background">
       <PageContainer className="store-header">
-        <Link href="/" className="store-brand">
-          ByteCore
-        </Link>
-        <StoreNavigation />
-        {quickSearch || cartPreview ? (
-          <div className="col-span-full flex min-w-0 flex-wrap items-center gap-3">
-            {quickSearch}
-            {cartPreview}
-          </div>
-        ) : null}
+        <div className="store-branding">
+          <Link href="/" className="store-brand">ByteCore</Link>
+          <p className="text-xs text-muted">Electronics, clearly connected.</p>
+        </div>
+        <StoreNavigation quickSearch={quickSearch} cartPreview={cartPreview} />
       </PageContainer>
     </header>
   );

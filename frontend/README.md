@@ -21,16 +21,45 @@ retains the single skip link and deterministic dark theme.
 
 Every unavailable page has a working return-home link. Header links use Next.js
 navigation with visible current-route and keyboard-focus states. At widths below
-48rem, a HeroUI **Menu** button toggles an in-flow disclosure: Tab moves naturally,
-Enter/Space toggle, Escape closes and restores trigger focus, and navigation closes
-the panel. It is not a dialog and does not trap focus. Breakpoint changes close
-the mobile panel and move focus out of controls becoming hidden. At very narrow
+48rem, a HeroUI **Menu** button opens a modal left navigation Drawer. React Aria
+contains focus, hides/blocks the background and restores trigger focus on dismissal.
+Enter/Space open it; Escape, backdrop, close button and navigation dismiss it.
+Desktop Categories and Account buttons open nonmodal HeroUI popovers on keyboard
+or touch, never on hover alone. Breakpoint changes close
+overlays and move focus out of controls becoming hidden. At very narrow
 CSS widths (including 200% zoom on mobile), branding and the trigger stack and
 long text wraps instead of being clipped.
 
 `StoreHeader` accepts optional `quickSearch` and `cartPreview` React nodes as
 composition points for #64 and #73. Both are absent today; Search and Cart remain
 ordinary links. Do not add placeholder interactive overlays to those slots.
+
+## #61 design follow-up
+
+The shell borrows electronics-store hierarchy, not branding or content, from
+Arvutitark, 1a and C&C: a clear ByteCore identity, prominent discovery area,
+category entry, compact account/cart actions, and grouped footer navigation.
+The Search area is an actual link, not a fake input. Shared slots are mounted
+once (Search in the responsive header; cart preview in the desktop actions).
+Future #64/#73 implementations must supply their own real interaction/state;
+the mobile drawer currently links to the separate Search and Cart pages.
+
+HeroUI surfaces, separators, radii, muted typography and the existing blue accent
+are reused, with consistent 20px Lucide icons and restrained spacing. The drawer
+and popovers use HeroUI's portal placement and React Aria focus/dismissal behavior;
+the installed modal primitive blocks background interaction with `inert`.
+Overlay widths fit the actual CSS viewport, including 160px at mobile 200% zoom.
+Reduced-motion rules cover portals as well as header controls.
+
+Category names/URLs cannot be populated yet: there is no frontend catalog
+integration and today's backend does not allow anonymous catalog browsing.
+Categories therefore offers only the supported `/catalog` destination with an
+explicit availability note. Account offers only `/account`, not invented login,
+orders or settings actions. No promotional merchandising (#86), live search
+(#64), cart contents/drawer (#73), product data or authentication is simulated.
+
+Reference access was limited: C&C hierarchy was readable; Arvutitark extraction
+was minimal and 1a returned HTTP 403. These sites are not runtime dependencies.
 
 ## Stack
 
@@ -124,11 +153,11 @@ containerized Spring instructions; do not start a second Spring process.
   and responsive `--page-gutter` tokens.
 - Storefront pages, layouts, header and footer remain Server Components.
   `StoreNavigation` is a small client boundary for route state and the mobile
-  disclosure; `FoundationDemo` retains its existing interactive boundary.
-  Both disclosures start collapsed identically on server and client.
+  overlays; `FoundationDemo` retains its existing interactive boundary.
+  All overlays start closed identically on server and client.
 - The page has a keyboard-visible skip link, semantic headings, visible HeroUI
-  focus styling, and an accessible disclosure with `aria-expanded` and
-  `aria-controls`. The button sends no network request.
+  focus styling, and accessible overlay triggers with `aria-expanded`.
+  Navigation overlays send no business network requests.
 
 ## Shared custom UI icons
 
@@ -138,8 +167,9 @@ namespace or add a dynamic icon loader, another custom icon library, or an
 external icon API/CDN. Keep HeroUI's built-in internal icons and authentic
 provider/brand logos. Do not use emoji or text glyphs as interface icons.
 
-The shell uses `Menu` / `X` on the disclosure trigger and `Search`, `UserRound`,
-and `ShoppingCart` beside navigation labels. Home, Catalog and ByteCore branding
+The shell uses `Menu` on the drawer trigger, `X` on its close action, `Grid2X2`
+and `ChevronDown` on category/account panels, and `Search`, `UserRound`,
+and `ShoppingCart` beside relevant navigation labels. Home, Catalog and ByteCore branding
 remain text-only. Icons use the shared `.store-icon` class (1.25rem / 20px at the
 default font size), stroke width 2, and Lucide's `currentColor` stroke, inheriting
 the existing semantic dark-theme colors and active states.
@@ -147,7 +177,7 @@ the existing semantic dark-theme colors and active states.
 Decorative icons must have `aria-hidden="true"` and `focusable="false"`.
 Keep useful visible labels; an icon-only button must have an accessible name on
 the **button**, not the SVG. The mobile trigger retains its visible **Menu**
-label/accessibility name in both states, with `aria-expanded` indicating whether
+label/accessibility name, with `aria-expanded` indicating whether
 the menu is open. Icons are not new actions: Search and Cart remain ordinary
 links to the existing honest unavailable pages.
 
@@ -171,7 +201,9 @@ Check the running production build, not just compilation:
 
 Also check header/footer and active navigation on every route, direct loading and
 reloads, mobile Menu opening/closing, Escape and focus return, closing after
-navigation (including the current route), browser history, and no focus trap.
+navigation (including the current route), browser history, modal focus containment
+and blocked background interaction. Desktop popovers are nonmodal and support
+keyboard/touch opening, Escape/outside dismissal and focus return.
 Check **1440px, 390px, 320px and 200% browser zoom**, with the menu open and closed.
 Unfinished pages must say they are unavailable and offer a working return link.
 Repeat against both production and development rendering.

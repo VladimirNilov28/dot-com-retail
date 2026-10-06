@@ -25,15 +25,16 @@ let zoomContext;
 let temporary;
 
 function captureErrors(page) {
-  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("pageerror", (error) => errors.push(`${page.url()}: ${error.stack ?? error.message}`));
   page.on("console", (message) => {
     if (message.type() === "error" || /hydration|did not match/i.test(message.text())) {
-      errors.push(`${message.type()}: ${message.text()}`);
+      errors.push(`${page.url()} ${message.type()}: ${message.text()}`);
     }
   });
 }
 
 async function inspect(page, route, mobile) {
+  await page.waitForFunction(() => document.querySelector(".store-popover, .store-drawer-backdrop") === null);
   assert.equal(await page.locator("main").count(), 1);
   assert.equal(await page.locator("#main-content").count(), 1);
   assert.equal(await page.getByRole("banner").count(), 1);
@@ -77,6 +78,8 @@ async function inspect(page, route, mobile) {
       const rect = element.getBoundingClientRect();
       const parent = element.parentElement.getBoundingClientRect();
       return {
+        scope: element.closest(".store-navigation") ? "shell" :
+          element.closest(".store-popover, .store-drawer-dialog") ? "overlay" : "unexpected",
         hidden: element.getAttribute("aria-hidden"),
         focusable: element.getAttribute("focusable"),
         stroke: element.getAttribute("stroke"),
@@ -90,7 +93,8 @@ async function inspect(page, route, mobile) {
       };
     }),
   );
-  assert.equal(icons.length, 7, "Three decorative navigation icons per layout plus the trigger icon");
+  assert.equal(icons.filter((icon) => icon.scope === "shell").length, 7, "Stable shell icons");
+  assert.equal(icons.some((icon) => icon.scope === "unexpected"), false, "Additional icons belong only to mounted overlays");
   for (const icon of icons) {
     assert.equal(icon.hidden, "true");
     assert.equal(icon.focusable, "false");
@@ -104,17 +108,26 @@ async function inspect(page, route, mobile) {
       assert.equal(icon.fits, true, "Icon fits inside its control");
     }
   }
-  for (const nav of [".store-desktop-nav", ".store-mobile-panel"]) {
-    for (const label of ["Search", "Account", "Cart"]) {
-      const link = page.locator(nav).getByRole("link", { name: label, exact: true, includeHidden: true });
-      assert.equal(await link.locator(".store-icon").count(), 1);
-    }
+  for (const label of ["Search", "Cart"]) {
+    const link = page.locator(label === "Search" ? ".store-search-slot" : ".store-desktop-nav")
+      .getByRole("link", { name: label, exact: true, includeHidden: true });
+    assert.equal(await link.locator(".store-icon").count(), 1);
   }
   return metrics;
 }
 
-async function assertFocus(locator) {
+async function assertFocused(locator) {
+  const element = await locator.elementHandle();
+  try {
+    await locator.page().waitForFunction((target) => document.activeElement === target, element);
+  } finally {
+    await element.dispose();
+  }
   assert.equal(await locator.evaluate((element) => document.activeElement === element), true);
+}
+
+async function assertFocus(locator) {
+  await assertFocused(locator);
   const visible = await locator.evaluate((element) => {
     const style = getComputedStyle(element);
     return (style.outlineStyle !== "none" && parseFloat(style.outlineWidth) > 0) ||
@@ -124,59 +137,114 @@ async function assertFocus(locator) {
 }
 
 async function assertActive(page, route) {
-  const navigation = page.getByRole("navigation", { name: "Primary", exact: true });
+  const drawer = page.getByRole("dialog", { name: "ByteCore navigation" });
+  const navigation = await drawer.count()
+    ? drawer.getByRole("navigation", { name: "Primary", exact: true })
+    : page.locator(".store-navigation");
   assert.equal(await navigation.count(), 1);
   const active = navigation.locator('[aria-current="page"]');
   assert.equal(await active.count(), 1);
-  assert.equal(await active.getAttribute("href"), route.path);
+  if (route.path === "/account" && await active.evaluate((element) => element.tagName === "BUTTON")) {
+    assert.equal(await active.getAttribute("aria-haspopup"), "dialog");
+  } else {
+    assert.equal(await active.getAttribute("href"), route.path);
+  }
   assert.equal(await active.textContent(), route.label);
 }
 
 async function checkMobile(page, route) {
-  const menu = page.getByRole("button", { name: "Menu", exact: true });
+  const menu = page.locator(".store-mobile-trigger");
   await menu.focus();
   await menu.press("Enter");
   assert.equal(await menu.getAttribute("aria-expanded"), "true");
-  assert.equal(await menu.locator("svg.lucide-x").count(), 1);
-  const id = await menu.getAttribute("aria-controls");
-  assert.equal(await page.locator(`[id="${id}"]`).isVisible(), true);
+  const dialog = page.getByRole("dialog", { name: "ByteCore navigation" });
+  await dialog.waitFor();
+  assert.equal(await dialog.getAttribute("role"), "dialog");
+  await page.waitForFunction(() => document.activeElement?.closest('[role="dialog"]') !== null);
+  assert.equal(await page.locator("main").evaluate((element) => element.closest('[inert], [aria-hidden="true"]') !== null), true,
+    "Modal hides background content from assistive technology");
   await assertActive(page, route);
-  await inspect(page, route, true);
-  await page.keyboard.press("Tab");
-  const home = page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Home", exact: true });
+  const home = dialog.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Home", exact: true });
+  await home.focus();
   await assertFocus(home);
+  for (let i = 0; i < 9; i++) {
+    await page.keyboard.press("Tab");
+    assert.equal(await dialog.evaluate((element) => element.contains(document.activeElement)), true, "Focus stays in drawer");
+  }
+  await page.keyboard.press("Shift+Tab");
+  assert.equal(await dialog.evaluate((element) => element.contains(document.activeElement)), true);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.keyboard.press("Escape");
   assert.equal(await menu.getAttribute("aria-expanded"), "false");
-  assert.equal(await menu.locator("svg.lucide-menu").count(), 1);
+  await dialog.waitFor({ state: "hidden" });
   await assertFocus(menu);
-  assert.equal(await page.locator(`[id="${id}"]`).isVisible(), false);
   await menu.press("Space");
   assert.equal(await menu.getAttribute("aria-expanded"), "true");
-  await menu.press("Space");
+  await dialog.getByRole("button", { name: "Close navigation" }).click();
+  await dialog.waitFor({ state: "hidden" });
   assert.equal(await menu.getAttribute("aria-expanded"), "false");
-  await assertFocus(menu);
+  await assertFocused(menu);
   await menu.press("Enter");
-  const current = page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: route.label, exact: true });
+  const current = dialog.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: route.label, exact: true });
   await current.click();
+  await dialog.waitFor({ state: "hidden" });
   assert.equal(await menu.getAttribute("aria-expanded"), "false", "Same-route navigation closes the menu");
-  assert.equal(await menu.evaluate((element) => element === document.activeElement), true);
+  await assertFocused(menu);
   await menu.press("Enter");
-  const cart = page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Cart", exact: true });
-  await cart.focus();
-  await page.keyboard.press("Tab");
-  assert.equal(await page.evaluate(() => document.activeElement.closest("nav") === null), true, "No focus trap");
-  await page.keyboard.press("Escape");
-  // Escape applies within the disclosure, not to unrelated page controls.
-  await menu.focus();
-  await menu.press("Escape");
+  await dialog.waitFor();
+  const backdrop = page.locator(".store-drawer-backdrop");
+  const bounds = await backdrop.boundingBox();
+  await backdrop.click({ position: { x: bounds.width - 2, y: Math.min(bounds.height - 2, 250) } });
+  await dialog.waitFor({ state: "hidden" });
   assert.equal(await menu.getAttribute("aria-expanded"), "false");
+  await assertFocused(menu);
+  await inspect(page, route, true);
+}
+
+async function checkDesktopPopovers(page) {
+  for (const [buttonName, dialogName, linkName] of [
+    ["Categories", "Category navigation", "Catalog"],
+    ["Account", "Account navigation", "Account"],
+  ]) {
+    const button = page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: buttonName, exact: true });
+    await button.focus();
+    await button.press("Enter");
+    const dialog = page.getByRole("dialog", { name: dialogName });
+    await dialog.waitFor();
+    assert.notEqual(await dialog.getAttribute("aria-modal"), "true");
+    assert.equal(await page.getByRole("main").count(), 1, "Nonmodal popover leaves background exposed");
+    const link = dialog.getByRole("link", { name: linkName, exact: true });
+    await link.focus();
+    await assertFocus(link);
+    await page.keyboard.press("Escape");
+    await dialog.waitFor({ state: "hidden" });
+    await assertFocus(button);
+    await button.press("Space");
+    await dialog.waitFor();
+    await page.locator("h1").click();
+    await dialog.waitFor({ state: "hidden" });
+  }
+  const account = page.getByRole("button", { name: "Account", exact: true });
+  await account.click();
+  const dialog = page.getByRole("dialog", { name: "Account navigation" });
+  await dialog.getByRole("link", { name: "Account", exact: true }).focus();
+  await page.setViewportSize({ width: 390, height: 1000 });
+  await dialog.waitFor({ state: "hidden" });
+  await assertFocused(page.locator(".store-mobile-trigger"));
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.waitForFunction(() => document.activeElement?.closest(".store-desktop-nav") !== null);
 }
 
 async function verifyNavigation(page, mobile) {
   for (const route of routes) {
     if (mobile) await page.getByRole("button", { name: "Menu", exact: true }).click();
-    await page.getByRole("navigation", { name: "Primary", exact: true })
-      .getByRole("link", { name: route.label, exact: true }).click();
+    if (!mobile && route.label === "Account") {
+      await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Account", exact: true }).click();
+      await page.getByRole("dialog", { name: "Account navigation" }).getByRole("link", { name: "Account", exact: true }).click();
+    } else {
+      await page.locator(mobile ? ".store-mobile-panel" : ".store-navigation")
+        .getByRole("link", { name: route.label, exact: true }).click();
+    }
     await page.waitForURL(`${baseURL}${route.path}`);
     await page.getByRole("heading", { level: 1, name: route.heading, exact: true }).waitFor();
     await inspect(page, route, mobile);
@@ -190,18 +258,21 @@ async function verifyNavigation(page, mobile) {
   await page.waitForURL(`${baseURL}/`);
   await page.goBack();
   await page.waitForURL(`${baseURL}/cart`);
+  await page.getByRole("heading", { level: 1, name: "Cart", exact: true }).waitFor();
   if (mobile) {
     assert.equal(await page.getByRole("button", { name: "Menu", exact: true }).getAttribute("aria-expanded"), "false");
   }
   await page.goForward();
   await page.waitForURL(`${baseURL}/`);
+  await page.getByRole("heading", { level: 1, name: routes[0].heading, exact: true }).waitFor();
 }
 
 try {
   for (const colorScheme of ["light", "dark"]) {
     for (const width of [1440, 390, 320]) {
+      console.log(`Checking ${width}px/${colorScheme}`);
       const context = await browser.newContext({
-        viewport: { width, height: 1000 }, colorScheme, reducedMotion: "reduce",
+        viewport: { width, height: 1000 }, colorScheme, reducedMotion: "reduce", hasTouch: true,
       });
       await context.addInitScript(() => {
         window.__paintTime = null;
@@ -254,13 +325,27 @@ try {
       assert.equal(await page.evaluate(() => document.activeElement.id), "main-content");
       await page.locator(".store-brand").focus();
       await page.keyboard.press("Tab");
-      if (mobile) await assertFocus(page.getByRole("button", { name: "Menu", exact: true }));
-      else await assertFocus(page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Home", exact: true }));
+      await assertFocus(page.locator(".store-search-slot").getByRole("link", { name: "Search", exact: true }));
+      if (mobile) {
+        await page.keyboard.press("Tab");
+        await assertFocus(page.getByRole("button", { name: "Menu", exact: true }));
+      }
+      if (!mobile) await checkDesktopPopovers(page);
+      if (mobile) {
+        await page.locator(".store-mobile-trigger").tap();
+        await page.getByRole("dialog", { name: "ByteCore navigation" }).getByRole("button", { name: "Close navigation" }).tap();
+        await assertFocused(page.locator(".store-mobile-trigger"));
+      } else {
+        await page.getByRole("button", { name: "Categories", exact: true }).tap();
+        await page.getByRole("dialog", { name: "Category navigation" }).waitFor();
+        await page.locator("h1").tap();
+        await page.getByRole("dialog", { name: "Category navigation" }).waitFor({ state: "hidden" });
+      }
       await verifyNavigation(page, mobile);
       if (mobile) {
         const menu = page.getByRole("button", { name: "Menu", exact: true });
         await menu.click();
-        await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Catalog", exact: true }).focus();
+        await page.locator(".store-mobile-panel").getByRole("link", { name: "Catalog", exact: true }).focus();
         if (artifacts) await page.screenshot({ path: join(artifacts, `${width}-${colorScheme}-menu.png`), fullPage: true });
         await page.setViewportSize({ width: 1440, height: 1000 });
         await page.waitForFunction(() => document.activeElement?.closest(".store-desktop-nav") !== null);
@@ -289,7 +374,7 @@ try {
         assert.equal(frame.color, background);
         assert.equal(frame.scheme, "dark");
       }
-      results.push(`PASS ${width}px/${colorScheme}: routes, reloads, navigation, focus, skip link, dark paints, overflow${mobile ? ", disclosure/history/resize/reduced motion" : ""}`);
+      results.push(`PASS ${width}px/${colorScheme}: routes, reloads, navigation, focus, skip link, dark paints, overflow${mobile ? ", modal drawer/history/resize/reduced motion" : ", nonmodal popovers"}`);
       await context.close();
     }
   }
