@@ -15,8 +15,10 @@ design needs the checklist, not a review round.
 Paste or reference this in a storefront UI ticket prompt.
 
 > **Before coding** — read `docs/frontend/DESIGN.md` and look at the baseline
-> screenshots in `docs/frontend/baseline/`. Open the closest already-implemented
-> page and reuse its components, classes and tokens.
+> screenshots in `docs/frontend/baseline/`. **Check `docs/frontend/baseline/README.md`
+> for which existing captures your change will invalidate** — a shared header,
+> token or component affects screenshots owned by several tickets. Open the
+> closest already-implemented page and reuse its components, classes and tokens.
 >
 > **While coding** — compose the page yourself within the established design.
 > Use existing components (`PageContainer`, `UnavailablePage`, `.store-cta`,
@@ -27,9 +29,19 @@ Paste or reference this in a storefront UI ticket prompt.
 > Missing backend functionality stays visibly missing — no mocked data, fake
 > counts or simulated actions.
 >
-> **After coding** — look at the actual rendering at desktop and mobile widths,
-> not just the diff. Fix crowding, weak hierarchy, unnecessary panels and
-> inconsistent spacing before you call it done.
+> **After coding** — capture the running production build with Playwright at the
+> desktop and mobile widths and interaction states your ticket affects, into a
+> **temporary** directory. Inspect every capture alongside the working
+> interaction. Fix crowding, weak hierarchy, unnecessary panels and inconsistent
+> spacing, then recapture — never document a defect as the baseline.
+>
+> **Promote** only inspected, accepted captures into `docs/frontend/baseline/`,
+> named `issue-<ticket>-<route>-<viewport>-<state>.png`, replacing existing
+> files in place. Recapture any other screenshots your change invalidated,
+> update their manifest rows (including *Last updated by*), and delete
+> superseded files — in the same commit. Mark your new captures
+> **"Model-reviewed — awaiting owner approval"**; only the owner promotes them
+> to baseline.
 >
 > **Verify** — `bun run lint && bun run typecheck && bun run build`; keyboard
 > and focus behavior (tab order, Escape/backdrop dismissal, focus restoration);
@@ -39,7 +51,8 @@ Paste or reference this in a storefront UI ticket prompt.
 > dropping behavioral coverage.
 >
 > **Report** — in the issue, state what you built, any intentional departure
-> from `DESIGN.md` and why, which checks ran, and what remains unavailable.
+> from `DESIGN.md` and why, which checks ran, which screenshots you added or
+> refreshed, and what remains unavailable.
 
 ### Self-check before finishing
 
@@ -56,6 +69,12 @@ Paste or reference this in a storefront UI ticket prompt.
 - [ ] Loading state matches the real layout's dimensions; error state is actionable.
 - [ ] Nothing is simulated; unavailable features say so.
 - [ ] Lint, typecheck, build and the smoke script pass.
+- [ ] Captured the production build at the affected widths and states, and **looked at every image**.
+- [ ] Any defect found in a capture was fixed and recaptured — not documented as-is.
+- [ ] Promoted files use `issue-<ticket>-<route>-<viewport>-<state>.png` and replace existing names in place.
+- [ ] Screenshots invalidated by shared header/token/component changes were recaptured too.
+- [ ] Manifest rows updated (route, viewport, state, revision, covers, status, *Last updated by*); superseded files deleted.
+- [ ] New captures marked "Model-reviewed — awaiting owner approval", not "baseline".
 
 ---
 
@@ -70,11 +89,16 @@ routine edit.
 >
 > **Inputs:** ticket `#<N>`; the diff or changed files; screenshots of the result
 > at desktop and mobile widths, plus any relevant open overlay, loading or error
-> state.
+> state. The screenshots are named
+> `issue-<ticket>-<route>-<viewport>-<state>.png`, so each one tells you the
+> route, viewport and state it shows.
 >
-> **Reference:** `docs/frontend/DESIGN.md` (the approved design) and
-> `docs/frontend/baseline/` (approved-baseline screenshots). The baseline is the
-> owner-approved appearance — judge consistency against it.
+> **Reference:** `docs/frontend/DESIGN.md` (the approved design),
+> `docs/frontend/baseline/` (screenshots) and `docs/frontend/baseline/README.md`
+> (the manifest: what each image covers and whether it is owner-approved or only
+> model-reviewed). Judge consistency against the **owner-approved** images.
+> A capture marked "Model-reviewed — awaiting owner approval" is the work under
+> review, not a standard to measure against.
 >
 > **Review for, in priority order:**
 > 1. Functional and accessibility defects — unreachable or unlabelled controls,
@@ -87,6 +111,10 @@ routine edit.
 > 4. Consistency with the established design — tokens, control sizing, spacing
 >    steps, surface and accent usage, reuse of existing components.
 > 5. Composition — crowding, misalignment, unnecessary panels, uneven rhythm.
+> 6. Screenshot hygiene — do the supplied captures actually cover the states the
+>    ticket changed? Were captures invalidated elsewhere (shared header, token
+>    or component) refreshed? Are names and manifest rows correct? Missing or
+>    stale evidence is itself a finding.
 >
 > **Rules:**
 > - Report each issue with its **location** (file and line, or the screenshot and
@@ -102,6 +130,8 @@ routine edit.
 >   composition is not a defect. A broken convention is — unless the
 >   implementer explained the departure, in which case judge the explanation.
 > - If you find nothing above Preference level, say so plainly.
+> - Your review does **not** constitute owner approval. Captures stay
+>   "Model-reviewed — awaiting owner approval" until the owner says otherwise.
 >
 > **Output:** a short summary verdict, then a table of
 > `Severity | Location | Issue | User impact | Suggested correction`, then any

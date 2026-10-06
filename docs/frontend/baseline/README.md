@@ -1,53 +1,89 @@
-# Approved baseline screenshots
+# Baseline screenshots — manifest
 
-Owner-approved storefront appearance, captured from the **running production
-build** at commit `aef4673` (`dev`). These are design documentation — they are
-not runtime assets and must never be moved into `frontend/public/`.
+Persistent visual documentation of the storefront, captured from the **running
+production build** with Playwright. These are documentation assets: they stay
+outside `frontend/public/`, are never served at runtime, and are not
+product-image assets.
 
-Inspect these before changing storefront UI, and compare against them after.
-See [`../DESIGN.md`](../DESIGN.md) for the reasoning behind what they show.
+Read [`../DESIGN.md`](../DESIGN.md) for the design these images record, and its
+*Screenshot lifecycle* section for the rules this manifest implements.
 
-## Capture settings
+## Status vocabulary
 
-Shared by every image: Chromium 153 (Playwright 1.63), `deviceScaleFactor: 1`,
-`colorScheme: "light"` (deliberate — the storefront is fixed-dark via
-`data-theme="dark"`, so a light OS preference proves the theme is not
-preference-driven), `prefers-reduced-motion` unset, no authentication, no
-backend running.
+| Status | Meaning |
+|---|---|
+| **Owner-approved baseline** | The owner explicitly approved this appearance. Treat as the reference. Never overwrite it with an uninspected or known-broken capture. |
+| **Model-reviewed — awaiting owner approval** | Captured and visually inspected by the implementer; no owner sign-off. Usable as evidence, not as an authority. |
+| **Stale** | Known not to match current `dev`. The reason is recorded in the entry. Must not be presented as current. |
 
-| File | Route | Viewport | State |
-|---|---|---|---|
-| `01-home-desktop-1440.png` | `/` | 1440×900, full page | Default. Temporary holding page (#86 replaces it). |
-| `02-home-mobile-390.png` | `/` | 390×844, full page | Default mobile shell: wordmark, Search, Menu. |
-| `03-catalog-popover-desktop-1440.png` | `/` | 1440×900 | Catalog popover open (clicked the `Catalog` trigger). |
-| `04-account-popover-desktop-1440.png` | `/` | 1440×900 | Account popover open (clicked the `Account` trigger). |
-| `05-navigation-drawer-mobile-390.png` | `/` | 390×844 | Mobile navigation drawer open (clicked `Menu`). |
-| `06-catalog-unavailable-desktop-1440.png` | `/catalog` | 1440×900, full page | `UnavailablePage` — the honest not-yet-built route pattern. |
-| `07-header-narrow-320.png` | `/` | 320×640 | Narrow-width header. Below 22rem the Search label is visually hidden while keeping its accessible name. |
+Passing tests, or the mere existence of a capture, **never** establishes owner
+approval.
 
-No console errors, runtime errors or hydration warnings occurred during capture.
+## Naming
 
-## Reproducing
+`issue-<ticket>-<route>-<viewport>-<state>.png`
+
+- `<ticket>` — the **owning** ticket: the one whose implementation created the
+  view. It stays the same when the image is later refreshed; the refreshing
+  ticket goes in the *Last updated by* column.
+- `<route>` — route slug (`home`, `catalog`, `product`, `cart`, `checkout`).
+- `<viewport>` — `desktop-1440`, `mobile-390`, `narrow-320`, …
+- `<state>` — `default`, `catalog-popover-open`, `drawer-open`, `loading`,
+  `empty`, `error`, `unavailable`, …
+
+Names are **stable**. Replace the file in place. No timestamps, no `-v2`, no
+`-final`, no numbered copies.
+
+## Current set
+
+Source revision for every entry below: **`aef4673`** on `dev` (the shell as
+corrected in #61). Shared capture settings: Chromium 153 (Playwright 1.63),
+`deviceScaleFactor: 1`, `colorScheme: "light"` — deliberate, since the
+storefront is fixed-dark via `data-theme="dark"`, so a light OS preference
+proves the theme is not preference-driven. `prefers-reduced-motion` unset.
+
+**Data prerequisites: none.** No backend, database or authentication is
+required — every route currently renders static or honest-unavailable content.
+This changes from #63 onward: catalog, product and cart captures will need
+seeded data, and their entries must record exactly what.
+
+| File | Owns | Route | Viewport | State | Covers | Status | Last updated by |
+|---|---|---|---|---|---|---|---|
+| `issue-61-home-desktop-1440-default.png` | #61 | `/` | 1440×900, full page | Default | `StoreHeader`, `StoreBrand`, `StoreNavigation`, `PageContainer`, `StoreFooter`, temporary home page (#86 replaces it) | Owner-approved baseline | #61 |
+| `issue-61-home-mobile-390-default.png` | #61 | `/` | 390×844, full page | Default | Mobile shell (wordmark, Search, Menu), stacked home composition, footer | Owner-approved baseline | #61 |
+| `issue-61-home-desktop-1440-catalog-popover-open.png` | #61 | `/` | 1440×900 | Catalog popover open | `StoreNavigation` desktop popover, `.store-popover`, accent catalog trigger | Owner-approved baseline | #61 |
+| `issue-61-home-desktop-1440-account-popover-open.png` | #61 | `/` | 1440×900 | Account popover open | `StoreNavigation` ghost trigger + popover, quiet secondary-action treatment | Owner-approved baseline | #61 |
+| `issue-61-home-mobile-390-drawer-open.png` | #61 | `/` | 390×844 | Navigation drawer open | `StoreNavigation` mobile `Drawer`, `.store-drawer-*`, `.store-close` | Owner-approved baseline | #61 |
+| `issue-61-catalog-desktop-1440-unavailable.png` | #61 | `/catalog` | 1440×900, full page | Unavailable | `UnavailablePage` — the shared not-yet-built route pattern | Owner-approved baseline | #61 |
+| `issue-61-home-narrow-320-default.png` | #61 | `/` | 320×640 | Default | Narrow-width header rules: below 22rem the Search label is visually hidden while keeping its accessible name | Owner-approved baseline | #61 |
+
+No console, runtime or hydration errors occurred during capture.
+
+## Capture procedure
 
 Playwright is **not** a project dependency — installing it would change
 `package.json`/`bun.lock`. Install it outside the repository:
 
 ```bash
-# once, outside the repo
 mkdir -p /tmp/bytecore-pw && cd /tmp/bytecore-pw
 npm install playwright          # browsers cache in ~/.cache/ms-playwright
 ```
 
+Serve the production build — not `next dev`, so the capture matches what ships:
+
 ```bash
-# serve the production build
 cd frontend
 bun run build
 PORT=3100 bun start
 ```
 
-Then drive the seven captures with a short script against
-`http://127.0.0.1:3100`, using accessible-name selectors so the script does not
-depend on markup details:
+Capture into a **temporary** directory first, never straight into this one:
+
+```bash
+OUT=/tmp/shots FRONTEND_URL=http://127.0.0.1:3100 node /tmp/bytecore-pw/capture.mjs
+```
+
+Use accessible-name selectors so the script does not depend on markup details:
 
 ```js
 page.getByRole("button", { name: /^Catalog/ })   // catalog popover
@@ -56,11 +92,28 @@ page.getByRole("button", { name: /^Menu/ })      // mobile drawer
 page.getByRole("banner")                          // header — never page.locator("header")
 ```
 
-Capture `01`, `02` and `06` with `fullPage: true`; the overlay states with the
-default viewport clip.
+Use `fullPage: true` for whole-page views and the default viewport clip for
+overlay states, so the overlay is not dwarfed by an empty page.
 
-## Refreshing
+Then **inspect every file**, alongside the working interaction in a real
+browser. Only after inspection, copy the accepted files over their existing
+names here and update the affected rows above in the same commit. Intermediate,
+before and debug captures stay in the temporary directory unless an issue report
+genuinely needs them as before/after evidence.
 
-Replace an image only when the UI it shows has intentionally changed, and update
-the row above in the same commit. Keep the set small — add a new image only for
-a genuinely new state worth preserving, not for every page.
+## Before editing UI — consult this manifest
+
+A ticket ID marks **ownership, not exclusive coverage**. Changing the shell, a
+shared token or a shared component invalidates captures owned by several
+tickets. Check the *Covers* column, recapture every affected route and state,
+update those rows, and delete any file the change supersedes.
+
+If a capture cannot be reproduced — missing data, a removed route, a broken
+dependency — mark the row **Stale** with the reason. Do not leave it presented
+as current.
+
+Backend-only changes need a recapture only when they change visible UI behavior
+or invalidate the data a capture depends on.
+
+Keep the set small and representative: add an image only for a genuinely new
+state worth preserving, not for every page or every breakpoint.

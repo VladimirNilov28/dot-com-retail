@@ -371,6 +371,85 @@ Recorded so they aren't mistaken for bugs or silently "fixed":
 
 ---
 
+## 8. Screenshot lifecycle
+
+Baseline screenshots are **documentation under version control**, not
+throwaway artifacts. They only stay useful if they are treated as owned,
+inspected and maintained. The full rules and the current set live in
+[`baseline/README.md`](baseline/README.md); the essentials:
+
+### Naming — convention
+
+`issue-<ticket>-<route>-<viewport>-<state>.png`
+
+```
+issue-63-catalog-desktop-1440-default.png
+issue-73-cart-mobile-390-drawer-open.png
+issue-61-home-desktop-1440-catalog-popover-open.png
+```
+
+The ticket is the **owning** ticket — the one whose implementation created the
+view. Names are **stable**: replace the file in place. No timestamps, no `-v2`,
+no `-final`, no numbered copies. A diff should show an image changing, not the
+set growing.
+
+### Capture and review — convention
+
+1. After implementing a UI ticket, capture the **actual running app** with
+   Playwright — the production build, at the desktop and mobile widths and the
+   interaction states the ticket actually affects.
+2. **Inspect every capture**, alongside the working interaction in a real
+   browser. A screenshot proves rendering, not usability.
+3. If a capture reveals a visual defect, **fix the implementation and
+   recapture** the affected states. Do not document the defect as the baseline.
+4. Capture to a temporary directory and promote only inspected, accepted files
+   into `baseline/`. **Never overwrite an accepted baseline with a
+   known-broken or uninspected result.** Intermediate, before and debug
+   captures stay temporary unless an issue report genuinely needs them as
+   before/after evidence.
+5. Keep only the final inspected captures in `baseline/`.
+
+### Approval — convention
+
+Two distinct states, both recorded in the manifest:
+
+- **Model-reviewed — awaiting owner approval:** captured and inspected by the
+  implementer. Legitimate evidence in an issue report; not an authority.
+- **Owner-approved baseline:** the owner explicitly approved this appearance.
+  The reference the next change is judged against.
+
+**Passing lint, typecheck, the build or the smoke script does not establish
+owner approval. Neither does taking a screenshot.** Only the owner's explicit
+approval promotes a capture to baseline. The current `issue-61-*` set is
+owner-approved.
+
+### Recapture — convention
+
+**Before editing UI, read the manifest and identify which captures your change
+affects.**
+
+A ticket ID marks **ownership, not exclusive coverage**. Editing the shell, a
+shared token in `globals.css` or a shared component invalidates captures owned
+by several different tickets — a change to `--control-height` or `StoreHeader`
+touches every image in the set.
+
+- Recapture every affected route and state, update those manifest rows, and
+  delete any file the change supersedes — all in the same commit as the UI
+  change.
+- A **new page** uses its implementation ticket's ID. An **existing capture
+  keeps its owning ticket ID** when refreshed; record the refreshing ticket in
+  the manifest's *Last updated by* column.
+- If a capture cannot be reproduced (missing data, removed route, broken
+  dependency), mark it **Stale** in the manifest with the reason. Do not
+  silently present a stale image as current.
+- Backend-only changes need a recapture only when they change visible UI
+  behavior or invalidate the data a capture depends on.
+
+Keep the set small and representative. Add an image only for a genuinely new
+state worth preserving.
+
+---
+
 ## Verifying a UI change
 
 ```bash
@@ -388,3 +467,6 @@ bun scripts/storefront-smoke.mjs
 dismissal, focus restoration, breakpoint focus transfer, dark first paint, no-JS
 rendering, overflow and a real 200% zoom pass. **Update its assertions when you
 intentionally change markup; don't delete scenarios to make it pass.**
+
+Then capture, inspect and promote screenshots per §8, and update
+[`baseline/README.md`](baseline/README.md) in the same commit.
