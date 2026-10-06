@@ -33,7 +33,7 @@ export async function CatalogPageContent({ slug, parameters }: {
     <div className={`catalog-page catalog-${state.view}`}>
       <nav aria-label="Breadcrumb" className="catalog-breadcrumb">
         <Link href="/" className="store-link">Home</Link><span aria-hidden="true">/</span>
-        {category ? <CatalogLink href="/catalog" className="store-link">Catalog</CatalogLink> : <span aria-current="page">Catalog</span>}
+        {category ? <CatalogLink href={catalogHref(undefined, 1, state.view)} className="store-link">Catalog</CatalogLink> : <span aria-current="page">Catalog</span>}
         {trail.map((ancestor) => <span key={ancestor.id} className="contents">
           <span aria-hidden="true">/</span><CatalogLink href={catalogHref(ancestor.slug, 1, state.view)} className="store-link">{ancestor.name}</CatalogLink>
         </span>)}

@@ -90,6 +90,10 @@ try {
     await page.waitForURL(`${base}/catalog/computers?view=list`); await loaded(page);
     assert.match(await page.locator("ul.catalog-products .product-card").textContent(), /Modular Computer Kit.*Price unavailable.*Availability unknown/);
     assert.equal(await page.locator("ul.catalog-products .product-card").count(), 1, "Parent includes direct members only");
+    await page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Catalog", exact: true }).click();
+    await page.waitForURL(`${base}/catalog?view=list`);
+    await loaded(page);
+    assert.equal(await page.getByRole("button", { name: "List view" }).getAttribute("aria-pressed"), "true");
     await page.goto(`${base}/catalog/gaming`); await loaded(page);
     assert.equal(await page.locator("ul.catalog-products .product-card").count(), 0);
     assert.equal(await page.getByRole("list", { name: "Products" }).count(), 0);
