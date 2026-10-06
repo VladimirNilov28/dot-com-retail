@@ -9,11 +9,17 @@ screenshots in [`baseline/`](baseline/) ([manifest](baseline/README.md)).
 
 For a **new kind of page** with no implemented ByteCore precedent — a listing, a
 product page, a cart, a checkout step, an auth form — also study the third-party
-store references in [`.claude/references/`](../../.claude/references/)
-([what each one shows](../../.claude/references/README.md)). They are a pattern
-brief, never a baseline: take hierarchy, density and interaction ideas, not
-branding, colour or layout. Neither reference is a dark storefront — the
-structure transfers, the surface treatment does not.
+store references in [`docs/references/`](../references/)
+([indexed by file, state and ticket](../references/README.md)). They cover much
+of the same journey in **three** stores at different densities — arvutitark.ee
+(dark, the closest analogue, and the most complete journey here),
+iDeal/shop.cec.ee (restrained) and 1a.ee (dense).
+
+They are third-party inspiration, never a ByteCore baseline: take hierarchy,
+density and interaction ideas, not branding, colour or layout, and treat them as
+alternatives rather than requirements. Only arvutitark is dark; from the other
+two, structure transfers but surface treatment does not. Their product
+photography is not a source of runtime assets — see the image policy in §6.
 
 - Narrative history of the correction: [`frontend/README.md`](../../frontend/README.md) → *#61 visual correction*
 - Shared delivery/design contract: issue #94
@@ -241,7 +247,10 @@ Behavior that must survive any shell change:
 
 **Choose modal or nonmodal deliberately, and verify against that choice.** The
 two are not interchangeable, and a generic "overlays trap focus" checklist is
-wrong here:
+wrong here. The choice is about **behavior, not appearance**: size, elevation
+and a dimmed backdrop are presentation, and none of them requires modality.
+Decide by whether the surface should contain focus and block interaction with
+the page behind it.
 
 - **Modal** (the mobile drawer): contains focus, makes the background `inert`,
   dismisses on Escape and backdrop, and restores focus to the trigger or a
@@ -321,25 +330,37 @@ Guidance, not wireframes. Choose your own composition; these are the constraints
 that keep it consistent.
 
 Each section below names the most useful reference captures in
-[`.claude/references/`](../../.claude/references/) — study how those pages
-prioritise and pace information, then design ByteCore's version in this theme.
-Don't reproduce them. The set covers two stores at opposite densities (iDeal
-restrained, 1a.ee dense); ByteCore sits much nearer the restrained end today, so
-when they disagree prefer the quieter solution unless real data justifies the
-density.
+[`docs/references/`](../references/) — study how those pages prioritise and pace
+information, then design ByteCore's version in this theme. Don't reproduce them.
+
+The set covers three stores: **arvutitark.ee** (dark, the closest analogue, and
+the most complete journey), **iDeal** (restrained) and **1a.ee** (dense). Start
+with arvutitark when you need to see a pattern working in a dark theme. Where
+they disagree, each is a legitimate alternative — choose by what ByteCore's real
+content and feature state justify, not by what the references happen to have.
+With little catalogue depth today, the quieter answer is usually the right
+starting point, but that is a judgement about our content, not a rule.
 
 ### Catalog and search (#63, #64)
 
-*References: `iDeal_product_list` is where #63 should start — page title above a
-breadcrumb, a category tree shown in context on the left, a light toolbar with
-sort and a grid/list toggle, and **no filters at all**. `1a_product_list` is
-where #64 eventually lands — result count, refining chips, page-size selector,
-and a heavily faceted rail. Build the first, not the second. For the category
-**navigation** itself, `iDeal_top_nav_bar_1–5` show a full-width panel with three
-labelled column groups (a fixed template, plain text links, no icons or promo
-imagery); `1a_catalog` shows the sidebar-plus-flyout alternative that scales to a
-deeper taxonomy. Both references are light themes — take the structure, not the
-white cards.*
+*References, for **listing (#63)**: `arvutitark_products_list` shows a dark page
+header over a light results panel, with one toolbar carrying page size,
+pagination, a view toggle, sort and a result count. `iDeal_product_list` shows
+the same job with a category tree in context and **no facets at all**.
+`1a_product_list` shows **search with facets (#64)** — result count, refining
+chips, page-size selector and a filter rail. These are three points on a scale,
+not a sequence to work through: how much of it ByteCore needs depends on how
+large and varied the real catalogue turns out to be.*
+
+*For **category navigation**: `arvutitark_products_catalog_dropdown` is the
+dark-theme example; `iDeal_top_nav_bar_1`–`_5` show a fixed labelled-column
+template holding steady across sparse and long categories; `1a_catalog` shows a
+persistent sidebar with a flyout, which suits a deep taxonomy. Any of these, or
+something else entirely, can work — none is required.*
+
+*For **live suggestions (#64)**: `arvutitark_search_on_main_page` shows one panel
+split into labelled `PRODUCTS` and `CATEGORIES` sections as plain text rows, with
+no thumbnails or prices.*
 
 - **Convention:** results sit directly on the background, separated by borders
   and spacing. A filled card per product will look heavy in this theme.
@@ -356,14 +377,19 @@ white cards.*
 
 ### Product detail (#65)
 
-*References: `iDeal_product_page` — breadcrumb, SKU above the title, a gallery
-with a thumbnail rail, and a separate purchase panel on the right. Variant
-selection is its own bordered group (colour swatches with labels, storage as
-chips), the closest model for the variant dimensions in #97. Delivery and
-trade-in information sits *below* the purchase decision rather than competing
-with it. `1a_product_page_description` answers "where does all the detail go":
-long specifications as tabbed, three-column label/value tables well below the
-purchase panel.*
+*References: `arvutitark_product_page` — gallery, a main column with key-spec
+chips and prose, and a bordered purchase panel, with delivery and availability in
+a separate lighter panel **below** it. `iDeal_product_page` shows variant
+selection as its own bordered group (colour swatches with labels, storage as
+chips) — the closest model for the variant dimensions in #97 — and likewise puts
+delivery and trade-in information below the purchase decision.
+`1a_product_page` is the dense counterpart, still with a single clear primary.*
+
+*For long specifications, two workable treatments:
+`arvutitark_product_page_description` stacks full-width label/value tables under
+plain headings; `1a_product_page_description` uses tabs and three columns. The
+stacked version is simpler — prefer it unless the content genuinely needs
+separating.*
 
 - The gallery and the purchase panel are the two anchors; everything else is
   secondary.
@@ -376,13 +402,17 @@ purchase panel.*
 
 ### Forms (#66–#68, #71, #74)
 
-*References: `iDeal_registration` — one column, grouped into labelled fieldsets
-inside a card, primary action with a quiet secondary beside it. `IDeal_login` —
-a narrow form card next to a visually quieter panel whose only content is the
-secondary "create an account" path. `1a_login` ranks the same two paths the
-other way round, inside one card. All of them rank the paths rather than giving
-them equal weight. `1a_registration` is a warning: its consent and legal text
-outweighs the form itself — keep #66's consent handling honest but far shorter.*
+*References, for **sign-in (#66)**: `IDeal_login` puts a narrow form card beside
+a visually quieter panel whose only content is the secondary "create an account"
+path; `1a_login` ranks the same two paths the other way round inside one card,
+with federated sign-in detached alongside. Both rank the paths rather than
+weighting them equally — which one leads is a choice, not a rule.*
+
+*For **registration (#67)**: `iDeal_registration` is one column grouped into
+labelled fieldsets inside a card, with a primary action and a quiet secondary
+beside it. `1a_registration` is a warning rather than a model — its consent and
+legal text outweighs the form itself. Keep #67's CAPTCHA and consent handling
+honest but far shorter.*
 
 - **Convention:** use HeroUI form components. They carry label association,
   description/error wiring and focus styling already.
@@ -394,19 +424,35 @@ outweighs the form itself — keep #66's consent handling honest but far shorter
 
 ### Cart and checkout (#73, #74)
 
-*References: `iDeal_Shopping_Cart` — line items as rows (thumbnail · name ·
-chosen variant attributes as quiet label/value pairs · a small price/quantity/
-subtotal block · a plain remove link), a totals panel on the right with the tax
-breakdown, a primary checkout action with a quiet "return to store" beside it,
-and a separate promo-code box. Note also what makes it heavy: per-item warranty
-and protection-plan radio lists. ByteCore has no such upsell — keep the line
-simple. `1a_shopping_cart_empty` is the more immediately useful one: an **empty
-cart** that keeps the page's structure (column headers, delivery panel, totals
-reading `0,00 €`), says plainly that it is empty, disables the forward action
-and offers a way back to the catalog. `iDeal_main_page_2` shows a cart count
-badge on the header icon, the affordance #73 needs. No capture covers the
-checkout steps themselves; design those from the conventions above and note any
-reference you add in `.claude/references/README.md`.*
+*References, for the **cart page (#73)**: `arvutitark_shopping_cart_page` ranks
+two forward paths — a solid "buy as a guest" above a quiet "log in" — beside a
+summary panel. `iDeal_Shopping_Cart` shows line items as rows with the chosen
+variant attributes as quiet label/value pairs, and a totals panel with the tax
+breakdown; note also what makes it heavy, per-item warranty radio lists that
+ByteCore has no equivalent of. `1a_shopping_cart` puts totals below instead of
+beside. `1a_shopping_cart_empty` is the **empty cart**, and the most immediately
+useful of them: it keeps the page's structure, says plainly that it is empty,
+disables the forward action and offers a way back to the catalog.*
+
+*For the **global cart preview (#73)**:
+`arvutitark_shopping_cart_left_rail_popup_variant` shows a side panel that
+summarises lines and totals and offers one way forward without duplicating the
+cart page. `iDeal_main_page_2` and `iDeal_product_list` show the simpler
+affordance — a count badge on the header icon, including an honest `0`. For
+**add-to-cart feedback**, `arvutitark_success_moveing_item_to_cart_with_suggestions`
+offers only the forward path, while
+`1a_success_moveing_item_to_cart_with_suggestions` ranks "continue shopping"
+against "view cart"; both confirm in place rather than navigating away.*
+
+*For **checkout (#74)**: `arvutitark_payment_workflow` is a **single page** —
+shipping, payment and contact details as stacked bordered cards beside a
+persistent order summary, under a reduced header — which matches #74's
+single-page scope. The three `1a_payment_workflow*` captures show the multi-step
+alternative (a step indicator, navigation removed entirely, one decision per
+step, a dependent sub-form appearing in place when a delivery method is chosen).
+Read the 1a captures for how each step is composed rather than as an argument for
+splitting the flow. These describe only what the captures show, not how those
+sites behave underneath.*
 
 - The order summary is reference information — keep it quiet. *Checkout* /
   *Place order* is the emphasis.
@@ -421,12 +467,15 @@ reference you add in `.claude/references/README.md`.*
 
 ### Home and merchandising (#86)
 
-*References: `iDeal_main_page_2` — a horizontally scrollable row of product-type
-entries (image above a plain text label, no cards or borders) acting as the real
+*References: `arvutitark_main_page` — promo cards, then a row of category tiles,
+then promoted products, with content lifting onto a light panel; the dark-theme
+example. `iDeal_main_page_2` — a horizontally scrollable row of product-type
+entries (image above a plain text label, no cards or borders) acting as the
 catalog entry point, then a small number of featured products with one action
 each. `iDeal_main_page_1` shows the opposite emphasis: a single full-bleed hero.
 `1a_main_page` shows the cost of the dense approach — four full-width bands
-before any content.*
+before any content. `arvutitark_footer` is useful for #87, once there are real
+policy pages to link.*
 
 - The current home page is a **temporary holding composition**, not a design to
   preserve. #86 replaces it outright.
@@ -458,11 +507,14 @@ Recorded so they aren't mistaken for bugs or silently "fixed":
 - **Popover content is intentionally sparse.** Both popovers state what is not
   available instead of listing invented destinations. Replace the copy when the
   feature is real — don't pad it. When #63 brings real categories, the Catalog
-  panel will likely need to grow into a grouped, wider layout
-  (`iDeal_top_nav_bar_1–5` in [`.claude/references/`](../../.claude/references/)
-  show the pattern). That is a deliberate change of overlay semantics, not a
-  cosmetic one — re-decide modal vs nonmodal and verify the focus and dismissal
-  behavior that follows.
+  panel will likely need a grouped, wider layout
+  (`arvutitark_products_catalog_dropdown` and `iDeal_top_nav_bar_1`–`_5` in
+  [`docs/references/`](../references/) show two versions of it). **Growing the
+  panel is a layout change and does not by itself change its semantics** — a
+  wider surface, or one with a dimmed backdrop, can still be nonmodal. Keep it
+  nonmodal unless you decide it should contain focus and block background
+  interaction; if you do decide that, make it an explicit choice in that ticket
+  and verify the focus and dismissal behavior that follows.
 
 ---
 

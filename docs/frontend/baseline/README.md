@@ -8,9 +8,11 @@ product-image assets.
 Read [`../DESIGN.md`](../DESIGN.md) for the design these images record, and its
 *Screenshot lifecycle* section for the rules this manifest implements.
 
-Not to be confused with [`.claude/references/`](../../../.claude/references/),
+Not to be confused with [`docs/references/`](../../references/),
 which holds third-party electronics-store captures used as a **pattern brief**.
-Those are not ByteCore and are never a baseline.
+Those are not ByteCore, are never a baseline, carry no approval status, and do
+not follow the naming or recapture rules below — their filenames are the
+owner's.
 
 ## Status vocabulary
 

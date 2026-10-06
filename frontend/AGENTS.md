@@ -24,11 +24,15 @@ backend work, GraphQL transport, tooling and config.
    and tokens.
 2. **For a new kind of page** with no ByteCore precedent (listing, product,
    cart, checkout, auth form), also study the third-party store captures in
-   [`.claude/references/`](../.claude/references/) — its
-   [README](../.claude/references/README.md) says what each one shows and which
-   ticket it suits. Take hierarchy, density and interaction patterns only; never
-   branding, colour, copy or wholesale layout. They cover two stores at opposite
-   densities and neither is a dark theme — they are a brief, not a baseline.
+   [`docs/references/`](../docs/references/) — its
+   [README](../docs/references/README.md) indexes each one by page, interaction
+   state and relevant ticket. They cover three stores — arvutitark (dark, the
+   closest analogue), iDeal (restrained) and 1a.ee (dense). Take hierarchy,
+   density and interaction patterns only; never branding, colour, copy or
+   wholesale layout. They are alternatives, not requirements: nothing there
+   mandates a sidebar, a mega-menu, a column count or extra functionality. They
+   are third-party inspiration, never a ByteCore baseline, and they do not
+   follow the capture lifecycle in steps 4–6.
 3. **Compose it yourself** within that design. `DESIGN.md` separates
    conventions from examples — follow the conventions, choose your own layout.
    Don't add wrapper components, a design-system layer or new colour/size values

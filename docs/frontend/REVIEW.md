@@ -19,9 +19,11 @@ Paste or reference this in a storefront UI ticket prompt.
 > for which existing captures your change will invalidate** — a shared header,
 > token or component affects screenshots owned by several tickets. If this is a
 > new kind of page with no ByteCore precedent, also study the third-party store
-> references in `.claude/references/` (see its README for what each one shows) —
-> patterns and density only, never branding or layout. Open the closest
-> already-implemented page and reuse its components, classes and tokens.
+> references in `docs/references/` — its README indexes every capture by page,
+> interaction state and relevant ticket. Patterns and density only, never
+> branding or layout, and treat them as alternatives rather than requirements.
+> Open the closest already-implemented page and reuse its components, classes
+> and tokens.
 >
 > **While coding** — compose the page yourself within the established design.
 > Use existing components (`PageContainer`, `UnavailablePage`, `.store-cta`,
@@ -107,9 +109,11 @@ routine edit.
 > model-reviewed). Judge consistency against the **owner-approved** images.
 > A capture marked "Model-reviewed — awaiting owner approval" is the work under
 > review, not a standard to measure against.
-> `.claude/references/` holds third-party electronics-store captures used as a
-> pattern brief. Use them to judge whether hierarchy and density are plausible
-> for a store — **never** to require that ByteCore resemble them.
+> `docs/references/` holds third-party electronics-store captures (arvutitark,
+> iDeal and 1a.ee) used as a pattern brief. Use them to judge whether hierarchy
+> and density are plausible for a store — **never** to require that ByteCore
+> resemble them, adopt a layout they happen to use, or add functionality they
+> have. They are not baselines and carry no approval status.
 >
 > **Review for, in priority order:**
 > 1. Functional and accessibility defects — unreachable or unlabelled controls,
