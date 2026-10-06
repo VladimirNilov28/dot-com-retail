@@ -4,6 +4,7 @@ import { failure } from "./errors";
 
 export interface HiveConfig { endpoint: string; origin: string }
 export type RequestContext =
+  | { kind: "public" }
   | { kind: "guest"; cookieHeader?: string }
   | { kind: "authenticated"; accessToken: string; guestCookieHeader?: string };
 
@@ -77,11 +78,15 @@ export async function requestHive<Data, Variables>(
   if (operation.access === "authenticated" && context.kind !== "authenticated") {
     return { result: { status: "failure", error: failure("unauthenticated", false) }, setCookies };
   }
+  if (operation.access === "guest" && context.kind === "public") {
+    return { result: { status: "failure", error: failure("validation", false) }, setCookies };
+  }
   if (operation.access === "guest") {
     headers.set("Origin", config.origin);
     headers.set("X-Guest-Cart-Request", "1");
     try {
-      const cookie = guestCookies(context.kind === "guest" ? context.cookieHeader : context.guestCookieHeader);
+      const cookie = guestCookies(context.kind === "guest" ? context.cookieHeader :
+        context.kind === "authenticated" ? context.guestCookieHeader : undefined);
       if (cookie) headers.set("Cookie", cookie);
     } catch (error) {
       if (!(error instanceof TypeError)) throw error;
@@ -97,6 +102,10 @@ export async function requestHive<Data, Variables>(
   const result = await execute(operation, variables, {
     ...options, endpoint: config.endpoint, headers,
     onResponse(response) {
+      if (operation.access === "public") {
+        if (response.headers.has("Set-Cookie")) throw new TypeError("Public read returned credentials");
+        return;
+      }
       setCookies.push(...responseCookies(response.headers, config.origin.startsWith("https://")));
     },
   });

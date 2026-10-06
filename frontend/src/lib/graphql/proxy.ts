@@ -1,5 +1,5 @@
 import { failure, type SafeFailure } from "./errors";
-import { guestOperations, type Operation } from "./operations";
+import { guestOperations, publicOperations, type Operation } from "./operations";
 import { object, parseJson, serializeJson } from "./scalars";
 import { requestHive, type HiveConfig } from "./server-transport";
 import { boundedText, type Result } from "./transport";
@@ -29,8 +29,7 @@ export function proxyFailure(error: SafeFailure, status: number) {
 
 export async function handleGuestRequest(request: Request, config: HiveConfig, fetcher: typeof fetch = fetch) {
   if (request.method !== "POST") return proxyFailure(failure("validation", false), 405);
-  if (request.headers.get("Origin") !== config.origin ||
-      request.headers.get("X-Guest-Cart-Request") !== "1" ||
+  if ((request.headers.has("Origin") && request.headers.get("Origin") !== config.origin) ||
       request.headers.get("Authorization")) {
     return proxyFailure(failure("forbidden", false), 403);
   }
@@ -52,6 +51,10 @@ export async function handleGuestRequest(request: Request, config: HiveConfig, f
     return proxyFailure(failure("validation", false), 400);
   }
   async function dispatch<Data, Variables>(operation: Operation<Data, Variables>) {
+    if (operation.access === "guest" && (request.headers.get("Origin") !== config.origin ||
+        request.headers.get("X-Guest-Cart-Request") !== "1")) {
+      return proxyFailure(failure("forbidden", false), 403);
+    }
     if (envelope.query !== operation.source) return proxyFailure(failure("validation", false), 400);
     let variables: Variables;
     try {
@@ -60,7 +63,8 @@ export async function handleGuestRequest(request: Request, config: HiveConfig, f
       if (!(error instanceof TypeError)) throw error;
       return proxyFailure(failure("validation", false), 400);
     }
-    const { result, setCookies } = await requestHive(operation, variables, config, {
+    const { result, setCookies } = await requestHive(operation, variables, config, operation.access === "public" ?
+      { kind: "public" } : {
       kind: "guest", cookieHeader: request.headers.get("Cookie") ?? undefined,
     }, { fetch: fetcher, signal, timeoutMs: Math.max(1, 10_000 - (Date.now() - started)) });
     return jsonResponse(result, setCookies);
@@ -69,5 +73,8 @@ export async function handleGuestRequest(request: Request, config: HiveConfig, f
   if (envelope.operationName === shipping.name) return dispatch(shipping);
   if (envelope.operationName === cart.name) return dispatch(cart);
   if (envelope.operationName === order.name) return dispatch(order);
+  const [categories, listing] = publicOperations;
+  if (envelope.operationName === categories.name) return dispatch(categories);
+  if (envelope.operationName === listing.name) return dispatch(listing);
   return proxyFailure(failure("validation", false), 400);
 }

@@ -1,9 +1,16 @@
 import assert from "node:assert/strict";
-import { shippingOptions, guestCart } from "../src/lib/graphql/operations";
+import { shippingOptions, guestCart, catalogCategories, catalogListing } from "../src/lib/graphql/operations";
 import { hiveConfig, requestHive } from "../src/lib/graphql/server-transport";
 import { execute } from "../src/lib/graphql/transport";
 
 const config = hiveConfig(process.env);
+const categories = await requestHive(catalogCategories, {}, config, { kind: "public" });
+assert.equal(categories.result.status, "success", JSON.stringify(categories.result));
+assert.deepEqual(categories.setCookies, []);
+const listing = await requestHive(catalogListing, { input: { page: 0, size: 20, sort: "PRICE_ASC" } }, config, { kind: "public" });
+assert.equal(listing.result.status, "success", JSON.stringify(listing.result));
+assert.deepEqual(listing.setCookies, []);
+console.log("PASS anonymous registered categories and bounded PRICE_ASC listing via real Hive; no credentials or guest ceremony.");
 const direct = await requestHive(shippingOptions, { countryCode: "EE" }, config, { kind: "guest" });
 assert.equal(direct.result.status, "success", JSON.stringify(direct.result));
 if (direct.result.status !== "success") throw new Error("Live Hive read failed");

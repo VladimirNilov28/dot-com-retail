@@ -29,4 +29,26 @@ query IntegrationGuestOrder($publicId: UUID, $requestId: UUID) {
     status
     totals { merchandiseSubtotal shippingCharge total currency }
   }
+
+}
+
+query CatalogCategories {
+  categories {
+    id
+    name
+    slug
+    parent { id }
+  }
+}
+
+query CatalogListing($input: ProductSearchInput!) {
+  searchProducts(input: $input) {
+    items {
+      id
+      name
+      slug
+      variants { id price isActive }
+    }
+    pageInfo { page size totalItems totalPages }
+  }
 }

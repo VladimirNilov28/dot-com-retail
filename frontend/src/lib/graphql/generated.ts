@@ -17,6 +17,48 @@ export type OrderStatus =
   | 'PENDING'
   | 'SHIPPING';
 
+export type ProductSort =
+  | 'PRICE_ASC'
+  | 'PRICE_DESC'
+  | 'RELEVANCE';
+
+export type ProductAttributeFilterInput = {
+  name: string;
+  value: string;
+};
+
+export type ProductFilterInput = {
+  attributes?: Array<ProductAttributeFilterInput> | null | undefined;
+  categoryId?: string | number | null | undefined;
+  inStock?: boolean | null | undefined;
+  maxPrice?: Decimal | null | undefined;
+  minPrice?: Decimal | null | undefined;
+};
+
+/**
+ * Catalog discovery (search/filters/sort/suggestions). PostgreSQL-backed MVP:
+ *
+ * - Search matches Product.name, Product.description, and ProductVariant.sku
+ *   (ILIKE + pg_trgm indexes) — no external search engine.
+ * - categoryId filters by DIRECT category membership only; parent/child
+ *   category hierarchy is not expanded to descendants in this MVP.
+ * - minPrice/maxPrice/attributes/inStock are variant-level filters and must
+ *   all be satisfied by the SAME ProductVariant to match a product.
+ * - Sorting: RELEVANCE (simple deterministic name/description/sku ranking,
+ *   only meaningful with a non-blank query), PRICE_ASC/PRICE_DESC (using the
+ *   minimum price among a product's filter-matching variants). Rating sort is
+ *   intentionally not offered — no rating/review data exists in the model yet.
+ * - Facets are computed over the population that already matches the search
+ *   query and filters (no per-facet self-exclusion).
+ */
+export type ProductSearchInput = {
+  filters?: ProductFilterInput | null | undefined;
+  page?: number | null | undefined;
+  query?: string | null | undefined;
+  size?: number | null | undefined;
+  sort?: ProductSort | null | undefined;
+};
+
 export type IntegrationShippingOptionsQueryVariables = Exact<{
   countryCode?: string | null | undefined;
 }>;
@@ -37,6 +79,20 @@ export type IntegrationGuestOrderQueryVariables = Exact<{
 
 export type IntegrationGuestOrderQuery = { guestOrder: { publicId: UUID, requestId: UUID, status: OrderStatus, totals: { merchandiseSubtotal: Decimal, shippingCharge: Decimal, total: Decimal, currency: string } } | null };
 
+export type CatalogCategoriesQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type CatalogCategoriesQuery = { categories: Array<{ id: string, name: string, slug: string, parent: { id: string } | null }> };
+
+export type CatalogListingQueryVariables = Exact<{
+  input: ProductSearchInput;
+}>;
+
+
+export type CatalogListingQuery = { searchProducts: { items: Array<{ id: string, name: string, slug: string, variants: Array<{ id: string, price: Decimal, isActive: boolean }> }>, pageInfo: { page: number, size: number, totalItems: number, totalPages: number } } };
+
 export const IntegrationShippingOptionsSource = "query IntegrationShippingOptions($countryCode: String) {\n  checkoutShippingOptions(countryCode: $countryCode) {\n    method\n    charge\n    currency\n    estimate\n    supportedCountries\n  }\n}";
 export const IntegrationGuestCartSource = "query IntegrationGuestCart {\n  guestCart {\n    id\n    expiresAt\n    totals {\n      subtotal\n      currency\n    }\n    items {\n      id\n      quantity\n      subtotal\n      productVariant {\n        id\n        sku\n        price\n        attributes\n        isActive\n      }\n    }\n  }\n}";
 export const IntegrationGuestOrderSource = "query IntegrationGuestOrder($publicId: UUID, $requestId: UUID) {\n  guestOrder(publicId: $publicId, requestId: $requestId) {\n    publicId\n    requestId\n    status\n    totals {\n      merchandiseSubtotal\n      shippingCharge\n      total\n      currency\n    }\n  }\n}";
+export const CatalogCategoriesSource = "query CatalogCategories {\n  categories {\n    id\n    name\n    slug\n    parent {\n      id\n    }\n  }\n}";
+export const CatalogListingSource = "query CatalogListing($input: ProductSearchInput!) {\n  searchProducts(input: $input) {\n    items {\n      id\n      name\n      slug\n      variants {\n        id\n        price\n        isActive\n      }\n    }\n    pageInfo {\n      page\n      size\n      totalItems\n      totalPages\n    }\n  }\n}";

@@ -1,4 +1,10 @@
 import {
+  CatalogCategoriesSource,
+  CatalogListingSource,
+  type CatalogCategoriesQuery,
+  type CatalogCategoriesQueryVariables,
+  type CatalogListingQuery,
+  type CatalogListingQueryVariables,
   IntegrationGuestCartSource,
   IntegrationGuestOrderSource,
   IntegrationShippingOptionsSource,
@@ -115,3 +121,60 @@ export const guestOrder: Operation<IntegrationGuestOrderQuery, IntegrationGuestO
 };
 
 export const guestOperations = [shippingOptions, guestCart, guestOrder] as const;
+
+export const catalogCategories: Operation<CatalogCategoriesQuery, CatalogCategoriesQueryVariables> = {
+  name: "CatalogCategories", source: CatalogCategoriesSource, kind: "query", access: "public",
+  variables(value) { variables(value, []); return {}; },
+  decode(value) {
+    return { categories: list(object(value).categories, (value) => {
+      const category = object(value);
+      return {
+        id: text(category.id), name: text(category.name), slug: text(category.slug),
+        parent: category.parent === null ? null : { id: text(object(category.parent).id) },
+      };
+    }) };
+  },
+};
+
+export const catalogListing: Operation<CatalogListingQuery, CatalogListingQueryVariables> = {
+  name: "CatalogListing", source: CatalogListingSource, kind: "query", access: "public",
+  variables(value) {
+    const root = variables(value, ["input"]);
+    const input = variables(root.input, ["page", "size", "sort", "filters"]);
+    const page = integer(input.page);
+    if (page < 0 || integer(input.size) !== 20 || input.sort !== "PRICE_ASC") throw new TypeError("Invalid listing input");
+    const filters = input.filters === undefined ? undefined : variables(input.filters, ["categoryId"]);
+    const categoryId = filters ? text(filters.categoryId) : undefined;
+    if (categoryId !== undefined && !/^[1-9]\d*$/.test(categoryId)) throw new TypeError("Invalid category id");
+    return { input: {
+      page, size: 20, sort: "PRICE_ASC",
+      ...(categoryId === undefined ? {} : { filters: { categoryId } }),
+    } };
+  },
+  decode(value) {
+    const result = object(object(value).searchProducts);
+    const info = object(result.pageInfo);
+    const pageInfo = {
+      page: integer(info.page), size: integer(info.size),
+      totalItems: integer(info.totalItems), totalPages: integer(info.totalPages),
+    };
+    if (pageInfo.page < 0 || pageInfo.size !== 20 || pageInfo.totalItems < 0 ||
+        pageInfo.totalPages !== Math.ceil(pageInfo.totalItems / pageInfo.size)) {
+      throw new TypeError("Invalid pagination");
+    }
+    const items = list(result.items, (value) => {
+      const product = object(value);
+      return {
+        id: text(product.id), name: text(product.name), slug: text(product.slug),
+        variants: list(product.variants, (value) => {
+          const variant = object(value);
+          return { id: text(variant.id), price: decimal(variant.price), isActive: boolean(variant.isActive) };
+        }),
+      };
+    });
+    if (items.length > pageInfo.size) throw new TypeError("Unbounded listing response");
+    return { searchProducts: { items, pageInfo } };
+  },
+};
+
+export const publicOperations = [catalogCategories, catalogListing] as const;
