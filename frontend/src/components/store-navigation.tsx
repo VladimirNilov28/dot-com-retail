@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@heroui/react";
+import { Menu, Search, ShoppingCart, UserRound, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
@@ -8,9 +9,9 @@ import { useEffect, useId, useRef, useState } from "react";
 const destinations = [
   { href: "/", label: "Home" },
   { href: "/catalog", label: "Catalog" },
-  { href: "/search", label: "Search" },
-  { href: "/account", label: "Account" },
-  { href: "/cart", label: "Cart" },
+  { href: "/search", label: "Search", icon: Search },
+  { href: "/account", label: "Account", icon: UserRound },
+  { href: "/cart", label: "Cart", icon: ShoppingCart },
 ] as const;
 
 export function StoreNavigation() {
@@ -76,7 +77,9 @@ export function StoreNavigation() {
   }
 
   function links(isMobile: boolean) {
-    return destinations.map(({ href, label }) => {
+    return destinations.map((destination) => {
+      const { href, label } = destination;
+      const Icon = "icon" in destination ? destination.icon : null;
       const isCurrent =
         href === "/"
           ? pathname === href
@@ -103,7 +106,16 @@ export function StoreNavigation() {
                 : undefined
             }
           >
-            {label}
+            {Icon ? (
+              <Icon
+                className="store-icon"
+                size={20}
+                strokeWidth={2}
+                aria-hidden="true"
+                focusable="false"
+              />
+            ) : null}
+            <span className="min-w-0">{label}</span>
           </Link>
         </li>
       );
@@ -139,6 +151,11 @@ export function StoreNavigation() {
               else setMenu({ pathname, isOpen: true });
             }}
           >
+            {menu.isOpen ? (
+              <X className="store-icon" size={20} strokeWidth={2} aria-hidden="true" focusable="false" />
+            ) : (
+              <Menu className="store-icon" size={20} strokeWidth={2} aria-hidden="true" focusable="false" />
+            )}
             Menu
           </Button>
         </div>

@@ -40,6 +40,7 @@ ordinary links. Do not add placeholder interactive overlays to those slots.
 | Next.js / eslint-config-next | 16.3.6 |
 | React / React DOM | 19.2.8 |
 | HeroUI React / styles | 3.2.6 |
+| Lucide React | 1.52.0 |
 | TypeScript | 5.9.3 |
 | Tailwind CSS / PostCSS plugin | 4.3.3 |
 | ESLint | 9.39.5 |
@@ -128,6 +129,27 @@ containerized Spring instructions; do not start a second Spring process.
 - The page has a keyboard-visible skip link, semantic headings, visible HeroUI
   focus styling, and an accessible disclosure with `aria-expanded` and
   `aria-controls`. The button sends no network request.
+
+## Shared custom UI icons
+
+Use **`lucide-react` 1.52.0** for custom storefront and future admin UI icons.
+Import only the icons needed via direct named imports; do not import the icon
+namespace or add a dynamic icon loader, another custom icon library, or an
+external icon API/CDN. Keep HeroUI's built-in internal icons and authentic
+provider/brand logos. Do not use emoji or text glyphs as interface icons.
+
+The shell uses `Menu` / `X` on the disclosure trigger and `Search`, `UserRound`,
+and `ShoppingCart` beside navigation labels. Home, Catalog and ByteCore branding
+remain text-only. Icons use the shared `.store-icon` class (1.25rem / 20px at the
+default font size), stroke width 2, and Lucide's `currentColor` stroke, inheriting
+the existing semantic dark-theme colors and active states.
+
+Decorative icons must have `aria-hidden="true"` and `focusable="false"`.
+Keep useful visible labels; an icon-only button must have an accessible name on
+the **button**, not the SVG. The mobile trigger retains its visible **Menu**
+label/accessibility name in both states, with `aria-expanded` indicating whether
+the menu is open. Icons are not new actions: Search and Cart remain ordinary
+links to the existing honest unavailable pages.
 
 ## Browser smoke verification
 

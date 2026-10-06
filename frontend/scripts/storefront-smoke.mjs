@@ -71,6 +71,45 @@ async function inspect(page, route, mobile) {
   assert.equal(metrics.scheme, "dark");
   assert.ok(Math.max(...metrics.rgb) < 40);
   assert.equal(await page.getByRole("button", { name: "Menu", exact: true }).isVisible(), mobile);
+  const icons = await page.locator(".store-icon").evaluateAll((elements) =>
+    elements.map((element) => {
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      const parent = element.parentElement.getBoundingClientRect();
+      return {
+        hidden: element.getAttribute("aria-hidden"),
+        focusable: element.getAttribute("focusable"),
+        stroke: element.getAttribute("stroke"),
+        strokeWidth: element.getAttribute("stroke-width"),
+        width: style.width,
+        height: style.height,
+        flexShrink: style.flexShrink,
+        visible: rect.width > 0 && rect.height > 0,
+        aligned: Math.abs(rect.y + rect.height / 2 - parent.y - parent.height / 2) < 1,
+        fits: rect.x >= parent.x && rect.right <= parent.right,
+      };
+    }),
+  );
+  assert.equal(icons.length, 7, "Three decorative navigation icons per layout plus the trigger icon");
+  for (const icon of icons) {
+    assert.equal(icon.hidden, "true");
+    assert.equal(icon.focusable, "false");
+    assert.equal(icon.stroke, "currentColor");
+    assert.equal(icon.strokeWidth, "2");
+    assert.equal(icon.width, "20px");
+    assert.equal(icon.height, "20px");
+    assert.equal(icon.flexShrink, "0");
+    if (icon.visible) {
+      assert.equal(icon.aligned, true, "Icon is vertically aligned with its control");
+      assert.equal(icon.fits, true, "Icon fits inside its control");
+    }
+  }
+  for (const nav of [".store-desktop-nav", ".store-mobile-panel"]) {
+    for (const label of ["Search", "Account", "Cart"]) {
+      const link = page.locator(nav).getByRole("link", { name: label, exact: true, includeHidden: true });
+      assert.equal(await link.locator(".store-icon").count(), 1);
+    }
+  }
   return metrics;
 }
 
@@ -98,6 +137,7 @@ async function checkMobile(page, route) {
   await menu.focus();
   await menu.press("Enter");
   assert.equal(await menu.getAttribute("aria-expanded"), "true");
+  assert.equal(await menu.locator("svg.lucide-x").count(), 1);
   const id = await menu.getAttribute("aria-controls");
   assert.equal(await page.locator(`[id="${id}"]`).isVisible(), true);
   await assertActive(page, route);
@@ -107,6 +147,7 @@ async function checkMobile(page, route) {
   await assertFocus(home);
   await page.keyboard.press("Escape");
   assert.equal(await menu.getAttribute("aria-expanded"), "false");
+  assert.equal(await menu.locator("svg.lucide-menu").count(), 1);
   await assertFocus(menu);
   assert.equal(await page.locator(`[id="${id}"]`).isVisible(), false);
   await menu.press("Space");
