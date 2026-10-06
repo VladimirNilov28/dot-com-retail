@@ -14,6 +14,7 @@ public final class Scopes {
 
     public static final String PRODUCT_READ = "product:read";
     public static final String PRODUCT_WRITE = "product:write";
+    public static final String RATING_WRITE = "rating:write";
 
     public static final String CATEGORY_READ = "category:read";
     public static final String CATEGORY_WRITE = "category:write";

@@ -31,6 +31,12 @@ input UpdateProductVariantInput {
 }
 
 extend type Mutation {
+  """
+  Submit/update the caller's integer 1-5 star rating. Requires rating:write and an
+  active canonical account. One rating per user/product; no verified-purchase rule.
+  No user ID is accepted, so callers cannot edit another user's rating.
+  """
+  rateProduct(productId: ID!, stars: Int!): Product!
   createProduct(input: CreateProductInput!): Product!
   updateProduct(productId: ID!, input: UpdateProductInput!): Product!
   deleteProduct(productId: ID!): Boolean!

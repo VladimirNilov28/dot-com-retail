@@ -50,4 +50,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Modifying
     @Query(value = "DELETE FROM wishlists WHERE user_id = :id", nativeQuery = true)
     void deleteWishlist(@Param("id") Long id);
+
+    @Modifying
+    @Query(value = "DELETE FROM product_ratings WHERE user_id = :id", nativeQuery = true)
+    void deleteRatings(@Param("id") Long id);
 }

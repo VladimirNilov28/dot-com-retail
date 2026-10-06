@@ -21,6 +21,8 @@ public class ProductMapper {
                 .name(entity.getName())
                 .slug(entity.getSlug())
                 .description(entity.getDescription())
+                .averageRating(entity.getAverageRating())
+                .ratingCount(entity.getRatingCount())
                 .createdAt(entity.getCreatedAt())
                 .updatedAt(entity.getUpdatedAt())
                 .build();

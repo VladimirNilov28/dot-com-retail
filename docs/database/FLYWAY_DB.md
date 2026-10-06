@@ -28,6 +28,7 @@ schema changes must be new `V{n}__...sql` files instead.
 | `V12__guest_carts.sql` | guest cart fields/constraints and `guest_cart_merge_receipts` | `V3` (carts), `V1` (users) |
 | `V13__checkout_orders.sql` | checkout requests, guest orders and immutable snapshots | `V4`, `V12` |
 | `V14__order_cancellation_refunds.sql` | financial/release markers, cancellation receipts, order refunds | `V4`, `V9`, `V11`, `V13` |
+| `V15__product_ratings.sql` | `product_ratings` | `V0`, `V1` (users), `V2` (products) |
 
 Every foreign key either points to a table created in an earlier migration
 file, or to a table created earlier within the same file. There are no
@@ -42,9 +43,11 @@ erDiagram
     users ||--o| carts : owns
     users ||--o{ orders : places
     users ||--o| wishlists : owns
+    users ||--o{ product_ratings : submits
 
     products ||--o{ product_variants : has
     products ||--o{ product_categories : "tagged via"
+    products ||--o{ product_ratings : receives
     categories ||--o{ product_categories : "tagged via"
     categories ||--o{ categories : "parent of"
 
@@ -93,6 +96,22 @@ for category-specific specs like color or size that don't warrant dedicated
 columns. `is_active` allows soft-disabling a variant without deleting it.
 
 Stock is **not** tracked here — see `inventory`.
+
+### product_ratings (V15)
+
+One integer `stars` value (1-5, database-checked) per `(product_id, user_id)`.
+The composite primary key deduplicates owners and indexes per-product
+aggregation; an additional user index supports account cleanup. Both foreign
+keys cascade on physical deletion. Creation/update timestamps follow the
+existing database trigger convention.
+
+The self-service rating transaction locks the active canonical user and uses
+`INSERT ... ON CONFLICT ... DO UPDATE`; duplicate submissions update, never add
+another vote. Normal account deletion removes ratings before anonymization.
+Product average/count are computed directly from these rows rather than stored
+on `products`, eliminating lost/stale counter updates under concurrent writes.
+No review text, helpful votes, eligibility/purchase flag or seed ratings are added.
+See [P1 rating API](../api/graphql-schema.md#p1-product-ratings-78).
 
 ### categories / product_categories
 `categories` is self-referencing (`parent_id`) to support arbitrary-depth

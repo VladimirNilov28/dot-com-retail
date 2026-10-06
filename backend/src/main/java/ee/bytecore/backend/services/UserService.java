@@ -207,6 +207,7 @@ public class UserService {
             userRepository.deleteGuestCartMergeReceipts(id);
             userRepository.deleteCart(id);
             userRepository.deleteWishlist(id);
+            userRepository.deleteRatings(id);
             String anonymous = "deleted-" + UUID.randomUUID();
             user.setUsername(anonymous);
             user.setEmail(anonymous + "@deleted.invalid");

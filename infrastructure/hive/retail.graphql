@@ -216,6 +216,12 @@ type Mutation {
   deleteUserPaymentMethod(paymentMethodId: ID!, userId: ID!): Boolean!
   deleteWarehouse(warehouseId: ID!): Boolean!
   mergeGuestCart(requestId: UUID!): GuestCartMergeResult!
+  """
+  Submit/update the caller's integer 1-5 star rating. Requires rating:write and an
+  active canonical account. One rating per user/product; no verified-purchase rule.
+  No user ID is accepted, so callers cannot edit another user's rating.
+  """
+  rateProduct(productId: ID!, stars: Int!): Product!
   removeCartItem(cartItemId: ID!): Boolean!
   removeGuestCartItem(cartItemId: ID!): GuestCart!
   removeWishlistItem(wishlistItemId: ID!): Boolean!
@@ -298,11 +304,15 @@ type PriceFacet {
 }
 
 type Product {
+  "Arithmetic mean of persisted 1-5 star ratings; null when there are no ratings."
+  averageRating: Float
   categories: [Category!]!
   createdAt: Instant!
   description: String
   id: ID!
   name: String!
+  "Number of distinct authenticated users who rated this product."
+  ratingCount: Int!
   slug: String!
   updatedAt: Instant!
   variants: [ProductVariant!]!
@@ -744,6 +754,7 @@ enum PaymentMethodType {
 enum ProductSort {
   PRICE_ASC
   PRICE_DESC
+  RATING_DESC
   RELEVANCE
 }
 
@@ -883,8 +894,8 @@ Catalog discovery (search/filters/sort/suggestions). PostgreSQL-backed MVP:
   all be satisfied by the SAME ProductVariant to match a product.
 - Sorting: RELEVANCE (simple deterministic name/description/sku ranking,
   only meaningful with a non-blank query), PRICE_ASC/PRICE_DESC (using the
-  minimum price among a product's filter-matching variants). Rating sort is
-  intentionally not offered — no rating/review data exists in the model yet.
+  minimum price among a product's filter-matching variants), RATING_DESC
+  (persisted average, highest first, unrated last). All ties use product ID ascending.
 - Facets are computed over the population that already matches the search
   query and filters (no per-facet self-exclusion).
 """

@@ -96,7 +96,7 @@ class RealScopeGrantTest(unittest.TestCase):
         expected = {
             "user:read", "user:write", "product:read", "category:read", "cart:read",
             "cart:write", "wishlist:read", "wishlist:write", "order:read", "order:write",
-            "payment:read", "payment:write", "offline_access",
+            "payment:read", "payment:write", "rating:write", "offline_access",
         }
         broad = self.token(self.client["scope"])
         self.verify(broad, expected)

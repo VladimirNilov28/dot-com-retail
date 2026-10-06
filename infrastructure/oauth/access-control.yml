@@ -38,6 +38,8 @@ scopes:
       Create, update, or delete products and product variants
       (createProduct, updateProduct, deleteProduct, createProductVariant,
       updateProductVariant, deleteProductVariant).
+  - name: rating:write
+    description: Submit or update the caller's own product star rating (rateProduct).
   - name: category:read
     description: Query categories (category, categories).
   - name: category:write
@@ -105,6 +107,7 @@ roles:
       - user:read
       - user:write
       - product:read
+      - rating:write
       - category:read
       - cart:read
       - cart:write
@@ -164,6 +167,7 @@ clients:
       - user:manage-role
       - product:read
       - product:write
+      - rating:write
       - category:read
       - category:write
       - cart:read

@@ -9,8 +9,8 @@ Catalog discovery (search/filters/sort/suggestions). PostgreSQL-backed MVP:
   all be satisfied by the SAME ProductVariant to match a product.
 - Sorting: RELEVANCE (simple deterministic name/description/sku ranking,
   only meaningful with a non-blank query), PRICE_ASC/PRICE_DESC (using the
-  minimum price among a product's filter-matching variants). Rating sort is
-  intentionally not offered — no rating/review data exists in the model yet.
+  minimum price among a product's filter-matching variants), RATING_DESC
+  (persisted average, highest first, unrated last). All ties use product ID ascending.
 - Facets are computed over the population that already matches the search
   query and filters (no per-facet self-exclusion).
 """
@@ -39,6 +39,7 @@ enum ProductSort {
   RELEVANCE
   PRICE_ASC
   PRICE_DESC
+  RATING_DESC
 }
 
 type ProductSearchResult {

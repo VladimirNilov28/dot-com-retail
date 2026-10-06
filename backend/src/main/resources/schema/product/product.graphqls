@@ -3,6 +3,10 @@ type Product {
   name: String!
   slug: String!
   description: String
+  """Arithmetic mean of persisted 1-5 star ratings; null when there are no ratings."""
+  averageRating: Float
+  """Number of distinct authenticated users who rated this product."""
+  ratingCount: Int!
   categories: [Category!]!
   variants: [ProductVariant!]!
   createdAt: Instant!

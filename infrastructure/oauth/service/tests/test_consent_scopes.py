@@ -11,7 +11,7 @@ from services.login_consent import BridgeError, handle_consent
 POLICY = str(Path(__file__).resolve().parents[2] / "access-control.yml")
 ROLE_SCOPES = {
     "USER": {
-        "user:read", "user:write", "product:read", "category:read",
+        "user:read", "user:write", "product:read", "category:read", "rating:write",
         "cart:read", "cart:write", "wishlist:read", "wishlist:write",
         "order:read", "order:write", "payment:read", "payment:write",
     },

@@ -11,6 +11,7 @@ import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.Formula;
 import org.hibernate.annotations.UpdateTimestamp;
 
 @Getter
@@ -33,6 +34,14 @@ public class Product {
 
     @Column(name = "description", length = Integer.MAX_VALUE)
     private String description;
+
+    @Setter(lombok.AccessLevel.NONE)
+    @Formula("(select avg(r.stars) from product_ratings r where r.product_id = id)")
+    private Double averageRating;
+
+    @Setter(lombok.AccessLevel.NONE)
+    @Formula("(select count(*) from product_ratings r where r.product_id = id)")
+    private Integer ratingCount = 0;
 
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(

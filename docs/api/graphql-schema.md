@@ -130,6 +130,73 @@ the `Product` entity — it's loaded via `ProductVariantRepository.findAllByProd
 |---|---|
 | `createProduct` / `updateProduct` / `deleteProduct` | `Product!` / `Product!` / `Boolean!` |
 | `createProductVariant` / `updateProductVariant` / `deleteProductVariant` | `ProductVariant!` / `ProductVariant!` / `Boolean!` |
+| `rateProduct(productId: ID!, stars: Int!)` | `Product!` with fresh rating aggregates |
+
+#### P1 product ratings (#78)
+
+`Product.averageRating: Float` and `Product.ratingCount: Int!` are public catalog
+fields on every product projection, including bounded `searchProducts` results.
+Unrated products return **null / 0**, not a fabricated neutral rating.
+
+`rateProduct` requires `rating:write` (granted to USER and ADMIN through the
+existing OAuth policy) and an active canonical account resolved by
+`CurrentUserProvider` from JWT `sub`. It accepts an integer **1 through 5**.
+Missing products, malformed IDs, invalid stars and inactive/missing accounts fail
+explicitly. There is no verified-purchase requirement. No caller-supplied owner or
+rating ID is accepted: the caller can only submit/update their own rating.
+
+`product_ratings` is the persisted source of truth, with foreign keys, a database
+star-range check and a unique `(product_id, user_id)` primary key. Repeat
+submissions are atomic PostgreSQL upserts: one row per owner/product, last
+serialized write wins, and identical repeats never inflate the count.
+Writes lock the active account, matching other self-service writes and excluding
+concurrent account deletion. Account deletion removes that account's ratings;
+physical user/product deletion cascades.
+
+Aggregates are **computed**, not denormalized: PostgreSQL `AVG(stars)` and
+`COUNT(*)` are loaded with each Product via Hibernate formulas, with no extra
+resolver query per product. Both see the same statement snapshot. Updates and
+concurrent writes cannot lose aggregate increments or leave stored counters stale.
+The mutation refreshes its Product projection after upsert. Readers see committed
+data at their statement snapshot; concurrent commits can appear on the next read.
+Public catalog caching from #95 still allows up to 60 seconds of display staleness.
+
+`ProductSort.RATING_DESC` sorts the full filtered database population by exact
+average descending, **unrated last**, then product ID ascending (no count-based
+tie-break). Pagination remains zero-based and bounded to 100 items. Existing
+price/relevance sorting, same-variant filters and filtered-population facets are
+unchanged. As with existing sorts, offset pages are not a frozen snapshot across
+separate requests if the underlying data changes.
+
+#64 requires real rating sorting, not a rating filter; a minimum-star filter is
+deferred. Review text, helpful votes, review listing/deletion/moderation and all
+frontend rating/review interfaces remain P3. There is no public per-user rating
+list or new inventory access.
+
+Focused persistence/concurrency checks:
+
+```bash
+cd backend
+./gradlew spotlessCheck test --tests "ee.bytecore.backend.services.ProductRatingIntegrationTest" --tests "ee.bytecore.backend.graphql.GuestCartHiveTransportTest"
+```
+
+The Hive Testcontainers suite uses a **mocked JWT decoder** for scoped calls;
+it is not real-token authentication evidence. With the updated backend, OAuth
+policy (restart `oauth-service` to reconcile client scopes), and composed Hive
+SDL running, the opt-in live check uses real registered USER identities and
+Hydra-issued tokens:
+
+```bash
+python3 infrastructure/hive/tests/real/product_ratings_test.py
+```
+
+Run this command from the repository root. It creates uniquely named fixture
+products/accounts, submits ratings only through the API, then deletes fixture
+products and revokes/anonymizes the fixture accounts through normal APIs.
+Owner products and ratings are never edited, wiped or reseeded. Anonymized
+canonical account tombstones remain per the existing deletion contract.
+For an enrolled admin, supply `HIVE_BEARER_TOKEN` privately through the
+environment as described in the root README; never put tokens in arguments.
 
 ### Category (`category/`)
 
