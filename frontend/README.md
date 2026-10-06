@@ -3,8 +3,13 @@
 Responsive ByteCore storefront shell for [#61](https://github.com/VladimirNilov28/dot-com-retail/issues/61)
 and typed Hive access for [#62](https://github.com/VladimirNilov28/dot-com-retail/issues/62),
 built on the [#60](https://github.com/VladimirNilov28/dot-com-retail/issues/60) foundation.
-The home page retains the actual HeroUI v3 Card/Button demonstration. Shopping
+The HeroUI v3 Card/Button demonstration lives at `/dev/foundation`. Shopping
 features are not implemented or simulated.
+
+**Before changing storefront UI, read [`docs/frontend/DESIGN.md`](../docs/frontend/DESIGN.md)**
+— the approved design, its reasoning and extension guidance — and look at the
+approved-baseline screenshots in [`docs/frontend/baseline/`](../docs/frontend/baseline/).
+Reusable review checklist and prompt templates: [`docs/frontend/REVIEW.md`](../docs/frontend/REVIEW.md).
 
 ## Routes and shell
 
@@ -209,7 +214,7 @@ containerized Spring instructions; do not start a second Spring process.
   inline`. Typography uses responsive heading sizes and a 1.6 body line height;
   builds do not download Google fonts.
 - `src/components/page-container.tsx` is a reusable Server Component accepting
-  native div props. Its `.page-container` class uses `--page-max-width` (72rem)
+  native div props. Its `.page-container` class uses `--page-max-width` (80rem)
   and responsive `--page-gutter` tokens.
 - Storefront pages, layouts, header and footer remain Server Components.
   `StoreNavigation` is a small client boundary for route state and the mobile
