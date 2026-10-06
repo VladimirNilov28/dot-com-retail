@@ -322,33 +322,61 @@ class GuestCartHiveTransportTest {
     }
 
     @Test
-    void shouldNotExposeInventoryThroughPublicCatalogTraversalOrCacheCredentialedReadsTest() throws Exception {
+    void shouldDenyAnonymousInventoryTraversalAllowScopedAccessAndKeepCredentialedReadsPrivateTest() throws Exception {
         CatalogFixture fixture = createCatalogFixture();
-        Long warehouseId = jdbc.queryForObject(
-                "INSERT INTO warehouses(name) VALUES (?) RETURNING id",
-                Long.class,
-                "Public access warehouse " + UUID.randomUUID());
+        String warehouseName = "Public access warehouse " + UUID.randomUUID();
+        Long warehouseId =
+                jdbc.queryForObject("INSERT INTO warehouses(name) VALUES (?) RETURNING id", Long.class, warehouseName);
         jdbc.update(
                 "INSERT INTO inventory(product_variant_id,warehouse_id,quantity) VALUES (?,?,?)",
                 Long.valueOf(fixture.variantId()),
                 warehouseId,
                 17);
 
-        JsonNode inventoryResponse = mapper.readTree(postCatalog(
-                        """
-                        query InventoryTraversal($id: ID!) {
-                          product(id: $id) {
-                            variants { inventory { quantity warehouse { id name } } }
-                          }
-                        }
-                        """,
-                        null,
-                        Map.of("id", fixture.productId()),
-                        null,
-                        null)
-                .body());
-        assertThat(inventoryResponse.path("errors").isArray()).isTrue();
-        assertThat(inventoryResponse.toString()).doesNotContain("\"quantity\":17");
+        when(jwtDecoder.decode("catalog-and-warehouse-reader"))
+                .thenReturn(Jwt.withTokenValue("catalog-and-warehouse-reader")
+                        .header("alg", "RS256")
+                        .subject("42")
+                        .claim("role", "USER")
+                        .claim("scope", "product:read category:read warehouse:read")
+                        .build());
+        String traversalQuery =
+                """
+                query InventoryTraversal($id: ID!) {
+                  product(id: $id) {
+                    id name
+                    variants { inventory { quantity warehouse { id name } } }
+                  }
+                  categories { id }
+                }
+                """;
+        Map<String, Object> variables = Map.of("id", fixture.productId());
+
+        HttpResponse<String> authorized =
+                postCatalog(traversalQuery, null, variables, null, "catalog-and-warehouse-reader");
+        JsonNode authorizedBody = success(authorized);
+        assertThat(authorizedBody
+                        .at("/data/product/variants/0/inventory/0/quantity")
+                        .asInt())
+                .isEqualTo(17);
+        assertThat(authorizedBody
+                        .at("/data/product/variants/0/inventory/0/warehouse/id")
+                        .asText())
+                .isEqualTo(warehouseId.toString());
+        assertThat(authorizedBody
+                        .at("/data/product/variants/0/inventory/0/warehouse/name")
+                        .asText())
+                .isEqualTo(warehouseName);
+        assertPrivateNoStore(authorized);
+
+        JsonNode inventoryResponse = mapper.readTree(
+                postCatalog(traversalQuery, null, variables, null, null).body());
+        JsonNode authorizationError = inventoryResponse.at("/errors/0");
+        assertThat(authorizationError.path("message").asString()).containsIgnoringCase("access denied");
+        assertThat(authorizationError.path("path").toString()).isEqualTo("[\"product\",\"variants\",0,\"inventory\"]");
+        assertThat(inventoryResponse.at("/data/product").isNull()).isTrue();
+        assertThat(containsFieldValue(inventoryResponse.at("/data/categories"), "id", fixture.categoryId()))
+                .isTrue();
 
         HttpResponse<String> cookieBearing = postCatalog(
                 "query PublicCategories { categories { id } }", null, Map.of(), "retail_guest_cart=opaque", null);
@@ -479,8 +507,11 @@ class GuestCartHiveTransportTest {
     private void assertPublicCache(HttpResponse<String> response) {
         String cacheControl = response.headers().firstValue("Cache-Control").orElse("");
         assertThat(cacheControl).contains("public").contains("max-age=60").doesNotContain("no-store");
-        String vary = response.headers().firstValue("Vary").orElse("");
-        assertThat(vary).containsIgnoringCase("Authorization").containsIgnoringCase("Cookie");
+        String vary = String.join(", ", response.headers().allValues("Vary"));
+        assertThat(vary)
+                .containsIgnoringCase("Origin")
+                .containsIgnoringCase("Authorization")
+                .containsIgnoringCase("Cookie");
     }
 
     private void assertPrivateNoStore(HttpResponse<String> response) {
