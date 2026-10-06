@@ -7,14 +7,23 @@ import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 const destinations = [
-  { href: "/", label: "Home" },
   { href: "/catalog", label: "Catalog" },
   { href: "/search", label: "Search", icon: Search },
   { href: "/account", label: "Account", icon: UserRound },
   { href: "/cart", label: "Cart", icon: ShoppingCart },
 ] as const;
 
-type Overlay = "mobile" | "categories" | "account" | null;
+const CATALOG = 0;
+const SEARCH = 1;
+const ACCOUNT = 2;
+const CART = 3;
+
+const DESKTOP_ONLY = ".store-catalog-slot, .store-actions";
+// Selector lists cannot take a shared descendant combinator, so spell these out.
+const DESKTOP_LINKS = ".store-catalog-slot a, .store-actions a";
+const DESKTOP_BUTTONS = ".store-catalog-slot button, .store-actions button";
+
+type Overlay = "mobile" | "catalog" | "account" | null;
 
 export function StoreNavigation({
   quickSearch,
@@ -28,7 +37,6 @@ export function StoreNavigation({
     pathname, overlay: null,
   });
   const mobileTrigger = useRef<HTMLButtonElement>(null);
-  const desktop = useRef<HTMLDivElement>(null);
   const lastFocused = useRef<HTMLElement | null>(null);
   const drawerId = useId();
 
@@ -48,19 +56,19 @@ export function StoreNavigation({
       const focused = document.activeElement === document.body
         ? lastFocused.current : document.activeElement;
       const fromMobile = focused === mobileTrigger.current || document.getElementById(drawerId)?.contains(focused);
-      const fromDesktop = desktop.current?.contains(focused) ||
-        (focused instanceof HTMLElement && focused.closest(".store-popover"));
+      const fromDesktop = focused instanceof HTMLElement &&
+        focused.closest(`${DESKTOP_ONLY}, .store-popover`) !== null;
       setState({ pathname, overlay: null });
       // Let the overlay restore/unhide the document before moving breakpoint focus.
       frame = requestAnimationFrame(() => {
         if (breakpoint.matches && fromMobile) {
           const href = focused?.getAttribute("href") ?? pathname;
-          const link = Array.from(desktop.current?.querySelectorAll<HTMLAnchorElement>("a") ?? [])
+          const link = Array.from(document.querySelectorAll<HTMLAnchorElement>(DESKTOP_LINKS))
             .find((candidate) => candidate.getAttribute("href") === href);
           const search = href === "/search"
             ? document.querySelector<HTMLAnchorElement>(".store-search-slot a")
             : null;
-          (link ?? search ?? desktop.current?.querySelector<HTMLButtonElement>("button"))?.focus();
+          (link ?? search ?? document.querySelector<HTMLButtonElement>(DESKTOP_BUTTONS))?.focus();
         } else if (!breakpoint.matches && fromDesktop) {
           mobileTrigger.current?.focus();
         }
@@ -76,16 +84,16 @@ export function StoreNavigation({
   }, [pathname, drawerId]);
 
   function current(href: string) {
-    return href === "/" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
+    return pathname === href || pathname.startsWith(`${href}/`);
   }
 
-  function navigationLink(destination: typeof destinations[number], prominent = false) {
+  function navigationLink(destination: typeof destinations[number], compact = false) {
     const Icon = "icon" in destination ? destination.icon : null;
     return (
       <Link
         key={destination.href}
         href={destination.href}
-        className={`store-nav-link${prominent ? " store-search-link" : ""}`}
+        className={compact ? "store-action" : "store-nav-link"}
         aria-current={current(destination.href) ? "page" : undefined}
         onClick={(event) => {
           if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
@@ -94,29 +102,36 @@ export function StoreNavigation({
         }}
       >
         {Icon ? <Icon className="store-icon" size={20} strokeWidth={2} aria-hidden="true" focusable="false" /> : null}
-        <span className="min-w-0">{destination.label}</span>
+        <span className={compact ? "store-action-label" : "min-w-0"}>{destination.label}</span>
       </Link>
     );
   }
 
-  function desktopPopover(kind: "categories" | "account") {
-    const category = kind === "categories";
-    const Icon = category ? Grid2X2 : UserRound;
+  function desktopPopover(kind: "catalog" | "account") {
+    const catalog = kind === "catalog";
+    const Icon = catalog ? Grid2X2 : UserRound;
+    const destination = destinations[catalog ? CATALOG : ACCOUNT];
     return (
       <Popover isOpen={state.overlay === kind} onOpenChange={(open) => setOverlay(open ? kind : null)}>
-        <Button variant="ghost" className="store-panel-trigger" aria-haspopup="dialog"
-          aria-current={!category && current("/account") ? "page" : undefined}>
+        <Button
+          variant={catalog ? "primary" : "ghost"}
+          className={catalog ? "store-catalog-trigger" : "store-panel-trigger"}
+          aria-haspopup="dialog"
+          aria-current={current(destination.href) ? "page" : undefined}
+        >
           <Icon className="store-icon" size={20} strokeWidth={2} aria-hidden="true" focusable="false" />
-          {category ? "Categories" : "Account"}
+          {destination.label}
           <ChevronDown className="store-icon" size={20} strokeWidth={2} aria-hidden="true" focusable="false" />
         </Button>
-        <Popover.Content isNonModal placement="bottom" className="store-popover">
-          <Popover.Dialog aria-label={category ? "Category navigation" : "Account navigation"}>
-            <Popover.Heading className="font-semibold">{category ? "Explore the catalog" : "Your account"}</Popover.Heading>
+        <Popover.Content isNonModal placement="bottom start" className="store-popover">
+          <Popover.Dialog aria-label={catalog ? "Category navigation" : "Account navigation"}>
+            <Popover.Heading className="font-semibold">{catalog ? "Explore the catalog" : "Your account"}</Popover.Heading>
             <p className="my-3 text-sm text-muted">
-              {category ? "Category links will appear when catalog integration is available." : "Account features are not available yet."}
+              {catalog
+                ? "Category links will appear when catalog integration is available."
+                : "Account features are not available yet."}
             </p>
-            {navigationLink(destinations[category ? 1 : 3])}
+            {navigationLink(destination)}
           </Popover.Dialog>
         </Popover.Content>
       </Popover>
@@ -125,23 +140,15 @@ export function StoreNavigation({
 
   return (
     <nav aria-label="Primary" className="store-navigation">
-      <div className="store-search-slot">{quickSearch ?? navigationLink(destinations[2], true)}</div>
-      <div ref={desktop} className="store-desktop-nav">
-        <div className="store-desktop-top">
-          <div className="store-actions">
-            {desktopPopover("account")}
-            {cartPreview ?? navigationLink(destinations[4])}
-          </div>
-        </div>
-        <div className="store-catalog-row">
-          {desktopPopover("categories")}
-          {navigationLink(destinations[0])}
-          {navigationLink(destinations[1])}
-        </div>
+      <div className="store-catalog-slot">{desktopPopover("catalog")}</div>
+      <div className="store-search-slot">{quickSearch ?? navigationLink(destinations[SEARCH], true)}</div>
+      <div className="store-actions">
+        {desktopPopover("account")}
+        {cartPreview ?? navigationLink(destinations[CART], true)}
       </div>
       <div className="store-mobile-nav">
         <Drawer isOpen={state.overlay === "mobile"} onOpenChange={(open) => setOverlay(open ? "mobile" : null)}>
-          <Button ref={mobileTrigger} variant="secondary" className="store-mobile-trigger" aria-haspopup="dialog">
+          <Button ref={mobileTrigger} variant="ghost" className="store-mobile-trigger" aria-haspopup="dialog">
             <Menu className="store-icon" size={20} strokeWidth={2} aria-hidden="true" focusable="false" />
             Menu
           </Button>
@@ -156,9 +163,11 @@ export function StoreNavigation({
                 </Drawer.Header>
                 <Drawer.Body className="store-drawer-body">
                   <nav aria-label="Primary" className="store-mobile-panel">
-                    {destinations.map((destination) => navigationLink(destination, destination.href === "/search"))}
+                    {destinations.map((destination) => navigationLink(destination))}
                   </nav>
-                  <p className="mt-6 text-sm text-muted">Browse the catalog to discover electronics. Category links are not available yet.</p>
+                  <p className="mt-6 text-sm text-muted">
+                    Browse the catalog to discover electronics. Category links are not available yet.
+                  </p>
                 </Drawer.Body>
               </Drawer.Dialog>
             </Drawer.Content>

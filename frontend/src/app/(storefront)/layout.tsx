@@ -10,7 +10,7 @@ export default function StorefrontLayout({
   return (
     <div className="flex min-h-dvh flex-col">
       <StoreHeader />
-      <main id="main-content" tabIndex={-1} className="flex-1 py-10 sm:py-16">
+      <main id="main-content" tabIndex={-1} className="flex-1 py-8 sm:py-12">
         <PageContainer>{children}</PageContainer>
       </main>
       <StoreFooter />

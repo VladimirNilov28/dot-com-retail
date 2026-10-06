@@ -1,6 +1,6 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
 import { PageContainer } from "@/components/page-container";
+import { StoreBrand } from "@/components/store-brand";
 import { StoreNavigation } from "@/components/store-navigation";
 
 export function StoreHeader({
@@ -13,10 +13,7 @@ export function StoreHeader({
   return (
     <header className="border-b border-separator bg-background">
       <PageContainer className="store-header">
-        <div className="store-branding">
-          <Link href="/" className="store-brand">ByteCore</Link>
-          <p className="text-xs text-muted">Electronics, clearly connected.</p>
-        </div>
+        <StoreBrand />
         <StoreNavigation quickSearch={quickSearch} cartPreview={cartPreview} />
       </PageContainer>
     </header>

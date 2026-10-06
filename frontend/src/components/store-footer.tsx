@@ -14,7 +14,6 @@ export function StoreFooter() {
           <p className="font-semibold text-foreground">Discover</p>
           <Link href="/catalog" className="store-link">Catalog</Link>
           <Link href="/search" className="store-link">Search</Link>
-          <Link href="/" className="store-link">Back to home</Link>
         </nav>
         <nav aria-label="Footer account" className="grid gap-2">
           <p className="font-semibold text-foreground">Your shopping</p>
