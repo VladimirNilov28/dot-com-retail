@@ -126,6 +126,121 @@ class GuestCartHiveTransportTest {
     }
 
     @Test
+    void shouldExposeAnonymousRatingAggregatesAndProtectOwnedWritesThroughHiveTest() throws Exception {
+        CatalogFixture fixture = createCatalogFixture();
+        String suffix = UUID.randomUUID().toString();
+        User alice = users.save(
+                User.create("rating-alice-" + suffix, "alice-" + suffix + "@example.com", LocalDate.of(2000, 1, 1)));
+        User bob = users.save(
+                User.create("rating-bob-" + suffix, "bob-" + suffix + "@example.com", LocalDate.of(2000, 1, 1)));
+        when(jwtDecoder.decode("rating-alice"))
+                .thenReturn(ratingJwt("rating-alice", alice.getId().toString(), "rating:write"));
+        when(jwtDecoder.decode("rating-bob"))
+                .thenReturn(ratingJwt("rating-bob", bob.getId().toString(), "rating:write"));
+        when(jwtDecoder.decode("rating-no-scope"))
+                .thenReturn(ratingJwt("rating-no-scope", alice.getId().toString(), ""));
+        when(jwtDecoder.decode("rating-machine"))
+                .thenReturn(ratingJwt("rating-machine", "machine-subject", "rating:write"));
+        String mutation =
+                """
+                mutation Rate($id: ID!, $stars: Int!) {
+                  rateProduct(productId: $id, stars: $stars) { id averageRating ratingCount }
+                }
+                """;
+        Map<String, Object> variables = Map.of("id", fixture.productId(), "stars", 5);
+        assertThat(postCatalog(mutation, null, variables, null, null).body()).contains("Authentication is required");
+        for (String token : List.of("rating-no-scope", "rating-machine")) {
+            assertThat(mapper.readTree(postCatalog(mutation, null, variables, null, token)
+                                    .body())
+                            .has("errors"))
+                    .isTrue();
+        }
+        String query =
+                """
+                query Ratings($id: ID!, $term: String!) {
+                  product(id: $id) { averageRating ratingCount }
+                  products { id averageRating ratingCount }
+                  searchProducts(input: {query: $term, sort: RATING_DESC, size: 2}) {
+                    items { id averageRating ratingCount }
+                    pageInfo { totalItems size }
+                  }
+                }
+                """;
+        Map<String, Object> read = Map.of("id", fixture.productId(), "term", fixture.name());
+        JsonNode empty = success(postCatalog(query, null, read, null, null));
+        assertThat(empty.at("/data/product/averageRating").isNull()).isTrue();
+        assertThat(empty.at("/data/product/ratingCount").asInt()).isZero();
+        assertThat(success(postCatalog(mutation, null, variables, null, "rating-alice"))
+                        .at("/data/rateProduct/ratingCount")
+                        .asInt())
+                .isEqualTo(1);
+        success(postCatalog(mutation, null, Map.of("id", fixture.productId(), "stars", 3), null, "rating-bob"));
+        success(postCatalog(mutation, null, Map.of("id", fixture.productId(), "stars", 2), null, "rating-alice"));
+        HttpResponse<String> response = postCatalog(query, null, read, null, null);
+        JsonNode body = success(response);
+        assertPublicCache(response);
+        assertThat(body.at("/data/product/averageRating").asDouble()).isEqualTo(2.5);
+        assertThat(body.at("/data/product/ratingCount").asInt()).isEqualTo(2);
+        assertThat(body.at("/data/searchProducts/items/0/averageRating").asDouble())
+                .isEqualTo(2.5);
+        assertThat(body.at("/data/searchProducts/items/0/ratingCount").asInt()).isEqualTo(2);
+        JsonNode listed = null;
+        for (JsonNode item : body.at("/data/products")) {
+            if (fixture.productId().equals(item.path("id").asText())) listed = item;
+        }
+        assertThat(listed).isNotNull();
+        assertThat(listed.path("averageRating").asDouble()).isEqualTo(2.5);
+        assertThat(listed.path("ratingCount").asInt()).isEqualTo(2);
+        assertThat(jdbc.queryForObject(
+                        "SELECT stars FROM product_ratings WHERE product_id=? AND user_id=?",
+                        Integer.class,
+                        Long.parseLong(fixture.productId()),
+                        bob.getId()))
+                .isEqualTo(3);
+        for (int invalid : List.of(0, 6)) {
+            assertThat(mapper.readTree(postCatalog(
+                                            mutation,
+                                            null,
+                                            Map.of("id", fixture.productId(), "stars", invalid),
+                                            null,
+                                            "rating-alice")
+                                    .body())
+                            .has("errors"))
+                    .isTrue();
+        }
+        for (String invalid : List.of("not-an-id", Long.toString(Long.MAX_VALUE))) {
+            assertThat(mapper.readTree(
+                                    postCatalog(mutation, null, Map.of("id", invalid, "stars", 5), null, "rating-alice")
+                                            .body())
+                            .has("errors"))
+                    .isTrue();
+        }
+        assertThat(postCatalog(
+                                "mutation { rateProduct(productId: \"" + fixture.productId()
+                                        + "\", stars: 5, userId: \"" + bob.getId() + "\") { id } }",
+                                null,
+                                Map.of(),
+                                null,
+                                "rating-alice")
+                        .body())
+                .contains("errors");
+        assertThat(jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM product_ratings WHERE product_id=?",
+                        Integer.class,
+                        Long.parseLong(fixture.productId())))
+                .isEqualTo(2);
+    }
+
+    private Jwt ratingJwt(String token, String subject, String scope) {
+        return Jwt.withTokenValue(token)
+                .header("alg", "RS256")
+                .subject(subject)
+                .claim("role", "USER")
+                .claim("scope", scope)
+                .build();
+    }
+
+    @Test
     void shouldAllowCredentialFreeReadsForEachPublicCatalogRootTest() throws Exception {
         CatalogFixture fixture = createCatalogFixture();
         List<CatalogOperation> operations = List.of(

@@ -19,6 +19,20 @@ def root_fields(text):
 
 
 class SchemaContractTest(unittest.TestCase):
+    def test_product_ratings_and_sort_are_composed_without_p3_review_fields(self):
+        for filename in ("retail.graphql", "supergraph.graphql"):
+            text = (ROOT / "infrastructure/hive" / filename).read_text()
+            with self.subTest(schema=filename):
+                product = re.search(r"type Product\b[^{]*\{([^}]+)\}", text).group(1)
+                self.assertRegex(product, r"averageRating: Float\b(?!\!)")
+                self.assertIn("ratingCount: Int!", product)
+                sort = re.search(r"enum ProductSort\b[^{]*\{([^}]+)\}", text).group(1)
+                for value in ("RELEVANCE", "PRICE_ASC", "PRICE_DESC", "RATING_DESC"):
+                    self.assertIn(value, sort)
+                self.assertIn("rateProduct(productId: ID!, stars: Int!): Product!", text)
+                self.assertNotIn("helpfulVotes", product)
+                self.assertNotIn("reviews:", product)
+
     def test_checkout_snapshots_and_required_placement_input_are_composed(self):
         for filename in ("retail.graphql", "supergraph.graphql"):
             text = (ROOT / "infrastructure/hive" / filename).read_text()
