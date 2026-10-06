@@ -44,6 +44,14 @@ trigger stack and long text wraps instead of being clipped.
 composition points for #64 and #73. Both are absent today; Search and Cart remain
 ordinary links. Do not add placeholder interactive overlays to those slots.
 
+> **Planned correction.** The owner rejected the catalog composition on
+> 2026-10-06. `/catalog` becomes category discovery, category and search results
+> share one implementation behind a desktop sidebar and a mobile drawer, the
+> narrow catalog dropdown becomes grouped navigation, and the `quickSearch` slot
+> receives a real search input rather than remaining a link. The requirements and
+> the step order are in [`docs/frontend/DESIGN.md`](../docs/frontend/DESIGN.md)
+> §9; the table above describes behaviour **today**, not the target.
+
 ## #61 design follow-up
 
 The shell borrows electronics-store hierarchy, not branding or content, from
@@ -227,6 +235,15 @@ containerized Spring instructions; do not start a second Spring process.
   Navigation overlays reuse server-supplied categories without per-category requests.
 
 ## #63 catalog contract
+
+> **Partly superseded.** The data contract below still holds, but the owner
+> rejected the *composition* it renders. `DESIGN.md` §9 replaces the catalog
+> root with category discovery, adds a shared sidebar/drawer results surface for
+> category browsing **and** search with URL-backed query/filter/sort/page state,
+> introduces the real `ProductSort` values (`RELEVANCE`, `PRICE_ASC`,
+> `PRICE_DESC`, `RATING_DESC`) and the real `ProductFilterInput`/`ProductFacets`
+> capabilities, and reduces the image placeholder. Update this section as each
+> step lands.
 
 `CatalogCategories` fetches the flat category/parent relationships once;
 `CatalogListing` uses only `searchProducts` with **20 items and PRICE_ASC**.

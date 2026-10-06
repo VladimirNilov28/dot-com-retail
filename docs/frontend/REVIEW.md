@@ -14,10 +14,18 @@ design needs the checklist, not a review round.
 
 Paste or reference this in a storefront UI ticket prompt.
 
-> **Before coding** — read `docs/frontend/DESIGN.md` and look at the baseline
-> screenshots in `docs/frontend/baseline/`. **Check `docs/frontend/baseline/README.md`
+> **Before coding** — read `docs/frontend/DESIGN.md`, **including §9
+> "Navigation and discovery requirements"**, which records the owner's
+> 2026-10-06 correction and overrides anything earlier that conflicts with it.
+> Then look at the baseline screenshots in
+> `docs/frontend/baseline/`. **Check `docs/frontend/baseline/README.md`
 > for which existing captures your change will invalidate** — a shared header,
-> token or component affects screenshots owned by several tickets. If this is a
+> token or component affects screenshots owned by several tickets, and the
+> *Planned invalidation* table already maps each correction step to the captures
+> it supersedes. Note the status column: captures marked **Owner-rejected
+> composition** show a layout the owner turned down; they are before-evidence,
+> never a standard to match, and **no capture is owner-approved today**. If this
+> is a
 > new kind of page with no ByteCore precedent, also study the third-party store
 > references in `docs/references/` — its README indexes every capture by page,
 > interaction state and relevant ticket. Patterns and density only, never
@@ -65,6 +73,20 @@ Paste or reference this in a storefront UI ticket prompt.
 
 ### Self-check before finishing
 
+**Navigation and discovery (DESIGN.md §9) — only for catalog, search, home or
+shell work. Skip entirely otherwise.**
+
+- [ ] Category navigation is **grouped and informative**, not a single narrow list or a row of filter-like buttons. Headings link to their own category.
+- [ ] Every navigation surface works by **click, keyboard and touch**. Hover is an enhancement only, guarded by `(hover: hover) and (pointer: fine)`, and never the sole path.
+- [ ] The catalog root leads with category discovery; "All products" is present but explicitly secondary.
+- [ ] Category and search results use **one** results implementation and the same URL-backed query/filter/sort/view/page state. Back/forward restores it; page resets on query/filter change; pagination is immediate.
+- [ ] Desktop results have a left sidebar with category navigation **and real filters**; mobile has an accessible modal drawer, not a stacked sidebar.
+- [ ] Every filter, sort and label maps to a real backend capability in §9.0. No "In stock" while availability is unknown; no featured/popular/trending/new/recommended/deals; no fabricated counts or category imagery.
+- [ ] The media placeholder is **not the dominant element** of a card, and carries no `404` numeral.
+- [ ] The header offers a **real search input** that submits without JavaScript — not a link to another page.
+
+**General**
+
 - [ ] One `<h1>`; heading levels not skipped.
 - [ ] Exactly one action reads as most important, and it is the right one.
 - [ ] No card or panel added purely to fill space.
@@ -85,6 +107,7 @@ Paste or reference this in a storefront UI ticket prompt.
 - [ ] Screenshots invalidated by shared header/token/component changes were recaptured too.
 - [ ] Manifest rows updated (route, viewport, state, revision, covers, status, *Last updated by*); superseded files deleted.
 - [ ] New captures marked "Model-reviewed — awaiting owner approval", not "baseline".
+- [ ] Captures of a composition the owner rejected were not cited as a standard, and were replaced rather than matched.
 
 ---
 
@@ -103,12 +126,16 @@ routine edit.
 > `issue-<ticket>-<route>-<viewport>-<state>.png`, so each one tells you the
 > route, viewport and state it shows.
 >
-> **Reference:** `docs/frontend/DESIGN.md` (the approved design),
-> `docs/frontend/baseline/` (screenshots) and `docs/frontend/baseline/README.md`
-> (the manifest: what each image covers and whether it is owner-approved or only
-> model-reviewed). Judge consistency against the **owner-approved** images.
-> A capture marked "Model-reviewed — awaiting owner approval" is the work under
-> review, not a standard to measure against.
+> **Reference:** `docs/frontend/DESIGN.md` (the approved design — **§9 records
+> the owner's 2026-10-06 navigation and discovery correction and overrides
+> anything earlier that conflicts with it**), `docs/frontend/baseline/`
+> (screenshots) and `docs/frontend/baseline/README.md`
+> (the manifest: what each image covers and its status). **No capture is
+> owner-approved today.** Judge consistency against the **conventions** in
+> `DESIGN.md`, not against an image. A capture marked "Model-reviewed —
+> awaiting owner approval" is work under review, not a standard. A capture
+> marked **"Owner-rejected composition"** is a layout the owner turned down:
+> treat it as before-evidence, and never report a departure from it as a defect.
 > `docs/references/` holds third-party electronics-store captures (arvutitark,
 > iDeal and 1a.ee) used as a pattern brief. Use them to judge whether hierarchy
 > and density are plausible for a store — **never** to require that ByteCore
@@ -118,17 +145,26 @@ routine edit.
 > **Review for, in priority order:**
 > 1. Functional and accessibility defects — unreachable or unlabelled controls,
 >    broken focus or dismissal, colour-only state, overflow, illegible contrast,
->    broken responsive behavior.
-> 2. Honesty — mocked data, fabricated counts, or an unavailable feature
+>    broken responsive behavior, anything reachable by hover alone.
+> 2. Honesty — mocked data, fabricated counts, a filter or sort with no backend
+>    behind it (check `DESIGN.md` §9.0), a section label such as *Featured*,
+>    *Popular* or *Recommended* that no query computes, or an unavailable feature
 >    presented as working.
-> 3. Hierarchy — is the most important action the most prominent one? Does
+> 3. **Navigation and discovery requirements** — for catalog, search, home or
+>    shell work, check each §9 convention: grouped category navigation;
+>    discovery before a flat grid; one shared results implementation with
+>    URL-backed state; desktop sidebar and mobile drawer; a real header search
+>    input; a media placeholder that does not dominate the card. A documented,
+>    explained departure is a judgement call; an undocumented one is a defect.
+> 4. Hierarchy — is the most important action the most prominent one? Does
 >    anything compete with it?
-> 4. Consistency with the established design — tokens, control sizing, spacing
+> 5. Consistency with the established design — tokens, control sizing, spacing
 >    steps, surface and accent usage, reuse of existing components.
-> 5. Composition — crowding, misalignment, unnecessary panels, uneven rhythm.
-> 6. Screenshot hygiene — do the supplied captures actually cover the states the
+> 6. Composition — crowding, misalignment, unnecessary panels, uneven rhythm.
+> 7. Screenshot hygiene — do the supplied captures actually cover the states the
 >    ticket changed? Were captures invalidated elsewhere (shared header, token
->    or component) refreshed? Are names and manifest rows correct? Missing or
+>    or component) refreshed, per the manifest's *Planned invalidation* table?
+>    Are names, statuses and manifest rows correct? Missing or
 >    stale evidence is itself a finding.
 >
 > **Rules:**
@@ -144,6 +180,10 @@ routine edit.
 > - `DESIGN.md` distinguishes **conventions** from **examples**. A different
 >   composition is not a defect. A broken convention is — unless the
 >   implementer explained the departure, in which case judge the explanation.
+>   **Everything in §9 is a convention**, including the items it marks
+>   "required": they are navigation and honesty requirements, not a wireframe.
+>   Column counts, widths, ordering and rhythm inside them remain the
+>   implementer's choice.
 > - If you find nothing above Preference level, say so plainly.
 > - Your review does **not** constitute owner approval. Captures stay
 >   "Model-reviewed — awaiting owner approval" until the owner says otherwise.

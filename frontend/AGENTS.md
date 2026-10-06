@@ -17,9 +17,21 @@ backend work, GraphQL transport, tooling and config.
 
 1. **Read first.** [`docs/frontend/DESIGN.md`](../docs/frontend/DESIGN.md) and the
    baseline screenshots in [`docs/frontend/baseline/`](../docs/frontend/baseline/).
+   **If your change touches the catalog, search, home page or the shell, §9
+   "Navigation and discovery requirements" is mandatory** — it records the
+   owner's 2026-10-06 correction (grouped category navigation, discovery before
+   a flat product grid, one shared results implementation with a desktop sidebar
+   and mobile drawer, a real header search input, a subordinate image
+   placeholder) and overrides anything earlier that conflicts with it. It also
+   lists exactly which filters, sorts and section labels the backend can honestly
+   support.
    Check the manifest (`baseline/README.md`) for which captures your change will
    invalidate — a ticket ID marks ownership, not exclusive coverage, so a shared
-   header, token or component affects several tickets' screenshots. Then open
+   header, token or component affects several tickets' screenshots, and its
+   *Planned invalidation* table already maps each correction step to the captures
+   it supersedes. Mind the status column: **no capture is owner-approved today**,
+   and captures marked **Owner-rejected composition** show a layout the owner
+   turned down — they are before-evidence, never a target. Then open
    the closest already-implemented page and reuse its components, shared classes
    and tokens.
 2. **For a new kind of page** with no ByteCore precedent (listing, product,
