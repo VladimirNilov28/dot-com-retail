@@ -384,6 +384,9 @@ lead into wrapping current-branch category links, one restrained result/view
 toolbar, then a four/three/two/one-column responsive grid or compact list.
 Products sit directly on the background with separators; only the 4:3 placeholder
 uses a quiet surface. Name areas flex to align prices without truncating long names.
+Control/navigation icons retain the shared 20px size. The placeholder's muted
+ImageOff is deliberately 24px as a media illustration rather than an action icon,
+remaining readable within the compact list thumbnail.
 The existing Catalog trigger remains the primary accent; selected view controls
 are quiet and expose pressed semantics, not colour alone.
 
