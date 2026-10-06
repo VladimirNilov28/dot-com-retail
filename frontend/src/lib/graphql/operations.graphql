@@ -1,0 +1,32 @@
+query IntegrationShippingOptions($countryCode: String) {
+  checkoutShippingOptions(countryCode: $countryCode) {
+    method
+    charge
+    currency
+    estimate
+    supportedCountries
+  }
+}
+
+query IntegrationGuestCart {
+  guestCart {
+    id
+    expiresAt
+    totals { subtotal currency }
+    items {
+      id
+      quantity
+      subtotal
+      productVariant { id sku price attributes isActive }
+    }
+  }
+}
+
+query IntegrationGuestOrder($publicId: UUID, $requestId: UUID) {
+  guestOrder(publicId: $publicId, requestId: $requestId) {
+    publicId
+    requestId
+    status
+    totals { merchandiseSubtotal shippingCharge total currency }
+  }
+}

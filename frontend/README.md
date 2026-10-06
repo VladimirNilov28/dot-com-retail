@@ -1,6 +1,7 @@
 # Frontend storefront shell
 
-Responsive ByteCore storefront shell for [#61](https://github.com/VladimirNilov28/dot-com-retail/issues/61),
+Responsive ByteCore storefront shell for [#61](https://github.com/VladimirNilov28/dot-com-retail/issues/61)
+and typed Hive access for [#62](https://github.com/VladimirNilov28/dot-com-retail/issues/62),
 built on the [#60](https://github.com/VladimirNilov28/dot-com-retail/issues/60) foundation.
 The home page retains the actual HeroUI v3 Card/Button demonstration. Shopping
 features are not implemented or simulated.
@@ -96,10 +97,11 @@ bun dev
 After installing dependencies, `make front-dev` from the repository root runs
 the same development server in the foreground.
 
-Open <http://localhost:3000>. No backend, database, Docker services, environment
-variables, or secrets are needed for this demonstration. There is therefore no
-frontend `.env.example` for this ticket. The repository root `.env` configures
-infrastructure, not this application.
+Open <http://localhost:3000>. The shell still needs no backend or environment
+variables. To enable the separate GraphQL boundary, copy `frontend/.env.example`
+to `frontend/.env.local` and run the existing Hive/backend stack. The repository
+root `.env` configures infrastructure, not this application. Never copy its
+credentials into frontend variables.
 
 | Command (inside `frontend/`) | Purpose |
 |---|---|
@@ -109,6 +111,10 @@ infrastructure, not this application.
 | `bun run typecheck` | Generate Next.js route types, then run `tsc --noEmit` |
 | `bun run build` | Create and type-check the production build |
 | `bun start` | Serve the existing production build |
+| `bun run graphql:generate` | Validate operations against composed SDL and regenerate operation types/documents |
+| `bun run graphql:check` | Fail if generated output is stale |
+| `bun run test:graphql` | Run focused mocked transport/scalar/proxy/isolation tests |
+| `bun run graphql:verify` | Perform real credential-free reads through the configured Hive endpoint |
 
 Run checks and production serving with:
 
@@ -232,3 +238,148 @@ on #61; a documented check is not a claim that it passed.
 - [HeroUI theming](https://heroui.com/docs/react/getting-started/theming)
 - Installed Next.js guides: `node_modules/next/dist/docs/`.
   Read these before changing version-sensitive APIs, as required by `AGENTS.md`.
+
+## Typed GraphQL boundary (#62)
+
+This is one schema-derived, typed-operation + `fetch` approach, not competing
+Apollo/urql clients or a global normalized cache. `operations.graphql` is validated
+against `infrastructure/hive/supergraph.graphql`; the generated file records its
+SHA-256. GraphQL Code Generator's operation plugin generates only the selected
+results/variables/enums. Add a real operation, regenerate, supply a runtime decoder
+and variable validator, and register browser operations deliberately. Do not
+invent fields or assume the federation snapshot makes catalog reads public.
+
+`src/lib/graphql/transport.ts` is the common bounded transport. `browser.ts`
+targets **same-origin `/graphql`** with the guest header and browser credentials.
+`server.ts` is marked `server-only`; its server adapter takes an explicit,
+request-specific guest cookie or access token. It never maintains a shared jar,
+obtains a fixture/admin token, or discovers credentials from infrastructure.
+The browser adapter imports no server configuration. The current shell has no
+data dependency and no GraphQL code in its client interaction boundary.
+
+`src/app/graphql/route.ts` accepts only the three exact generated **guest read**
+documents: development shipping options, guest cart, and guest order projection.
+It rejects arbitrary queries/batches, unsupported variables, foreign/missing
+Origin, missing guest header, bearer requests and non-JSON bodies. It forwards
+only selected `retail_guest_cart` / `retail_guest_orders` cookies, the configured
+exact Origin, and `X-Guest-Cart-Request: 1`. No forwarded-host/API-key/session
+headers are copied. Multiple validated HttpOnly, host-only, SameSite=Lax,
+`Path=/graphql` Set-Cookie fields remain separate; HTTPS requires Secure.
+Future mutation documents and authenticated session routing are not registered.
+The route and every current upstream request are private/no-store.
+
+Configure only server variables:
+
+```dotenv
+HIVE_GRAPHQL_URL=http://localhost:4002/graphql
+STOREFRONT_ORIGIN=http://localhost:3000
+```
+
+Origin must also be allowlisted independently in Spring and Hive. Use one
+hostname; do not mix localhost and 127.0.0.1. Missing/invalid configuration returns
+an explicit safe failure and a value-free server log. Non-local storefronts
+require HTTPS. No `NEXT_PUBLIC_` credential/endpoint variables are needed.
+Existing Hive request/response propagation was sufficient and left unchanged.
+
+### Scalars, failures and lifetime
+
+`BigDecimal` money is **branded exact text**, decoded from raw JSON numeric tokens
+with `lossless-json` before any JavaScript floating-point conversion. Trailing
+zeros, large values and exponents are preserved; already-rounded JS numbers are
+rejected as money inputs. The proxy serializes money as exact strings. No money
+arithmetic or `parseFloat` is used. UUID strings are validated and branded.
+Recursive JSON retains numeric tokens as `LosslessNumber`; use the integration's
+`serializeJson` to serialize/round-trip them without mistaking ordinary JSON
+marker properties for numeric class instances. Do not pass those class instances
+directly through an RSC boundary: serialize JSON explicitly, while Decimal/UUID
+strings can be passed normally. Only checked GraphQL Int values become JS numbers.
+
+Results are discriminated `success`, `partial` or `failure`. Even HTTP 200
+GraphQL errors remain errors; partial results carry a typed decoded selection
+and a safe failure, never pretend full success. Schema-invalid/incomplete data
+is rejected as a protocol failure rather than cast to a valid selection.
+Validation, auth/authorization, resource, conflict, unavailable, transport,
+timeout, cancellation, malformed-response and configuration failures have
+safe messages. Hive's nested downstream HTTP statuses are recognized. Raw
+upstream messages, stack traces, credentials and arbitrary extensions are not
+returned by the proxy. Safe classification supports future widget recovery
+and route error boundaries; no feature-page error UI is fabricated here.
+
+Requests default to **10 seconds**, accept bounded 1–30,000ms deadlines, and
+support caller cancellation through body reading. Requests are limited to 32KiB
+and responses to 1MiB, with JSON nesting bounded at 64. Redirects are rejected.
+`latestRequest()` aborts earlier work and rejects superseded results even if an
+adapter ignores cancellation. Consumers must use it for racing interactive reads;
+it is not a live-search UI/debounce implementation (#64).
+No automatic retries occur. `retryable` means a read may offer explicit user
+recovery for transient failure; validation/auth/cancellation are not blind retries.
+Mutations are never automatically replayed. Placement/merge/cancellation tickets
+must retain their existing UUID/payload/idempotency and quote-acceptance contracts.
+
+### Rendering and cache matrix (#94)
+
+| Route/data | Rendering and freshness | Isolation/interaction |
+|---|---|---|
+| Existing home/shell and unavailable pages | Server-rendered, statically prerendered; no live data to revalidate | Small navigation/demo client boundaries only |
+| Future public home/about/catalog/product | Server content; explicit initial 60-second browsing revalidation once anonymous access is supported | Credential-free public data only; do not cache HTTP-200 GraphQL failures |
+| Future URL-driven search/results | Server-backed URL parameters and explicit uncached/fresh search reads | Small suggestion/filter boundaries; cancellation/latest-result guard |
+| Current guest reads and shipping demonstration | Explicit `cache: "no-store"`; `/graphql` response private/no-store | Per-request cookies; no shared session/guest cache |
+| Future cart/checkout/account/orders/auth/admin | Request/session-specific server content where the resolved credential contract permits it; always no-store | Isolated private widgets; never hydrate a public cache with private results |
+| Cart/checkout price, stock and accepted quotes | Fresh authoritative server validation, not browsing revalidation | Cached price/stock is never an accepted purchase quote |
+
+The installed Next.js 16.3.6 **fetch-cache model** is used; Cache Components is
+not enabled. Fetch caching is opt-in, and even authorization/cookie POSTs could
+be cached if a caller used `force-cache`, so this adapter deliberately offers
+no shared-cache switch for current operations. Future public caching must wrap
+validated credential-free successful data, not raw GraphQL HTTP responses.
+The build leaves existing routes static and only `/graphql` request-driven.
+There is no global CSR, static export or blanket dynamic configuration.
+
+### Actual API/auth gaps and verification
+
+Anonymous catalog queries currently fail through Hive with GraphQL errors at
+HTTP 200 containing downstream 401. Shipping options are an existing protected
+guest-transport **development** catalog, not public product browsing. The live
+verification reads those options and a null credential-free `guestCart`; it
+creates no cart or order. A fixture-token read would not prove browsing/login.
+
+The authenticated adapter is a seam for a future request-resolved access token,
+not a working Next.js user session. #40 still owns callback/origin/PKCE, token
+storage/refresh/logout and onboarding decisions. Backend guest cookies retain
+`Path=/graphql`: a browser does **not** send them on `/cart` page requests.
+Server-rendered guest content on other paths therefore needs an explicit future
+cookie/session-delivery decision; do not widen cookie scope silently or pretend
+the server adapter itself solves it. #73 owns merge/mutation/browser cart flows.
+
+Mocked tests cover errors at HTTP 200, partial/malformed data, scalar precision,
+timeouts/cancellation/stale results, no automatic mutation replay, header/cookie
+selection, Set-Cookie handling and concurrent private isolation. Those are not
+live authentication, real-cookie creation or cart/checkout journey evidence.
+With the stack already running:
+
+```bash
+HIVE_GRAPHQL_URL=http://localhost:4002/graphql \
+STOREFRONT_ORIGIN=http://localhost:3000 \
+bun run graphql:verify
+
+# Also compare the real Next.js boundary against Hive, after configuring the server:
+FRONTEND_URL=http://localhost:3000 \
+HIVE_GRAPHQL_URL=http://localhost:4002/graphql \
+STOREFRONT_ORIGIN=http://localhost:3000 \
+bun run graphql:verify
+```
+
+The optional frontend comparison supplies the approved Origin explicitly as a
+non-browser client. It is not evidence of a browser session or user login.
+For actual browser Origin/cookie-transport verification, run the read-only smoke
+at the configured allowed origin (using the external Playwright module):
+
+```bash
+PLAYWRIGHT_MODULE=/absolute/path/to/playwright/index.mjs \
+FRONTEND_URL=http://localhost:3000 \
+bun scripts/hive-browser-smoke.mjs
+```
+
+It reads shipping options and the null credential-free cart through the Next.js
+boundary, without creating guest state or simulating an authenticated journey.
+Exact executed results and limitations are reported separately on #62.
