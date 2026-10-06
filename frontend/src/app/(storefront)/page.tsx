@@ -3,7 +3,7 @@ import Link from "next/link";
 const availability = [
   {
     area: "Catalog",
-    status: "Product browsing is being built.",
+    status: "Browse products and categories from the catalog.",
   },
   {
     area: "Search",

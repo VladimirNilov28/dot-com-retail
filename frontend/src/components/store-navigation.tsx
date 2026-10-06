@@ -5,6 +5,8 @@ import { ChevronDown, Grid2X2, Menu, Search, ShoppingCart, UserRound, X } from "
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { catalogHref, categoryIndex, type Category } from "@/lib/catalog/model";
+import { CatalogRetry } from "./catalog-retry";
 
 const destinations = [
   { href: "/catalog", label: "Catalog" },
@@ -28,9 +30,13 @@ type Overlay = "mobile" | "catalog" | "account" | null;
 export function StoreNavigation({
   quickSearch,
   cartPreview,
+  categories,
+  categoryError,
 }: {
   quickSearch?: ReactNode;
   cartPreview?: ReactNode;
+  categories: Category[];
+  categoryError: boolean;
 }) {
   const pathname = usePathname();
   const [state, setState] = useState<{ pathname: string; overlay: Overlay }>({
@@ -107,6 +113,22 @@ export function StoreNavigation({
     );
   }
 
+  function categoryLinks() {
+    const index = categoryIndex(categories);
+    return <nav aria-label="Catalog categories" className="store-category-links">
+      {index.children().map((root) => <div key={root.id}>
+        {[root, ...index.children(root.id)].map((category) => {
+          const href = catalogHref(category.slug);
+          return <Link key={category.id} href={href} prefetch={false} className="store-nav-link"
+            aria-current={pathname === href ? "page" : undefined}
+            onClick={(event) => {
+              if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) setOverlay(null);
+            }}>{category.name}</Link>;
+        })}
+      </div>)}
+    </nav>;
+  }
+
   function desktopPopover(kind: "catalog" | "account") {
     const catalog = kind === "catalog";
     const Icon = catalog ? Grid2X2 : UserRound;
@@ -128,10 +150,12 @@ export function StoreNavigation({
             <Popover.Heading className="font-semibold">{catalog ? "Explore the catalog" : "Your account"}</Popover.Heading>
             <p className="my-3 text-sm text-muted">
               {catalog
-                ? "Category links will appear when catalog integration is available."
+                ? (categoryError ? "Categories could not be loaded." : categories.length ? "Browse by category." : "No categories yet.")
                 : "Account features are not available yet."}
             </p>
             {navigationLink(destination)}
+            {catalog && categoryLinks()}
+            {catalog && categoryError && <CatalogRetry />}
           </Popover.Dialog>
         </Popover.Content>
       </Popover>
@@ -165,9 +189,10 @@ export function StoreNavigation({
                   <nav aria-label="Primary" className="store-mobile-panel">
                     {destinations.map((destination) => navigationLink(destination))}
                   </nav>
-                  <p className="mt-6 text-sm text-muted">
-                    Browse the catalog to discover electronics. Category links are not available yet.
-                  </p>
+                  <p className="mt-6 mb-2 text-sm text-muted">{categoryError ? "Categories could not be loaded." :
+                    categories.length ? "Browse by category" : "No categories yet."}</p>
+                  {categoryLinks()}
+                  {categoryError && <CatalogRetry />}
                 </Drawer.Body>
               </Drawer.Dialog>
             </Drawer.Content>

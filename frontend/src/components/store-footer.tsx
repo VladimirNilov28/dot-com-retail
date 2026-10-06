@@ -8,7 +8,7 @@ export function StoreFooter() {
         <div>
           <p className="text-lg font-semibold text-foreground">ByteCore</p>
           <p>Electronics, clearly connected.</p>
-          <p className="mt-3">Storefront in progress. Shopping features are not available yet.</p>
+          <p className="mt-3">Browse the catalog. Sign-in, cart and checkout are not available yet.</p>
         </div>
         <nav aria-label="Footer catalog" className="grid gap-2">
           <p className="font-semibold text-foreground">Discover</p>

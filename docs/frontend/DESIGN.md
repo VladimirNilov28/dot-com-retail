@@ -290,6 +290,10 @@ Everything in `frontend/src/components/`:
 | [`store-footer.tsx`](../../frontend/src/components/store-footer.tsx) | Server | Grouped link columns mirroring the header. Add a column here when a new destination group appears. |
 | [`unavailable-page.tsx`](../../frontend/src/components/unavailable-page.tsx) | Server | **Reuse for every not-yet-built route.** Takes `title` + `description`; renders eyebrow, `h1`, description and a home link. |
 | [`foundation-demo.tsx`](../../frontend/src/components/foundation-demo.tsx) | Client | Component playground. Lives only at `/dev/foundation` (`noindex, nofollow`, unlinked). Not customer-facing. |
+| [`product-card.tsx`](../../frontend/src/components/product-card.tsx) | Server | #63 grid/list names, exact EUR display and explicitly unknown availability. |
+| [`image-unavailable.tsx`](../../frontend/src/components/image-unavailable.tsx) | Server | Shared code-rendered media placeholder, no network image requests. |
+| [`catalog-page.tsx`](../../frontend/src/components/catalog-page.tsx) | Server | #63 breadcrumbs, direct category context, results/recovery and bounded pagination. |
+| `catalog-controls.tsx`, `catalog-link.tsx`, `catalog-retry.tsx` | Client | URL-backed view/pending navigation and explicit route recovery only. |
 
 Shared CSS classes live in `globals.css` `@layer components`: `.page-container`,
 `.store-header`, `.store-brand`, `.store-nav-link`, `.store-action`,
@@ -310,9 +314,8 @@ Shared CSS classes live in `globals.css` `@layer components`: `.page-container`,
 **Extract only when a second real caller exists.** Three components are likely
 to emerge from upcoming tickets, but **do not create them in advance**:
 
-- A **product card** (#63) — genuinely shared by listing, search, home and cart
-  recommendations. Build it in #63 for listing, then reuse it; don't design it
-  for four pages at once.
+- The **product card** now exists for #63 grid/list. Reuse it when search/home
+  need it; it was not designed speculatively for four pages.
 - A **page header** (eyebrow + `h1` + description + optional toolbar) — already
   duplicated between `UnavailablePage` and the home hero. Worth extracting when
   the third caller appears, not before.
@@ -374,6 +377,29 @@ no thumbnails or prices.*
   drawer; a grid/list toggle in a result toolbar beside the result count. The
   mobile filter drawer should reuse the existing `Drawer` behavior.
 - Skeletons must match the real layout's dimensions so nothing reflows.
+
+**#63 composition decision (model-reviewed, not owner-approved):** retain the
+80rem PageContainer and compact one-row shell. Breadcrumbs and a modest heading
+lead into wrapping current-branch category links, one restrained result/view
+toolbar, then a four/three/two/one-column responsive grid or compact list.
+Products sit directly on the background with separators; only the 4:3 placeholder
+uses a quiet surface. Name areas flex to align prices without truncating long names.
+The existing Catalog trigger remains the primary accent; selected view controls
+are quiet and expose pressed semantics, not colour alone.
+
+This deliberately omits a permanent category/facet rail, duplicated top navigation
+and filled results panel: current direct-membership browsing does not justify them,
+and facets/search belong to #64. Parent pages explain their scope and link children;
+they never imply descendant aggregation. The same fetched flat taxonomy supplies
+breadcrumbs, in-page links and genuine shell root/child links.
+
+Prices use exact minimum active-variant EUR values (“From” only for differing
+eligible prices; none means “Price unavailable”). Stock remains “Availability
+unknown”; `isActive` is not stock. Actual media/public stock stay deferred.
+Loading retains route context with matching grid/list skeletons; errors have an
+explicit retry, empty parents direct shoppers to children, and missing slugs have
+the dark category-specific HTTP 404. See `frontend/README.md` for freshness,
+scale and route rules, and the manifest for fixture-backed visual evidence.
 
 ### Product detail (#65)
 

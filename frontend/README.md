@@ -1,10 +1,11 @@
 # Frontend storefront shell
 
-Responsive ByteCore storefront shell for [#61](https://github.com/VladimirNilov28/dot-com-retail/issues/61)
-and typed Hive access for [#62](https://github.com/VladimirNilov28/dot-com-retail/issues/62),
+Responsive ByteCore storefront shell for [#61](https://github.com/VladimirNilov28/dot-com-retail/issues/61),
+typed Hive access for [#62](https://github.com/VladimirNilov28/dot-com-retail/issues/62),
+and public catalog browsing for [#63](https://github.com/VladimirNilov28/dot-com-retail/issues/63),
 built on the [#60](https://github.com/VladimirNilov28/dot-com-retail/issues/60) foundation.
 The HeroUI v3 Card/Button demonstration lives at `/dev/foundation`. Shopping
-features are not implemented or simulated.
+actions, search, account and checkout are not implemented or simulated.
 
 **Before changing storefront UI, read [`docs/frontend/DESIGN.md`](../docs/frontend/DESIGN.md)**
 — the approved design, its reasoning and extension guidance — and look at the
@@ -20,7 +21,8 @@ retains the single skip link and deterministic dark theme.
 | Route | Current behavior |
 |---|---|
 | `/` | Compact holding composition: intro, catalog action, honest availability list |
-| `/catalog` | Honest unavailable page; no products |
+| `/catalog` | Server-rendered bounded public product listing, category navigation and grid/list views |
+| `/catalog/[slug]` | Direct category members, ancestors/child links, real metadata and missing-category 404 |
 | `/search` | Honest unavailable page; no search form or quick-search overlay |
 | `/account` | Honest unavailable page; no fake sign-in |
 | `/cart` | Honest unavailable page; no counts, cart contents, preview or checkout |
@@ -59,10 +61,9 @@ the installed modal primitive blocks background interaction with `inert`.
 Overlay widths fit the actual CSS viewport, including 160px at mobile 200% zoom.
 Reduced-motion rules cover portals as well as header controls.
 
-Category names/URLs cannot be populated yet: there is no frontend catalog
-integration and today's backend does not allow anonymous catalog browsing.
-The Catalog popover therefore offers only the supported `/catalog` destination
-with an explicit availability note. Account offers only `/account`, not invented
+Category names/URLs now come from credential-free Hive data under #95, shared
+with listing/metadata. Catalog popover and mobile drawer include real root/child
+links; empty or failed category reads are explicit. Account offers only `/account`, not invented
 login, orders or settings actions. No promotional merchandising (#86), live search
 (#64), cart contents/drawer (#73), product data or authentication is simulated.
 
@@ -156,8 +157,9 @@ bun dev
 After installing dependencies, `make front-dev` from the repository root runs
 the same development server in the foreground.
 
-Open <http://localhost:3000>. The shell still needs no backend or environment
-variables. To enable the separate GraphQL boundary, copy `frontend/.env.example`
+Open <http://localhost:3000>. Public catalog/shell categories require Hive;
+missing configuration has an actionable unavailable state, not fallback products.
+Copy `frontend/.env.example`
 to `frontend/.env.local` and run the existing Hive/backend stack. The repository
 root `.env` configures infrastructure, not this application. Never copy its
 credentials into frontend variables.
@@ -222,7 +224,55 @@ containerized Spring instructions; do not start a second Spring process.
   All overlays start closed identically on server and client.
 - The page has a keyboard-visible skip link, semantic headings, visible HeroUI
   focus styling, and accessible overlay triggers with `aria-expanded`.
-  Navigation overlays send no business network requests.
+  Navigation overlays reuse server-supplied categories without per-category requests.
+
+## #63 catalog contract
+
+`CatalogCategories` fetches the flat category/parent relationships once;
+`CatalogListing` uses only `searchProducts` with **20 items and PRICE_ASC**.
+The backend supplies zero-based pages; URLs use one-based `page` and optional
+`view=grid|list`. Pagination is immediate, without debounce. Categories reset
+the page and preserve the view. Invalid/duplicated state has a first-page recovery;
+out-of-range pages redirect to the last page.
+
+Category pages show **direct membership**, not descendants. Parent pages provide
+child links and explain that scope, including when only their children have products.
+Category existence is validated before streaming so missing slugs return HTTP 404.
+Products, prices, counts and metadata are server-rendered, including with JavaScript
+disabled. Pending navigation uses geometry-matched skeletons and destination feedback;
+view transitions retain useful products.
+
+Prices are the exact minimum among active variants. Differing active prices use
+“From”; equal prices use one price; no active variants means “Price unavailable”.
+`isActive` is never a stock signal. Currency is implicitly EUR, consistent with
+`docs/api/guest-cart.md` and `docs/api/checkout.md`; the schema has no currency field.
+Decimal strings are compared without floating-point money arithmetic and displayed
+to two places using positive half-up rounding. Browsing prices are not checkout quotes.
+
+Inventory is protected under #95: **“Availability unknown” is not completion of
+public availability**. Real images remain deferred to #81/#96. Cards share a
+code-rendered “404 / Image unavailable” placeholder and make no image requests.
+Product links target the planned `/products/[slug]` route (#65), which is not
+implemented here. No facets/search (#64), details or cart actions (#73) are simulated.
+
+The server-only loader caches **validated successful credential-free results**
+with 60-second revalidation and endpoint/origin/normalized-input cache identity.
+React request-local deduplication shares category data with shell and metadata.
+Time-based revalidation can serve stale successful data while refreshing; 60 seconds
+is not a strict maximum age. Failures/partial results throw inside the cache scope
+and are recovered outside it; failed rendering opts out of prerender/full-route caching.
+Retry refreshes the route. Core transport and same-origin proxy remain `no-store`;
+private/guest data never enter the public cache.
+
+Scale assumption: hundreds of categories within the existing 1 MiB transport budget.
+The backend flat category root and per-product variants are unpaginated. There are
+no category waterfalls, unbounded `products` listing requests or silent truncation.
+
+Focused checks: `bun test src/lib/graphql src/lib/catalog`. The production
+`scripts/catalog-smoke.mjs` additionally needs an **isolated real backend/Hive**
+with the fixture prerequisites in the screenshot manifest; its optional
+`CATALOG_TEST_CONTROL` bridge supplies verification-only delays/errors, never
+production fallback data. Start from a cold public cache for loading checks.
 
 ## Shared custom UI icons
 
@@ -312,23 +362,29 @@ and variable validator, and register browser operations deliberately. Do not
 invent fields or assume the federation snapshot makes catalog reads public.
 
 `src/lib/graphql/transport.ts` is the common bounded transport. `browser.ts`
-targets **same-origin `/graphql`** with the guest header and browser credentials.
+targets **same-origin `/graphql`**: guest reads use the guest header/credentials;
+registered public reads use `requestPublic` with credentials omitted.
 `server.ts` is marked `server-only`; its server adapter takes an explicit,
-request-specific guest cookie or access token. It never maintains a shared jar,
+request-specific guest cookie/access token or an explicit public context.
+Public context attaches no credentials or guest ceremony. It never maintains a shared jar,
 obtains a fixture/admin token, or discovers credentials from infrastructure.
-The browser adapter imports no server configuration. The current shell has no
-data dependency and no GraphQL code in its client interaction boundary.
+The browser adapter imports no server configuration. Shell categories load on
+the server; its client interaction boundary receives the resulting flat data.
 
-`src/app/graphql/route.ts` accepts only the three exact generated **guest read**
-documents: development shipping options, guest cart, and guest order projection.
-It rejects arbitrary queries/batches, unsupported variables, foreign/missing
+`src/app/graphql/route.ts` accepts three exact generated **guest read**
+documents (development shipping options, guest cart and guest order projection)
+and two registered public catalog documents. It rejects arbitrary queries/batches
+and unsupported variables. Guest dispatch additionally rejects foreign/missing
 Origin, missing guest header, bearer requests and non-JSON bodies. It forwards
 only selected `retail_guest_cart` / `retail_guest_orders` cookies, the configured
 exact Origin, and `X-Guest-Cart-Request: 1`. No forwarded-host/API-key/session
 headers are copied. Multiple validated HttpOnly, host-only, SameSite=Lax,
 `Path=/graphql` Set-Cookie fields remain separate; HTTPS requires Secure.
 Future mutation documents and authenticated session routing are not registered.
-The route and every current upstream request are private/no-store.
+Public dispatch needs no guest header, rejects bearer/foreign Origin requests,
+ignores incoming cookies and rejects upstream Set-Cookie. The proxy response and
+every raw upstream request remain private/no-store; public successful data caching
+exists only in the server catalog loader.
 
 Configure only server variables:
 
@@ -382,8 +438,9 @@ must retain their existing UUID/payload/idempotency and quote-acceptance contrac
 
 | Route/data | Rendering and freshness | Isolation/interaction |
 |---|---|---|
-| Existing home/shell and unavailable pages | Server-rendered, statically prerendered; no live data to revalidate | Small navigation/demo client boundaries only |
-| Future public home/about/catalog/product | Server content; explicit initial 60-second browsing revalidation once anonymous access is supported | Credential-free public data only; do not cache HTTP-200 GraphQL failures |
+| Home/shell and unavailable pages | Server-rendered, statically prerendered with successful category data; 60-second revalidation | Failed category rendering is dynamic, never cached error UI |
+| Catalog/category | Meaningful server content; validated public success with 60-second revalidation | Credential-free data only; failures/partials not cached |
+| Future public home merchandising/about/product | Server content with explicit browsing freshness | Credential-free public data only |
 | Future URL-driven search/results | Server-backed URL parameters and explicit uncached/fresh search reads | Small suggestion/filter boundaries; cancellation/latest-result guard |
 | Current guest reads and shipping demonstration | Explicit `cache: "no-store"`; `/graphql` response private/no-store | Per-request cookies; no shared session/guest cache |
 | Future cart/checkout/account/orders/auth/admin | Request/session-specific server content where the resolved credential contract permits it; always no-store | Isolated private widgets; never hydrate a public cache with private results |
@@ -392,17 +449,18 @@ must retain their existing UUID/payload/idempotency and quote-acceptance contrac
 The installed Next.js 16.3.6 **fetch-cache model** is used; Cache Components is
 not enabled. Fetch caching is opt-in, and even authorization/cookie POSTs could
 be cached if a caller used `force-cache`, so this adapter deliberately offers
-no shared-cache switch for current operations. Future public caching must wrap
+no shared-cache switch on the raw adapter. Catalog caching wraps
 validated credential-free successful data, not raw GraphQL HTTP responses.
-The build leaves existing routes static and only `/graphql` request-driven.
+Normal builds leave existing routes static; catalog/category and `/graphql` are request-driven.
 There is no global CSR, static export or blanket dynamic configuration.
 
 ### Actual API/auth gaps and verification
 
-Anonymous catalog queries currently fail through Hive with GraphQL errors at
-HTTP 200 containing downstream 401. Shipping options are an existing protected
+Anonymous catalog reads are now allowed by #95; the earlier #62 downstream-401
+gap is superseded. Verification includes registered flat categories and bounded
+PRICE_ASC listings without credentials. Shipping options are an existing protected
 guest-transport **development** catalog, not public product browsing. The live
-verification reads those options and a null credential-free `guestCart`; it
+verification also reads those options and a null credential-free `guestCart`; it
 creates no cart or order. A fixture-token read would not prove browsing/login.
 
 The authenticated adapter is a seam for a future request-resolved access token,
