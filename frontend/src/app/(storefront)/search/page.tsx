@@ -1,13 +1,11 @@
 import type { Metadata } from "next";
-import { UnavailablePage } from "@/components/unavailable-page";
+import { CatalogPageContent } from "@/components/catalog-page";
 
-export const metadata: Metadata = { title: "Search" };
+export const metadata: Metadata = {
+  title: "Search",
+  description: "Search ByteCore products. Actual EUR prices, no fabricated results.",
+};
 
-export default function SearchPage() {
-  return (
-    <UnavailablePage
-      title="Search"
-      description="Product search is not available yet. There is no search form or quick-search overlay at this stage."
-    />
-  );
+export default async function SearchPage({ searchParams }: PageProps<"/search">) {
+  return <CatalogPageContent isSearch parameters={await searchParams} />;
 }
