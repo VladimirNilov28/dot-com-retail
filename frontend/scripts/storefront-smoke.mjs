@@ -44,19 +44,20 @@ async function inspect(page, route, mobile) {
   assert.equal(await page.getByRole("contentinfo").count(), 1);
   assert.equal(await page.locator('a[href="#main-content"]').count(), 1);
   assert.equal(await page.getByRole("heading", { level: 1 }).textContent(), route.heading);
-  if (route.path !== "/" && route.path !== "/catalog/all-products") {
+  if (route.path !== "/" && route.path !== "/catalog/all-products" && route.path !== "/search") {
     assert.match(await page.locator("main").textContent(), /not available yet/i);
     assert.equal(await page.locator("main input, main form, main button").count(), 0);
     assert.equal(await page.getByRole("link", { name: "Return to home" }).getAttribute("href"), "/");
     assert.equal(await page.title(), `${route.label} | ByteCore`);
   }
-  if (route.path === "/catalog/all-products") {
+  if (route.path === "/catalog/all-products" || route.path === "/search") {
     await page.getByRole("group", { name: "Product view" }).waitFor();
-    assert.equal(await page.title(), "All products | ByteCore");
+    assert.equal(await page.title(), route.path === "/search" ? "Search | ByteCore" : "All products | ByteCore");
     const list = new URL(page.url()).searchParams.get("view") === "list";
     assert.equal(await page.getByRole("button", { name: "Grid view" }).getAttribute("aria-pressed"), String(!list));
     assert.equal(await page.getByRole("button", { name: "List view" }).getAttribute("aria-pressed"), String(list));
     assert.match(await page.locator("main").textContent(), /products|No products/);
+    if (route.path === "/search") assert.equal(await page.getByRole("combobox", { name: "Search products" }).count(), 1);
   }
   const metrics = await page.evaluate(() => {
     const root = document.documentElement;

@@ -95,7 +95,7 @@ async function CatalogResults({ route, categoryId, hasChildren, isSearch, state 
           (listing.pageInfo.totalItems === 0 ? "0 products" :
             `${(state.page - 1) * 20 + 1}–${(state.page - 1) * 20 + listing.items.length} of ${listing.pageInfo.totalItems} products`) :
           "Products could not be loaded"}</p>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <CatalogSort route={route} state={state} />
           <CatalogControls route={route} state={state} />
         </div>
