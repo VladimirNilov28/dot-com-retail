@@ -117,7 +117,6 @@ async function CatalogResults({ route, categoryId, hasChildren, isSearch, state 
         {categoryId && <CatalogLink href={catalogHref(undefined, 1, state.view)} className="store-link">Browse all products</CatalogLink>}
       </section> : listing && <>
         <ul className="catalog-products" aria-label="Products">{listing.items.map((product) => <ProductCard key={product.id} product={product} />)}</ul>
-        <p className="mt-4 text-xs text-muted">Stock information is not public yet. Availability is unknown; prices are browsing information, not a checkout quote.</p>
         {listing.pageInfo.totalPages > 1 && <nav aria-label="Pagination" className="catalog-pagination">
           {state.page > 1 ? <CatalogLink href={resultsHref(route, state, { page: state.page - 1 })} className="store-cta">Previous</CatalogLink> : <span className="catalog-disabled">Previous</span>}
           <span className="text-sm">Page {state.page} of {listing.pageInfo.totalPages}</span>

@@ -1,12 +1,12 @@
 "use client";
 
-import { SlidersHorizontal, X } from "lucide-react";
-import { Button, Drawer } from "@heroui/react";
+import { ChevronDown, SlidersHorizontal, X } from "lucide-react";
+import { Button, Disclosure, Drawer } from "@heroui/react";
 import { useId, useState, type MouseEvent } from "react";
 import { isPlainClick } from "./category-navigation";
 import { CatalogLink } from "./catalog-link";
 import {
-  ATTRIBUTE_PARAM_PREFIX, DEFAULT_SORT, catalogHref, hasActiveFilters, resultsHref,
+  ATTRIBUTE_PARAM_PREFIX, DEFAULT_SORT, attributeLabel, catalogHref, hasActiveFilters, resultsHref,
   type AttributeFilter, type Category, type CatalogFacets, type ResultsState,
 } from "@/lib/catalog/model";
 
@@ -108,40 +108,63 @@ function Filters({ route, state, facets, onNavigate }: {
         </ul>
       )}
       {hasPriceFacet && (
-        <form action={route} method="get" className="results-price-form" aria-label="Price range">
-          <PreserveParams state={state} omit={["minPrice", "maxPrice"]} />
-          <label className="results-price-label">
-            Min
-            <input type="number" min="0" step="0.01" name="minPrice" defaultValue={state.minPrice ?? ""} inputMode="decimal" className="results-price-input" />
-          </label>
-          <label className="results-price-label">
-            Max
-            <input type="number" min="0" step="0.01" name="maxPrice" defaultValue={state.maxPrice ?? ""} inputMode="decimal" className="results-price-input" />
-          </label>
-          <button type="submit" className="store-cta results-price-submit">Apply</button>
-        </form>
-      )}
-      {facets.attributes.map((attribute) => (
-        <div key={attribute.name} className="results-filter-block">
-          <h3 className="results-filter-heading">{attribute.name}</h3>
-          <ul className="results-filter-group" role="list">
-            {attribute.values.map((value) => {
-              const isActive = state.attributes.some((entry) => entry.name === attribute.name && entry.value === value.value);
-              const nextAttributes: AttributeFilter[] = isActive
-                ? state.attributes.filter((entry) => entry.name !== attribute.name)
-                : [...state.attributes.filter((entry) => entry.name !== attribute.name), { name: attribute.name, value: value.value }];
-              return (
-                <li key={value.value}>
-                  <CatalogLink href={resultsHref(route, state, { attributes: nextAttributes })}
-                    className="results-filter-option" aria-pressed={isActive} onClick={navClick(onNavigate)}>
-                    {value.value} <span className="results-filter-count">({value.count})</span>
-                  </CatalogLink>
-                </li>
-              );
-            })}
-          </ul>
+        <div className="results-filter-block">
+          <h3 className="results-filter-heading">Price (EUR)</h3>
+          <form action={route} method="get" className="results-price-form" aria-label="Price range in EUR">
+            <PreserveParams state={state} omit={["minPrice", "maxPrice"]} />
+            <label className="results-price-label">
+              Min
+              <input type="number" min="0" step="0.01" name="minPrice" defaultValue={state.minPrice ?? ""} inputMode="decimal"
+                aria-label="Minimum price in EUR" className="results-price-input" />
+            </label>
+            <label className="results-price-label">
+              Max
+              <input type="number" min="0" step="0.01" name="maxPrice" defaultValue={state.maxPrice ?? ""} inputMode="decimal"
+                aria-label="Maximum price in EUR" className="results-price-input" />
+            </label>
+            <button type="submit" className="store-cta results-price-submit">Apply</button>
+          </form>
         </div>
-      ))}
+      )}
+      {facets.attributes.map((attribute) => {
+        // A group starts expanded only while it already has an applied value
+        // (derived fresh from the URL state every render, not remembered
+        // client-side), so disclosure state never drifts from what is
+        // actually active and never resets unexpectedly on its own.
+        const hasActiveValue = state.attributes.some((entry) => entry.name === attribute.name);
+        return (
+          <Disclosure key={attribute.name} defaultExpanded={hasActiveValue} className="results-filter-block">
+            <Disclosure.Heading level={3} className="results-filter-row">
+              <Disclosure.Trigger className="results-filter-toggle">
+                <span className="results-filter-heading">{attributeLabel(attribute.name)}</span>
+                <Disclosure.Indicator>
+                  <ChevronDown size={16} strokeWidth={2} aria-hidden="true" focusable="false" className="store-icon" />
+                </Disclosure.Indicator>
+              </Disclosure.Trigger>
+            </Disclosure.Heading>
+            <Disclosure.Content>
+              <Disclosure.Body>
+                <ul className="results-filter-group" role="list">
+                  {attribute.values.map((value) => {
+                    const isActive = state.attributes.some((entry) => entry.name === attribute.name && entry.value === value.value);
+                    const nextAttributes: AttributeFilter[] = isActive
+                      ? state.attributes.filter((entry) => entry.name !== attribute.name)
+                      : [...state.attributes.filter((entry) => entry.name !== attribute.name), { name: attribute.name, value: value.value }];
+                    return (
+                      <li key={value.value}>
+                        <CatalogLink href={resultsHref(route, state, { attributes: nextAttributes })}
+                          className="results-filter-option" aria-pressed={isActive} onClick={navClick(onNavigate)}>
+                          {value.value} <span className="results-filter-count">({value.count})</span>
+                        </CatalogLink>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </Disclosure.Body>
+            </Disclosure.Content>
+          </Disclosure>
+        );
+      })}
     </section>
   );
 }
