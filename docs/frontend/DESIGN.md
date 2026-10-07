@@ -723,6 +723,29 @@ navigation**, not a single narrow column of every category.
 - **No counts** in the panel unless they come from `facets.categories`, in which
   case they must be labelled as direct-membership counts.
 
+**Resolved during implementation (#61, §9.8 step 1) — do not re-litigate
+without a new owner decision:**
+
+- **Desktop depth stops at children.** A group is a root heading plus *its
+  children*, exactly as defined above. Rendering grandchildren and deeper in the
+  panel was tried against a 150-category tree and produced the oversized sitemap
+  the owner rejected: unbreakable ~1000px groups and roots pushed out of the
+  first view. Deeper levels stay reachable from each category's own page and in
+  full from the mobile drawer, which keeps full depth behind collapsed
+  disclosures.
+- **Column count derives from rendered rows, not root count.** Deriving it from
+  the number of roots produces sparse, badly balanced columns. Use CSS multicol
+  with `break-inside: avoid` on each group; CSS grid aligns rows and leaves large
+  holes beside a tall group.
+- **Hover was deliberately not shipped.** Hover is optional above, but
+  "hover-opening must not move focus" is mandatory when it *is* implemented.
+  With HeroUI v3 / react-aria-components that constraint cannot be met: RAC
+  `Dialog` auto-focuses its `role="dialog"` element on mount and re-asserts that
+  focus, and `useOverlay`'s `shouldCloseOnBlur` then dismisses the panel when the
+  focus is moved back. Both workarounds required patching library internals. Add
+  hover only if a future HeroUI release makes dialog auto-focus opt-out; click,
+  keyboard and touch already satisfy every requirement.
+
 ### 9.2 Home — category entry points and real discovery
 
 #86 replaces the holding page with:

@@ -46,7 +46,11 @@ narrow category dropdown, and a Search control that offers no input.
 Consequences recorded in this manifest:
 
 - The `issue-63-*` catalog and category captures and the `issue-61-*` catalog
-  popover and drawer captures are **Owner-rejected composition**.
+  popover and drawer captures were **Owner-rejected composition**. The two
+  `issue-61-*` ones have since been **superseded by §9.8 step 1** (grouped
+  catalog navigation) and are now *Model-reviewed — awaiting owner approval*;
+  the rejected images remain in git history at `1d9477c`. The seventeen
+  `issue-63-*` rows are still rejected before-evidence.
 - The remaining `issue-61-*` captures stay *Model-reviewed*. They were not
   themselves rejected, but they are invalidated by the planned header search
   input and the home replacement.
@@ -80,7 +84,9 @@ Names are **stable**. Replace the file in place. No timestamps, no `-v2`, no
 ## Current set
 
 Source revision for every entry below: **`5ffceb0b6d21437a778491422cf4eeeec665325f`**
-on `dev` (#63 listing and refreshed #61 shell). Shared capture settings:
+on `dev` (#63 listing and refreshed #61 shell), **except** the three captures
+refreshed by §9.8 step 1 (grouped catalog navigation) — see below. Shared capture
+settings:
 Chromium 153.0.8010.12 (Playwright 1.63),
 `deviceScaleFactor: 1`, `colorScheme: "light"` — deliberate, since the
 storefront is fixed-dark via `data-theme="dark"`, so a light OS preference
@@ -102,13 +108,46 @@ the storefront/browser and public cache. No owner database was seeded or changed
 Names and counts in these captures are isolated test data, not a production
 catalog or production fallback. The owner's live endpoint had no products/categories.
 
+### Step 1 refresh — grouped catalog navigation (#61)
+
+Three captures were replaced in place on top of the working tree that implements
+§9.8 step 1, local commits on `dev` after
+`ebd726c5d8a204d2161253d3f0bc2d2b032bd990`:
+
+| File | Why refreshed |
+|---|---|
+| `issue-61-home-desktop-1440-catalog-popover-open.png` | The rejected narrow single-column list is replaced by the grouped multi-column panel |
+| `issue-61-home-mobile-390-drawer-open.png` | The flat category list is replaced by grouped roots with separate link and expand controls |
+| `issue-61-home-desktop-1440-account-popover-open.png` | Shared header trigger changed; refreshed to stay a truthful capture of the same revision |
+
+`issue-61-home-desktop-1440-default.png`, `issue-61-home-mobile-390-default.png`
+and `issue-61-home-narrow-320-default.png` were recaptured and verified
+**byte-identical**, so they were deliberately not churned.
+
+**Data source for these three captures only:** the local development stack
+(Postgres + Spring backend + Hive on `:4002`) with its development taxonomy of
+22 categories, 10 roots, maximum depth 2, Estonian names. This is development
+data, **not** the nine-category fixture recipe used by the rows above and not a
+production catalog. It was read, never modified.
+
+Larger and degraded trees could not be represented in those live captures, so
+they were verified separately against an **isolated verification-only GraphQL
+stub** (150 categories: 6 roots × 6 children × 3 grandchildren, with deliberately
+long labels) plus `small`, `empty`, `error` and transport-`down` modes. That stub
+exists only for verification; it is not in the repository and never served the
+owner's catalog. Its results are reported on #61, not retained as images.
+
+**No owner visual approval** is claimed for any of these three files. They are
+*Model-reviewed — awaiting owner approval*. The rejected predecessors remain in
+git history at `1d9477c` as before-evidence.
+
 | File | Owns | Route | Viewport | State | Covers | Status | Last updated by |
 |---|---|---|---|---|---|---|---|
 | `issue-61-home-desktop-1440-default.png` | #61 | `/` | 1440×900, full page | Default | Header, PageContainer, corrected home/footer availability copy | Model-reviewed — awaiting owner approval | #63 |
 | `issue-61-home-mobile-390-default.png` | #61 | `/` | 390×844, full page | Default | Mobile shell, stacked home, footer | Model-reviewed — awaiting owner approval | #63 |
-| `issue-61-home-desktop-1440-catalog-popover-open.png` | #61 | `/` | 1440×900 | Catalog popover open | Nonmodal popover, genuine root/child links | Owner-rejected composition — before-evidence only | #63 |
-| `issue-61-home-desktop-1440-account-popover-open.png` | #61 | `/` | 1440×900 | Account popover open | Existing account overlay with refreshed home/footer | Model-reviewed — awaiting owner approval | #63 |
-| `issue-61-home-mobile-390-drawer-open.png` | #61 | `/` | 390×844 | Drawer open | Modal drawer, genuine category hierarchy, close control | Owner-rejected composition — before-evidence only | #63 |
+| `issue-61-home-desktop-1440-catalog-popover-open.png` | #61 | `/` | 1440×900 | Catalog popover open | Nonmodal popover, grouped multi-column panel, root headings that are themselves links, children beneath them, empty space left empty | Model-reviewed — awaiting owner approval | #61 |
+| `issue-61-home-desktop-1440-account-popover-open.png` | #61 | `/` | 1440×900 | Account popover open | Existing account overlay, unchanged by the grouped-navigation correction except the shared header trigger | Model-reviewed — awaiting owner approval | #61 |
+| `issue-61-home-mobile-390-drawer-open.png` | #61 | `/` | 390×844 | Drawer open | Modal drawer, grouped roots with separate link and expand controls, all roots visible without scrolling | Model-reviewed — awaiting owner approval | #61 |
 | `issue-61-home-narrow-320-default.png` | #61 | `/` | 320×640 | Default | Narrow header/Search accessible-name behavior, corrected copy | Model-reviewed — awaiting owner approval | #63 |
 | `issue-63-catalog-desktop-1440-default.png` | #63 | `/catalog` | 1440×900, full page | Grid | Categories, count, four-column cards, exact prices, pagination/footer | Owner-rejected composition — before-evidence only | #63 |
 | `issue-63-catalog-mobile-390-default.png` | #63 | `/catalog` | 390×844, full page | Grid | Two-column cards, wrapped toolbar/categories, pagination/footer | Owner-rejected composition — before-evidence only | #63 |
@@ -138,8 +177,8 @@ both change the shell and therefore touch every capture in the set.
 
 | Capture | Invalidated by (§9.8 step) | What changes | Semantics retained? |
 |---|---|---|---|
-| `issue-61-home-desktop-1440-catalog-popover-open.png` | **1** grouped navigation | The rejected narrow single-column list becomes a wide grouped panel | Nonmodal popover semantics retained |
-| `issue-61-home-mobile-390-drawer-open.png` | **1** grouped navigation | Flat category list becomes grouped sections in the drawer | Modal drawer semantics retained |
+| `issue-61-home-desktop-1440-catalog-popover-open.png` | **1** grouped navigation | The rejected narrow single-column list becomes a wide grouped panel | Nonmodal popover semantics retained — **done, replaced in place** |
+| `issue-61-home-mobile-390-drawer-open.png` | **1** grouped navigation | Flat category list becomes grouped sections in the drawer | Modal drawer semantics retained — **done, replaced in place** |
 | `issue-63-catalog-desktop-1440-default.png` | **2** catalog discovery | `/catalog` stops being a flat all-products grid | Replaced; recapture as a discovery capture |
 | `issue-63-catalog-mobile-390-default.png` | **2** catalog discovery | As above, mobile | Replaced |
 | `issue-63-catalog-desktop-1440-list-loading.png` | **2**, **3** | The all-products listing moves to the shared results surface; skeleton must match the new layout | Loading-state coverage retained at the new route |
@@ -167,7 +206,7 @@ add an image only where it proves something the rows above do not:
 
 | Planned file | Step | Proves |
 |---|---|---|
-| `issue-61-home-desktop-1440-catalog-popover-open.png` *(replaced in place)* | 1 | Grouped multi-column navigation, headings as links, empty space left empty |
+| `issue-61-home-desktop-1440-catalog-popover-open.png` *(replaced in place)* | 1 | Grouped multi-column navigation, headings as links, empty space left empty — **done** |
 | `issue-63-catalog-desktop-1440-default.png` *(replaced in place)* | 2 | Category discovery with an explicit, secondary "All products" |
 | `issue-63-category-desktop-1440-default.png` *(replaced in place)* | 3 | Sidebar with in-context category navigation beside a compact product area |
 | `issue-63-category-mobile-390-filters-open.png` *(new)* | 3 | The mobile filter/navigation drawer with its active-filter count |
