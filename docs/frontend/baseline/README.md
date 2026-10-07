@@ -342,6 +342,89 @@ missing-category 404 resource response) and with the full
 **No owner visual approval** is claimed for any of the five #63/#64 files
 above. They remain *Model-reviewed — awaiting owner approval*.
 
+### Search-placement correction + visual refinements (this round) — #61, #63, #64
+
+Implements the owner's search-interaction correction (real search input shown
+by default on every listing route with the header's separate Search action
+hidden there; an expandable header search control on all other routes with
+immediate focus, restrained/reduced-motion-aware animation, two-stage Escape,
+an accessible close control and global whole-catalog scope on submit) and five
+visual refinements requested from the prior round's screenshots: collapsible
+facet/category disclosures, readable attribute labels, aligned grid-card
+title/price baselines, removal of overly technical stock-disclaimer copy, and
+tighter suggestion-panel density/alignment. The owner-approved desktop
+megamenu (`issue-61-home-desktop-1440-catalog-popover-open.png`) is
+**unchanged** — not touched, not recaptured.
+
+Consequences for this manifest:
+
+- `issue-63-category-desktop-1440-default.png`,
+  `issue-63-category-mobile-390-default.png` and
+  `issue-63-category-mobile-390-filters-open.png` are **replaced in place**:
+  attribute facets are now closed HeroUI `Disclosure` groups by default (open
+  only when they carry an active filter), category-navigation spacing is
+  tighter, the price group carries an explicit "Price (EUR)" heading with
+  accessible min/max labels, and grid-card titles/prices now align on a fixed
+  baseline regardless of how many lines the product name wraps to. Still own
+  #63; "Last updated by" stays `#63, #64`.
+- `issue-64-search-desktop-1440-default.png` and
+  `issue-64-search-desktop-1440-suggestions-open.png` are **replaced in
+  place**: same collapsible-facet/aligned-card refresh, the removed
+  "Stock information is not public yet"/"not a checkout quote" copy, and a
+  flush-aligned, denser suggestion popup (previously misaligned against the
+  input).
+- `issue-63-catalog-desktop-1440-card-alignment.png` is **new**: a dedicated
+  capture of `/catalog/all-products`'s default grid specifically evidencing
+  the title/price-baseline alignment fix across one- and two-line product
+  names, and the full 32-key attribute facet list (union across every
+  category) collapsed by default. Captured viewport-only rather than
+  full-page — Chromium/Playwright's full-page screenshot stitching visibly
+  duplicates the `position: sticky` sidebar at the tile boundary; this is a
+  capture-tooling artifact, confirmed by comparing against a clean
+  viewport-only capture, not a rendering defect in the app.
+- `issue-61-home-desktop-1440-search-expanded.png` and
+  `issue-61-home-desktop-1440-search-suggestions-open.png` are **new**: the
+  non-listing-page header search control, expanded, showing the focused field,
+  submit and close controls, and sibling header controls (brand, catalog,
+  account, cart) hidden while expanded; the second capture shows the same
+  control with live, real suggestions open, submitting globally to `/search`
+  (not scoped to any category).
+- All other #63/#64 rows (`list`, `loading`, `list-loading`, `empty`,
+  `parent-empty`, `error`, `not-found`) are **unaffected by this round** — none
+  of this round's changes touch pagination, loading-skeleton markup, empty/
+  error composition or the standalone not-found page; their existing Stale/
+  Model-reviewed statuses and reasons from the prior round stand unchanged.
+- The **owner-approved megamenu capture is untouched** and keeps its
+  **Owner-approved baseline** status; this round did not redesign or recapture
+  it, per the owner's explicit instruction to preserve it.
+
+**Data source:** same local development stack (Postgres + Spring backend +
+Hive on `:4002`), read-only, real dev data. The isolated fixture-stack gap
+remains unresolved this round (only the persistent dev-stack containers are
+running; no ephemeral verification stack was found or stood up) — reported
+again, not newly introduced. A second, independent blocker was discovered
+(not caused by this round): `scripts/catalog-smoke.mjs` hardcodes the English
+category slug `/catalog/laptops`, which 404s against the current dev dataset's
+Estonian-language slugs (`sulearvutid`, `lauaarvutid`, `komponendid`, …) — a
+pre-existing dataset/script mismatch, left unfixed as out of this pass's scope
+and reported as a new, distinct gap from the isolated-fixture-stack gap.
+Verification: `bun run lint`/`typecheck`/`build` pass; `bun test src/lib/catalog
+src/lib/graphql` (100 tests) pass; `storefront-smoke.mjs` (11/11 scenarios,
+rerun against a freshly rebuilt production server to rule out stale-build
+artifacts) passes with zero console/hydration/runtime errors; a standalone
+Playwright script covering header-search submit/Escape/close/focus-restoration/
+reduced-motion/mobile-overflow/listing-visibility/category-scoped-search/facet-
+disclosure passed 9/9 checks with zero console/runtime errors (after
+correcting the script's own origin mismatch — `127.0.0.1` vs the configured
+`STOREFRONT_ORIGIN=http://localhost:3000` — which had produced a spurious,
+reproducible-looking 403 on suggestion requests; confirmed via a direct Hive
+query and a direct proxy-route inspection that this was a verification-
+environment artifact, not a product defect, before re-running all checks
+against the correctly-matching origin).
+
+**No owner visual approval** is claimed for any of the seven refreshed/new
+files in this round. They remain *Model-reviewed — awaiting owner approval*.
+
 | File | Owns | Route | Viewport | State | Covers | Status | Last updated by |
 |---|---|---|---|---|---|---|---|
 | `issue-61-home-desktop-1440-default.png` | #61 | `/` | 1440×900, full page | Default | Header, PageContainer, corrected home/footer availability copy | Model-reviewed — awaiting owner approval | #63 |
@@ -350,15 +433,18 @@ above. They remain *Model-reviewed — awaiting owner approval*.
 | `issue-61-home-desktop-1440-account-popover-open.png` | #61 | `/` | 1440×900 | Account popover open | Existing account overlay, unchanged by the grouped-navigation correction except the shared header trigger | Model-reviewed — awaiting owner approval | #61 |
 | `issue-61-home-mobile-390-drawer-open.png` | #61 | `/` | 390×844 | Drawer open | Modal drawer with a dedicated "All products" entry above the grouped roots, each root with separate link and expand controls, all roots visible without scrolling | Model-reviewed — awaiting owner approval | #61, #63 |
 | `issue-61-home-narrow-320-default.png` | #61 | `/` | 320×640 | Default | Narrow header/Search accessible-name behavior, corrected copy | Model-reviewed — awaiting owner approval | #63 |
-| `issue-63-category-desktop-1440-default.png` | #63 | `/catalog/sulearvutid` | 1440×900, full page | Grid | Sidebar with current-category highlight, up-link, related categories, real min/max + attribute facets; compact three-column grid with reduced placeholder | Model-reviewed — awaiting owner approval | #63, #64 |
-| `issue-63-category-mobile-390-default.png` | #63 | `/catalog/sulearvutid` | 390×844, full page | Grid | Mobile toolbar wrapping, "Categories & filters" drawer trigger replacing the rejected button row | Model-reviewed — awaiting owner approval | #63, #64 |
-| `issue-63-category-mobile-390-filters-open.png` | #63 | `/catalog/sulearvutid` | 390×844 | Filters drawer open | Accessible modal drawer: current category highlighted, up-link to All categories, sibling categories, min/max price fields, attribute facets | Model-reviewed — awaiting owner approval | #63, #64 |
+| `issue-63-category-desktop-1440-default.png` | #63 | `/catalog/sulearvutid` | 1440×900, full page | Grid | Refreshed (search-interaction correction): visible page search field above the toolbar, compacted category-navigation spacing, attribute facets as collapsible disclosures (closed by default, open only when they carry an active filter), price group labelled "Price (EUR)" with accessible min/max labels, aligned grid-card title/price baselines regardless of name length | Model-reviewed — awaiting owner approval | #63, #64 |
+| `issue-63-category-mobile-390-default.png` | #63 | `/catalog/sulearvutid` | 390×844, full page | Grid | Refreshed: visible page search field, mobile toolbar wrapping, "Categories & filters" drawer trigger, aligned card title/price baselines | Model-reviewed — awaiting owner approval | #63, #64 |
+| `issue-63-category-mobile-390-filters-open.png` | #63 | `/catalog/sulearvutid` | 390×844 | Filters drawer open | Refreshed: collapsible attribute-facet disclosures (closed by default) replacing the always-expanded list, compacted category-navigation spacing, labelled price group | Model-reviewed — awaiting owner approval | #63, #64 |
 | `issue-63-category-desktop-1440-list.png` | #63 | `/catalog/laptops?page=2&view=list` | 1440×900, full page | List | URL-backed selected view, three remaining items, previous/next | Stale — the sidebar now wraps this state too; not re-shown. Needs a real category with >20 products or the isolated fixture stack to recapture honestly (current dev data: every category fits on one page) | #63 |
 | `issue-63-category-mobile-390-list.png` | #63 | `/catalog/laptops?page=2&view=list` | 390×844, full page | List | Compact image/text rows, long names, unknown stock | Stale — as above | #63 |
 | `issue-63-category-desktop-1440-loading.png` | #63 | `/catalog/laptops` → page 2 | 1440×900 | Loading grid | Retained category context, matching grid skeleton | Stale — as above | #63 |
 | `issue-63-catalog-desktop-1440-list-loading.png` | #63 | `/catalog/all-products?view=list` → page 2 | 1440×900 | Loading list | "All products" listing at its stable route, sidebar-aware list skeleton matching the new layout | Model-reviewed — awaiting owner approval | #61, #63, #64 |
-| `issue-64-search-desktop-1440-default.png` | #64 | `/search?q=Dell` | 1440×900, full page | Query results | Real visible query input, the same sidebar/grid/toolbar components as category pages, result count, sort, facets | Model-reviewed — awaiting owner approval | #64 |
-| `issue-64-search-desktop-1440-suggestions-open.png` | #64 | `/search` | 1440×900 | Suggestions open | Debounced name/slug-only suggestion popup with keyboard-navigable results beneath the query input | Model-reviewed — awaiting owner approval | #64 |
+| `issue-63-catalog-desktop-1440-card-alignment.png` | #63 | `/catalog/all-products` | 1440×900, viewport only (not full page — full-page capture stitches the sticky sidebar twice, a known Chromium/Playwright artifact, not a product defect) | Default grid | Grid-card title/price baselines aligned consistently across one- and two-line product names; full 32-key attribute facet list collapsed by default | Model-reviewed — awaiting owner approval | #63, #64 |
+| `issue-64-search-desktop-1440-default.png` | #64 | `/search?q=Dell` | 1440×900, full page | Query results | Refreshed: same sidebar/grid/toolbar components as category pages with collapsible facets, result count, sort; removed technical stock-disclaimer copy | Model-reviewed — awaiting owner approval | #64 |
+| `issue-64-search-desktop-1440-suggestions-open.png` | #64 | `/search` | 1440×900, viewport only (avoids the same sticky-sidebar stitching artifact) | Suggestions open | Debounced name/slug-only suggestion popup, now flush-aligned beneath the query input with tightened item density | Model-reviewed — awaiting owner approval | #64 |
+| `issue-61-home-desktop-1440-search-expanded.png` | #61 | `/` | 1440×900 | Header search expanded | Clicking the header Search action on a non-listing page smoothly expands it into a full-width overlay field with focus, a submit control and an accessible close control; sibling header controls (brand, catalog, account, cart) are hidden (not just visually offset) while expanded | Model-reviewed — awaiting owner approval | #61 |
+| `issue-61-home-desktop-1440-search-suggestions-open.png` | #61 | `/` | 1440×900 | Header search, suggestions open | Same expanded header control showing live suggestions reusing the shared suggestion styling; submitting navigates globally to `/search`, not scoped to any category | Model-reviewed — awaiting owner approval | #61 |
 | `issue-63-category-desktop-1440-empty.png` | #63 | `/catalog/tarkvara` | 1440×900, full page | Empty | Zero result count, honest "No products yet" copy, all-products recovery, sidebar with the empty category highlighted | Model-reviewed — awaiting owner approval | #63, #64 |
 | `issue-63-category-mobile-390-empty.png` | #63 | `/catalog/tarkvara` | 390×844, full page | Empty | Mobile empty state and wrapping, "Categories & filters" drawer trigger | Model-reviewed — awaiting owner approval | #63, #64 |
 | `issue-63-category-desktop-1440-parent-empty.png` | #63 | `/catalog/gaming` | 1440×900, full page | Parent empty | Honest direct-membership scope and child destination | Stale — the sidebar now wraps this state too; not re-shown. No live category currently has children while itself having zero direct products, so this needs the isolated fixture stack to recapture honestly | #63 |

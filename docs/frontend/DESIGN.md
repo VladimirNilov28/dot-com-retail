@@ -680,7 +680,7 @@ Design only against this. Everything else is forbidden as fabrication.
 | Taxonomy | `categories` — flat list, `parent` only, **no** `children`, description or image | Category names only. Build the tree client-side. |
 | Category filter | `filters.categoryId` — **direct membership only**, never expanded to descendants | A parent page shows only its own direct products and must say so |
 | Price filter | `filters.minPrice` / `maxPrice` (variant-level) | "Price" |
-| Attribute filter | `filters.attributes[{name,value}]` — repeated names **overwrite**, so one value per attribute | The real attribute name |
+| Attribute filter | `filters.attributes[{name,value}]` — repeated names **overwrite**, so one value per attribute | A readable label (`attributeLabel()` in `lib/catalog/model.ts` maps the 32 known keys, e.g. `refreshRate` → "Refresh rate", `cpu` → "Processor"; an unmapped key falls back to a humanized form of the raw name — never the raw camelCase key itself). The backend key and URL query-parameter serialization are unchanged; only the on-screen label is translated. |
 | Sorting | `RELEVANCE` (meaningless without a query), `PRICE_ASC`, `PRICE_DESC`, `RATING_DESC` | "Relevance", "Price: low to high", "Price: high to low", "Highest rated" |
 | Facet counts | `facets.categories[{id,name,count}]`, `facets.attributes`, `facets.price` | Counts are over the **already-filtered** population with **no self-exclusion**, and are direct-membership. `facets.price.max` is skewed (open #38 item) — don't present it as an exact bound |
 | Ratings | `Product.averageRating` (nullable), `ratingCount` | Show the real value and count, or nothing |
@@ -928,37 +928,77 @@ changes is how much of the page they occupy.
 - The real-media switch (#96) must be able to drop into the same box without
   relayout.
 
-### 9.6 A real search input in the header
+### 9.6 A real search input in the header — final placement contract
 
-The compact "Search" link that only navigates is replaced by an actual input in
-the existing `quickSearch` slot (§4) — one mounted, responsive control, not a
-parallel one.
+**Status: done.** Two distinct presentations, chosen per route, replace the
+single always-a-link control described in the original proposal:
 
-- A labelled `role="search"` form with a visible text input and a submit
-  control, sharing `--control-height`. It must work **without JavaScript** by
-  submitting to the shared results route.
-- Desktop: inline in `.store-search-slot`. Mobile: a labelled trigger opening an
-  accessible dialog containing the same form, or an inline field where it fits.
-  Never hover-only.
-- DOM order stays catalog → search → actions → mobile (§4).
-- The ~65px header height is not an acceptance test; the header may legitimately
-  grow (§4).
+**Listing routes** (`isResultsRoute(pathname)` in `lib/catalog/model.ts`: any
+`/catalog/<slug>` category page, `/catalog/all-products`, and `/search`) —
+the page's own `SearchForm` is the single search entry point:
 
-**Ownership split.** #61's correction owns the input's presence, labelling,
-layout, responsive presentation and plain form submission — it may only ship once
-the shared results route exists, so it is never a dead control. **#64 owns
-debounced suggestions (250–350 ms, a documented minimum query length, stale
-response cancellation), keyboard selection within the suggestion list, the
-enhanced submit path, an explicit "see all results" action, and the suggestion
-loading/empty/error states.** If the owner prefers the whole input to land in
-#64, move the first half — the only hard rule is that a non-functional field
-must never ship.
+- It renders in the page content on first paint, **including the initial
+  server response** — it does not wait for a client click or hydration.
+  It is pre-populated from the active URL `q` parameter.
+- The header's separate "Search" trigger is **not rendered** on these routes
+  (`.store-search-slot` is conditionally empty there) — there is exactly one
+  search field per page, never two.
+- Category pages scope the query to the current category (existing
+  `filters.categoryId` stays applied); `/catalog/all-products` and `/search`
+  search the whole catalog. Submitting a new query **resets pagination**
+  (`page` dropped from the URL) while preserving compatible active
+  filters/sort/view.
+
+**Every other route** (home, account, cart, product detail once it exists) —
+the header keeps a real `<Link href="/search">` trigger labelled "Search" for
+no-JS users, but a plain click intercepts navigation and instead:
+
+- Expands the trigger into a `position: fixed`, full-viewport-width overlay
+  containing the same `role="search"` form and suggestion list as the page
+  surface (shared `useProductSuggestions()` hook — no second suggestion
+  implementation).
+- Moves focus into the field immediately.
+- Animates in over `180ms ease-out` (`@keyframes store-search-expand`),
+  disabled entirely under `prefers-reduced-motion: reduce`.
+- Hides sibling header controls (brand, catalog trigger, account, cart,
+  mobile nav) via a `body.store-search-expanded` class + `visibility: hidden`
+  — not `display: none`, so layout doesn't jump, and not merely overlapped,
+  so they are genuinely unreachable by keyboard/AT while the overlay is open.
+- Handles **Escape in two stages**: first press closes an open suggestion
+  list only; a second press (or a first press with no suggestions open)
+  collapses the overlay and restores focus to the trigger.
+- Provides an explicit, labelled close button (not just Escape) that does the
+  same collapse-and-restore.
+- Submits (Enter or the submit control) by navigating to `/search?q=...` —
+  **always global**, never scoped to whatever page the user happened to be
+  on. A blank query submits to bare `/search`, a documented, predictable
+  choice (not an error state).
+- At the 390px mobile breakpoint, the fixed-position overlay does not compete
+  with the header grid for space, so account/cart controls are never squeezed
+  and there is no horizontal overflow.
+
+Both presentations use the **same canonical `/search` route, the same
+`resultsHref()`/`ResultsState` URL contract, and the same transport** — there
+is exactly one search-results implementation, reached two different ways
+depending on where the user already is.
+
+The ~65px header height is not an acceptance test; the header may legitimately
+grow when the overlay is open (§4).
+
+**Ownership split** (unchanged from the original proposal): #61 owns presence,
+labelling, the two placement presentations, the overlay's open/close/animation
+mechanics and plain submission. #64 owns debounced suggestions (250–350 ms, a
+documented minimum query length, stale-response cancellation), keyboard
+selection within the suggestion list and the suggestion loading/empty/error
+states — reused as-is by both presentations via the shared hook, not
+reimplemented per presentation.
 
 Suggestions carry `name` and `slug` only. Build the row from those fields;
 do not add prices, images or thumbnails that the API does not return. Matching
 *categories* may be added from the already-fetched taxonomy in a separately
 labelled section (`arvutitark_search_on_main_page` shows that shape) — that is
-local filtering of real data, not a fabricated result.
+local filtering of real data, not a fabricated result. (Not implemented this
+round — out of scope for the search-placement correction.)
 
 ### 9.7 What this correction does not change
 
@@ -983,7 +1023,7 @@ Small and sequential; each step is independently reviewable.
 | 1 | Grouped category navigation panel + mobile drawer grouping, with an explicit "All products" entry in the panel/drawer itself (§9.1) | #61 | — (taxonomy already fetched) | **Done**, owner-approved (desktop open-menu state) |
 | 2 | Megamenu is the sole category/subcategory discovery surface; `/catalog` is a compatibility redirect, not a second discovery page (§9.1, §9.3) | #61, #63 | 1 | **Done** |
 | 3 | Shared results implementation: sidebar, mobile drawer, URL-backed state, compact product area and reduced placeholder (§9.4, §9.5) | #63 | 2 | **Done** — awaiting owner visual review |
-| 4 | Real header search input and plain submission (§9.6) | #61 → #64 | 3 (results route must exist) | Not started — the header still links to `/search` (§9.6); a dedicated `/search` page with a real input exists (step 5/6), but the header's own input is a separate, still-pending change |
+| 4 | Real header search input and plain submission (§9.6) | #61 → #64 | 3 (results route must exist) | **Done** — listing routes show the page's own search field by default (header trigger hidden there); other routes get an expandable header overlay reusing the same suggestion hook and canonical `/search` route — awaiting owner visual review |
 | 5 | Query results and real facets in the shared sidebar/drawer (§9.0, §9.4) | #64 | 3, 4 | **Done** at `/search`, ahead of step 4 (the owner authorized #63+#64 together; the search page itself carries its own input) — awaiting owner visual review |
 | 6 | Debounced suggestions with keyboard selection (§9.6) | #64 | 5 | **Done** at `/search` — awaiting owner visual review |
 | 7 | Home category entry points and labelled discovery sections (§9.2) | #86 | 3 (shared card), 1 | Not started |
@@ -997,6 +1037,21 @@ instruction to leave header search to #61.
 Each step recaptures the screenshots it invalidates and updates the manifest in
 the same commit (§8). The manifest's *Planned invalidation* table already records
 which existing captures each step supersedes.
+
+**Visual refinements (this round, alongside step 4):** collapsible facet/
+category disclosures (closed by default; open only when carrying an active
+filter) replace the previously always-expanded sidebar/drawer lists; attribute
+labels are human-readable via `attributeLabel()` (§9.0) instead of raw
+camelCase keys; grid-card title/price baselines are aligned regardless of name
+length (`flex-direction: column` + a fixed `min-height` reservation on the
+title, replacing a fragile CSS Grid row-track approach that depended on
+cross-sibling stretching); the "Stock information is not public yet"/"not a
+checkout quote" sentences are removed in favor of the existing concise
+"Availability unknown" wording already used per-card; the suggestion popup is
+flush-aligned beneath its input with tightened item density. None of this
+changes product imagery policy, currency formatting, direct-membership
+category semantics, facet semantics, authorization or bounded `searchProducts`
+usage.
 
 ---
 
