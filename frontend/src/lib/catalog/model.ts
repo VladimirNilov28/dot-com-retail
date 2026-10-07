@@ -16,12 +16,25 @@ export function listingState(parameters: Record<string, string | string[] | unde
   return { page: Number(page), view };
 }
 
+/** `/catalog` itself is category discovery, not a product listing; the bounded,
+ * paginated "all products" listing (previously at bare `/catalog`) now lives at
+ * this reserved static route, which Next.js always prioritises over
+ * `/catalog/[slug]`. Accepted trade-off: a real category slugged
+ * "all-products" would become unreachable via `/catalog/<slug>`. */
+export const ALL_PRODUCTS_SLUG = "all-products";
+
 export function catalogHref(slug?: string, page = 1, view: View = "grid") {
   const query = new URLSearchParams();
   if (page !== 1) query.set("page", String(page));
   if (view !== "grid") query.set("view", view);
-  const route = slug === undefined ? "/catalog" : `/catalog/${encodeURIComponent(slug)}`;
+  const route = slug === undefined ? `/catalog/${ALL_PRODUCTS_SLUG}` : `/catalog/${encodeURIComponent(slug)}`;
   return query.size ? `${route}?${query}` : route;
+}
+
+/** Links to category discovery itself (the breadcrumb root), as opposed to the
+ * bounded "all products" listing produced by {@link catalogHref}. */
+export function catalogDiscoveryHref() {
+  return "/catalog";
 }
 
 export function categoryIndex(categories: Category[]) {

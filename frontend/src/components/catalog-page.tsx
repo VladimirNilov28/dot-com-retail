@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCategories, getListing } from "@/lib/catalog/server";
-import { catalogHref, categoryIndex, listingState, type View } from "@/lib/catalog/model";
+import { catalogDiscoveryHref, catalogHref, categoryIndex, listingState, type View } from "@/lib/catalog/model";
 import { CatalogControls } from "./catalog-controls";
 import { CatalogLink } from "./catalog-link";
 import { CatalogRetry } from "./catalog-retry";
@@ -33,17 +33,17 @@ export async function CatalogPageContent({ slug, parameters }: {
     <div className={`catalog-page catalog-${state.view}`}>
       <nav aria-label="Breadcrumb" className="catalog-breadcrumb">
         <Link href="/" className="store-link">Home</Link><span aria-hidden="true">/</span>
-        {category ? <CatalogLink href={catalogHref(undefined, 1, state.view)} className="store-link">Catalog</CatalogLink> : <span aria-current="page">Catalog</span>}
+        <CatalogLink href={catalogDiscoveryHref()} className="store-link">Catalog</CatalogLink>
         {trail.map((ancestor) => <span key={ancestor.id} className="contents">
           <span aria-hidden="true">/</span><CatalogLink href={catalogHref(ancestor.slug, 1, state.view)} className="store-link">{ancestor.name}</CatalogLink>
         </span>)}
-        {category && <><span aria-hidden="true">/</span><span aria-current="page">{category.name}</span></>}
+        <span aria-hidden="true">/</span><span aria-current="page">{category?.name ?? "All products"}</span>
       </nav>
       <header className="catalog-heading">
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{category?.name ?? "Catalog"}</h1>
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{category?.name ?? "All products"}</h1>
         <p className="text-sm text-muted">{category && children.length ?
           "Products assigned directly to this category. Browse a subcategory for its products." :
-          "Browse electronics by category. Prices are shown in EUR."}</p>
+          "Every ByteCore product in one bounded, paginated list. Prices are shown in EUR."}</p>
       </header>
       {links.length > 0 && <nav aria-label={children.length && category ? "Subcategories" : "Categories"} className="catalog-categories">
         {category && <CatalogLink href={catalogHref(undefined, 1, state.view)} className="store-cta">All products</CatalogLink>}
