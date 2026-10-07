@@ -85,8 +85,9 @@ Names are **stable**. Replace the file in place. No timestamps, no `-v2`, no
 
 Source revision for every entry below: **`5ffceb0b6d21437a778491422cf4eeeec665325f`**
 on `dev` (#63 listing and refreshed #61 shell), **except** the three captures
-refreshed by §9.8 step 1 (grouped catalog navigation) and the three refreshed
-by §9.8 step 2 (catalog root discovery) — see each step's subsection below.
+refreshed by §9.8 step 1 (grouped catalog navigation) and the files refreshed by
+the subsequent megamenu-only discovery correction (owner reversal of the
+standalone `/catalog` discovery page) — see each subsection below.
 Shared capture settings:
 Chromium 153.0.8010.12 (Playwright 1.63),
 `deviceScaleFactor: 1`, `colorScheme: "light"` — deliberate, since the
@@ -99,7 +100,10 @@ and approval is not inherited by a replacement. Seventeen entries are now
 **Owner-rejected composition** following the 2026-10-06 review above — they
 remain accurate before-evidence of what `dev` renders and must not be used as a
 standard. The former
-`issue-61-catalog-desktop-1440-unavailable.png` is removed as superseded.
+`issue-61-catalog-desktop-1440-unavailable.png` is removed as superseded, as are
+`issue-63-catalog-desktop-1440-default.png` and `issue-63-catalog-mobile-390-default.png`
+(the standalone `/catalog` discovery page the owner reversed before review —
+see "Megamenu-only discovery correction" below).
 
 **Data prerequisites:** an isolated PostgreSQL/Flyway database, current Spring
 backend and real Hive, with the verification-only fixtures below created through
@@ -142,16 +146,20 @@ owner's catalog. Its results are reported on #61, not retained as images.
 *Model-reviewed — awaiting owner approval*. The rejected predecessors remain in
 git history at `1d9477c` as before-evidence.
 
-### Step 2 refresh — catalog root discovery (#63)
+### Step 2 refresh — catalog root discovery (#63) — superseded, see below
 
-Three captures were replaced in place on top of the working tree that implements
-§9.8 step 2, local commits on `dev` starting at `748cb01` (through `248a2ff`):
+This subsection recorded the now-reversed standalone `/catalog` discovery page
+(local commits `748cb01`…`248a2ff`). The owner's later decision moved category
+discovery into the header megamenu exclusively and turned `/catalog` into a
+compatibility redirect — see **"Megamenu-only discovery correction"** below for
+the current state. Kept for history; do not treat the bullets in this
+subsection as current:
 
-| File | Why refreshed |
+| File | Why refreshed (historical, no longer applicable) |
 |---|---|
-| `issue-63-catalog-desktop-1440-default.png` | `/catalog` stops being a flat all-products grid; now shows category discovery (root headings, direct children, secondary "All products") |
-| `issue-63-catalog-mobile-390-default.png` | As above, mobile |
-| `issue-63-catalog-desktop-1440-list-loading.png` | The all-products listing moved to `/catalog/all-products`; recaptured at the new route with the same loading-skeleton coverage |
+| ~~`issue-63-catalog-desktop-1440-default.png`~~ | Removed — the standalone discovery page it depicted no longer exists |
+| ~~`issue-63-catalog-mobile-390-default.png`~~ | Removed — as above, mobile |
+| `issue-63-catalog-desktop-1440-list-loading.png` | Still applies; recaptured again below for the breadcrumb change |
 
 **Data source:** the same local development stack as the step 1 refresh above
 (Postgres + Spring backend + Hive on `:4002`, 22 categories/10 roots, maximum
@@ -185,22 +193,65 @@ unit tests (`model.test.mjs`) and the unmodified `CatalogPageContent`/
 **No owner visual approval** is claimed for any of these three files. They are
 *Model-reviewed — awaiting owner approval*.
 
+### Megamenu-only discovery correction — `/catalog` becomes a compatibility redirect (#61, #63)
+
+The owner rejected the standalone `/catalog` discovery page above before ever
+reviewing it: category/subcategory discovery now lives **only** in the header's
+catalog megamenu (#61), refined this round with an explicit "All products"
+entry inside the panel/drawer itself. `/catalog` is now a thin compatibility
+route — see [`../DESIGN.md`](../DESIGN.md) §9.3.
+
+Consequences for this manifest:
+
+- `issue-63-catalog-desktop-1440-default.png` and
+  `issue-63-catalog-mobile-390-default.png` are **removed**, not merely marked
+  stale. They captured a composition that no longer exists at any route and
+  was never shown to the owner, so unlike the owner-rejected `issue-63-category-*`
+  rows, they carry no before-evidence value worth retaining — the git history
+  at `748cb01`/`98c3ee6` still has them if ever needed.
+- `issue-61-home-desktop-1440-catalog-popover-open.png` and
+  `issue-61-home-mobile-390-drawer-open.png` are **replaced in place**: the
+  panel/drawer composition is otherwise unchanged from the step 1 grouped-navigation
+  correction, but both now show the dedicated "All products" entry above the
+  grouped categories, where the previous captures showed only the grouped
+  panel/drawer without it.
+- `issue-61-home-desktop-1440-account-popover-open.png` and the three
+  `issue-61-home-*-default.png` rows were re-captured and diffed **byte-identical**
+  to what is already in the manifest, so they were deliberately not churned.
+- `issue-63-catalog-desktop-1440-list-loading.png` is **replaced in place**: the
+  route (`/catalog/all-products`) and loading-skeleton coverage are unchanged,
+  but the breadcrumb's "Catalog" crumb is now plain text instead of a link
+  (§9.3), which is a real, if small, visible difference at that capture's clip.
+
+**Data source:** the same local development stack as the step 1/step 2
+refreshes above (Postgres + Spring backend + Hive on `:4002`) — development
+data, read-only. No isolated fixture stack was stood up this round (same
+verification gap as the step 2 refresh above); `catalog-smoke.mjs` was updated
+for the new breadcrumb/redirect assertions but not run end-to-end. The
+equivalent behavior — megamenu "All products" entry, no literal "Catalog" link
+inside the dialog/drawer, breadcrumb crumb non-linked, `/catalog` redirects —
+was independently verified with a standalone Playwright script against the
+live development stack (all checks passed, zero console/runtime/hydration
+errors) and with the full `storefront-smoke.mjs` suite (11 scenarios passed,
+including real Chromium 200% zoom and JavaScript-disabled SSR).
+
+**No owner visual approval** is claimed for any of these files. They remain
+*Model-reviewed — awaiting owner approval*.
+
 | File | Owns | Route | Viewport | State | Covers | Status | Last updated by |
 |---|---|---|---|---|---|---|---|
 | `issue-61-home-desktop-1440-default.png` | #61 | `/` | 1440×900, full page | Default | Header, PageContainer, corrected home/footer availability copy | Model-reviewed — awaiting owner approval | #63 |
 | `issue-61-home-mobile-390-default.png` | #61 | `/` | 390×844, full page | Default | Mobile shell, stacked home, footer | Model-reviewed — awaiting owner approval | #63 |
-| `issue-61-home-desktop-1440-catalog-popover-open.png` | #61 | `/` | 1440×900 | Catalog popover open | Nonmodal popover, grouped multi-column panel, root headings that are themselves links, children beneath them, empty space left empty | Model-reviewed — awaiting owner approval | #61 |
+| `issue-61-home-desktop-1440-catalog-popover-open.png` | #61 | `/` | 1440×900 | Catalog popover open | Nonmodal popover, grouped multi-column panel with a dedicated "All products" entry above the groups, root headings that are themselves links, children beneath them, empty space left empty | Model-reviewed — awaiting owner approval | #61, #63 |
 | `issue-61-home-desktop-1440-account-popover-open.png` | #61 | `/` | 1440×900 | Account popover open | Existing account overlay, unchanged by the grouped-navigation correction except the shared header trigger | Model-reviewed — awaiting owner approval | #61 |
-| `issue-61-home-mobile-390-drawer-open.png` | #61 | `/` | 390×844 | Drawer open | Modal drawer, grouped roots with separate link and expand controls, all roots visible without scrolling | Model-reviewed — awaiting owner approval | #61 |
+| `issue-61-home-mobile-390-drawer-open.png` | #61 | `/` | 390×844 | Drawer open | Modal drawer with a dedicated "All products" entry above the grouped roots, each root with separate link and expand controls, all roots visible without scrolling | Model-reviewed — awaiting owner approval | #61, #63 |
 | `issue-61-home-narrow-320-default.png` | #61 | `/` | 320×640 | Default | Narrow header/Search accessible-name behavior, corrected copy | Model-reviewed — awaiting owner approval | #63 |
-| `issue-63-catalog-desktop-1440-default.png` | #63 | `/catalog` | 1440×900, full page | Category discovery | Root categories as linked headings (3-column), direct children beneath them, secondary "All products" action; no mixed product feed | Model-reviewed — awaiting owner approval | #63 |
-| `issue-63-catalog-mobile-390-default.png` | #63 | `/catalog` | 390×844, full page | Category discovery | Single-column groups, same hierarchy and secondary "All products" action, no horizontal overflow | Model-reviewed — awaiting owner approval | #63 |
 | `issue-63-category-desktop-1440-default.png` | #63 | `/catalog/laptops` | 1440×900, full page | Grid | Ancestor breadcrumbs, sibling links, 20 of 23 products | Owner-rejected composition — before-evidence only | #63 |
 | `issue-63-category-mobile-390-default.png` | #63 | `/catalog/laptops` | 390×844, full page | Grid | Mobile names/price alignment and category context | Owner-rejected composition — before-evidence only | #63 |
 | `issue-63-category-desktop-1440-list.png` | #63 | `/catalog/laptops?page=2&view=list` | 1440×900, full page | List | URL-backed selected view, three remaining items, previous/next | Owner-rejected composition — before-evidence only | #63 |
 | `issue-63-category-mobile-390-list.png` | #63 | `/catalog/laptops?page=2&view=list` | 390×844, full page | List | Compact image/text rows, long names, unknown stock | Owner-rejected composition — before-evidence only | #63 |
 | `issue-63-category-desktop-1440-loading.png` | #63 | `/catalog/laptops` → page 2 | 1440×900 | Loading grid | Retained category context, matching grid skeleton | Owner-rejected composition — before-evidence only | #63 |
-| `issue-63-catalog-desktop-1440-list-loading.png` | #63 | `/catalog/all-products?view=list` → page 2 | 1440×900 | Loading list | Relocated listing route, retained breadcrumb/"All products" heading, matching list skeleton | Model-reviewed — awaiting owner approval | #63 |
+| `issue-63-catalog-desktop-1440-list-loading.png` | #63 | `/catalog/all-products?view=list` → page 2 | 1440×900 | Loading list | "All products" listing at its stable route, non-linked "Catalog" breadcrumb crumb (§9.3), matching list skeleton | Model-reviewed — awaiting owner approval | #61, #63 |
 | `issue-63-category-desktop-1440-empty.png` | #63 | `/catalog/monitors` | 1440×900, full page | Empty | Zero result count, alternate categories, all-products recovery | Owner-rejected composition — before-evidence only | #63 |
 | `issue-63-category-mobile-390-empty.png` | #63 | `/catalog/monitors` | 390×844, full page | Empty | Mobile empty state and wrapping | Owner-rejected composition — before-evidence only | #63 |
 | `issue-63-category-desktop-1440-parent-empty.png` | #63 | `/catalog/gaming` | 1440×900, full page | Parent empty | Honest direct-membership scope and child destination | Owner-rejected composition — before-evidence only | #63 |
@@ -221,11 +272,11 @@ both change the shell and therefore touch every capture in the set.
 
 | Capture | Invalidated by (§9.8 step) | What changes | Semantics retained? |
 |---|---|---|---|
-| `issue-61-home-desktop-1440-catalog-popover-open.png` | **1** grouped navigation | The rejected narrow single-column list becomes a wide grouped panel | Nonmodal popover semantics retained — **done, replaced in place** |
-| `issue-61-home-mobile-390-drawer-open.png` | **1** grouped navigation | Flat category list becomes grouped sections in the drawer | Modal drawer semantics retained — **done, replaced in place** |
-| `issue-63-catalog-desktop-1440-default.png` | **2** catalog discovery | `/catalog` stops being a flat all-products grid | Replaced — **done, replaced in place with a discovery capture** |
-| `issue-63-catalog-mobile-390-default.png` | **2** catalog discovery | As above, mobile | Replaced — **done, replaced in place** |
-| `issue-63-catalog-desktop-1440-list-loading.png` | **2**, **3** | The all-products listing moves to `/catalog/all-products`; skeleton must match the new layout | Loading-state coverage retained — **done, relocated capture replaced in place** |
+| `issue-61-home-desktop-1440-catalog-popover-open.png` | **1** grouped navigation | The rejected narrow single-column list becomes a wide grouped panel | Nonmodal popover semantics retained — **done, replaced in place**; refined again (megamenu-only correction) with a dedicated "All products" entry |
+| `issue-61-home-mobile-390-drawer-open.png` | **1** grouped navigation | Flat category list becomes grouped sections in the drawer | Modal drawer semantics retained — **done, replaced in place**; refined again (megamenu-only correction) with a dedicated "All products" entry |
+| ~~`issue-63-catalog-desktop-1440-default.png`~~ | **2** catalog discovery | `/catalog` stopped being a flat all-products grid, then the owner reversed the standalone discovery page entirely | **Removed** — the composition it showed no longer exists at any route; see "Megamenu-only discovery correction" above |
+| ~~`issue-63-catalog-mobile-390-default.png`~~ | **2** catalog discovery | As above, mobile | **Removed** — as above |
+| `issue-63-catalog-desktop-1440-list-loading.png` | **2**, **3** | The all-products listing moves to `/catalog/all-products`; skeleton must match the new layout | Loading-state coverage retained — **done, relocated capture replaced in place**; recaptured again for the non-linked breadcrumb crumb (megamenu-only correction) |
 | `issue-63-category-desktop-1440-default.png` | **3** sidebar + compact results | Button row replaced by the sidebar; placeholder reduced; three columns | Replaced |
 | `issue-63-category-mobile-390-default.png` | **3** | Filter/category drawer replaces the wrapped button row | Replaced; add a drawer-open capture |
 | `issue-63-category-desktop-1440-list.png` | **3** | List view inside the new two-region layout | View-toggle + pagination coverage retained |
@@ -250,8 +301,8 @@ add an image only where it proves something the rows above do not:
 
 | Planned file | Step | Proves |
 |---|---|---|
-| `issue-61-home-desktop-1440-catalog-popover-open.png` *(replaced in place)* | 1 | Grouped multi-column navigation, headings as links, empty space left empty — **done** |
-| `issue-63-catalog-desktop-1440-default.png` *(replaced in place)* | 2 | Category discovery with an explicit, secondary "All products" — **done** |
+| `issue-61-home-desktop-1440-catalog-popover-open.png` *(replaced in place)* | 1, megamenu-only correction | Grouped multi-column navigation, headings as links, empty space left empty, dedicated "All products" entry — **done** |
+| ~~`issue-63-catalog-desktop-1440-default.png`~~ *(removed)* | 2 (superseded) | Was category discovery at a standalone `/catalog` page; the owner reversed this before review — the megamenu is the sole discovery surface instead |
 | `issue-63-category-desktop-1440-default.png` *(replaced in place)* | 3 | Sidebar with in-context category navigation beside a compact product area |
 | `issue-63-category-mobile-390-filters-open.png` *(new)* | 3 | The mobile filter/navigation drawer with its active-filter count |
 | `issue-64-search-desktop-1440-default.png` *(new)* | 5 | The shared results surface under a search URL, with real facets |
