@@ -696,6 +696,16 @@ category descriptions, icons or imagery.
 
 ### 9.1 Category navigation panel — replaces the narrow dropdown
 
+**Owner-approved, 2026-10-07 — desktop open-menu state only.** The owner
+approved this composition: "compact wide panel, grouped columns, prominent
+main categories and quieter children." It is recorded against
+`issue-61-home-desktop-1440-catalog-popover-open.png` in
+[`baseline/README.md`](baseline/README.md) as the directory's only
+*Owner-approved baseline*. This covers the desktop open-menu state only — not
+the mobile drawer, not the results/search layout below, and not any homepage
+composition. **Preserve this composition unchanged** unless a new owner
+decision supersedes it; it was not redesigned in the #63/#64 results pass.
+
 The header Catalog panel must present the taxonomy as **informative grouped
 navigation**, not a single narrow column of every category.
 
@@ -968,13 +978,21 @@ Small and sequential; each step is independently reviewable.
 
 | # | Step | Ticket | Depends on |
 |---|---|---|---|
-| 1 | Grouped category navigation panel + mobile drawer grouping, with an explicit "All products" entry in the panel/drawer itself (§9.1) | #61 | — (taxonomy already fetched) |
-| 2 | Megamenu is the sole category/subcategory discovery surface; `/catalog` is a compatibility redirect, not a second discovery page (§9.1, §9.3) | #61, #63 | 1 |
-| 3 | Shared results implementation: sidebar, mobile drawer, URL-backed state, compact product area and reduced placeholder (§9.4, §9.5) | #63 | 2 |
-| 4 | Real header search input and plain submission (§9.6) | #61 → #64 | 3 (results route must exist) |
-| 5 | Query results and real facets in the shared sidebar/drawer (§9.0, §9.4) | #64 | 3, 4 |
-| 6 | Debounced suggestions with keyboard selection (§9.6) | #64 | 5 |
-| 7 | Home category entry points and labelled discovery sections (§9.2) | #86 | 3 (shared card), 1 |
+| # | Step | Ticket | Depends on | Status |
+|---|---|---|---|---|
+| 1 | Grouped category navigation panel + mobile drawer grouping, with an explicit "All products" entry in the panel/drawer itself (§9.1) | #61 | — (taxonomy already fetched) | **Done**, owner-approved (desktop open-menu state) |
+| 2 | Megamenu is the sole category/subcategory discovery surface; `/catalog` is a compatibility redirect, not a second discovery page (§9.1, §9.3) | #61, #63 | 1 | **Done** |
+| 3 | Shared results implementation: sidebar, mobile drawer, URL-backed state, compact product area and reduced placeholder (§9.4, §9.5) | #63 | 2 | **Done** — awaiting owner visual review |
+| 4 | Real header search input and plain submission (§9.6) | #61 → #64 | 3 (results route must exist) | Not started — the header still links to `/search` (§9.6); a dedicated `/search` page with a real input exists (step 5/6), but the header's own input is a separate, still-pending change |
+| 5 | Query results and real facets in the shared sidebar/drawer (§9.0, §9.4) | #64 | 3, 4 | **Done** at `/search`, ahead of step 4 (the owner authorized #63+#64 together; the search page itself carries its own input) — awaiting owner visual review |
+| 6 | Debounced suggestions with keyboard selection (§9.6) | #64 | 5 | **Done** at `/search` — awaiting owner visual review |
+| 7 | Home category entry points and labelled discovery sections (§9.2) | #86 | 3 (shared card), 1 | Not started |
+
+Steps 5 and 6 landed on the `/search` results page ahead of step 4 because the
+owner authorized #63 and #64 together for one coherent results interface; the
+*header's* input (step 4) is still a separate, not-yet-built control — today's
+header "Search" remains a plain link to `/search`, per #64's explicit
+instruction to leave header search to #61.
 
 Each step recaptures the screenshots it invalidates and updates the manifest in
 the same commit (§8). The manifest's *Planned invalidation* table already records

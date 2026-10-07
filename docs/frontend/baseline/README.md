@@ -18,7 +18,7 @@ owner's.
 
 | Status | Meaning |
 |---|---|
-| **Owner-approved baseline** | The owner explicitly approved this appearance. Treat as the reference. Never overwrite it with an uninspected or known-broken capture. **No file in this directory currently holds this status.** |
+| **Owner-approved baseline** | The owner explicitly approved this appearance. Treat as the reference. Never overwrite it with an uninspected or known-broken capture. **One file holds this status** — see "Owner approval — desktop megamenu, 2026-10-07" below; every other file is Model-reviewed or Owner-rejected. |
 | **Model-reviewed — awaiting owner approval** | Captured and visually inspected by the implementer; no owner sign-off. Usable as evidence, not as an authority. |
 | **Owner-rejected composition — before-evidence only** | The owner explicitly turned this layout down. The image still matches what `dev` renders, so it is retained as before-evidence for the correction, but it is **never** a consistency standard and must not be cited to argue a new design is inconsistent. |
 | **Stale** | Known not to match current `dev`. The reason is recorded in the entry. Must not be presented as current. |
@@ -33,7 +33,7 @@ the same filename and the same owning ticket.
 | Kind | Where | Authority |
 |---|---|---|
 | **Reference images** | [`docs/references/`](../../references/) — arvutitark, iDeal, 1a | Third-party pattern brief curated by the owner. Never a baseline, no approval status, not ByteCore, not a before-state. |
-| **Owner-approved baselines** | This directory, status *Owner-approved baseline* | The standard a change is judged against. Currently **none** — see below. |
+| **Owner-approved baselines** | This directory, status *Owner-approved baseline* | The standard a change is judged against. `issue-61-home-desktop-1440-catalog-popover-open.png` holds this status, scoped to the desktop open-menu state only — see "Owner approval — desktop megamenu, 2026-10-07" below. |
 | **Model-reviewed work** | This directory, status *Model-reviewed* or *Owner-rejected* | Evidence produced by an implementer. Proves what was rendered, not that it was accepted. |
 
 ## Owner review outcome — 2026-10-06
@@ -238,25 +238,132 @@ including real Chromium 200% zoom and JavaScript-disabled SSR).
 **No owner visual approval** is claimed for any of these files. They remain
 *Model-reviewed — awaiting owner approval*.
 
+### Owner approval — desktop megamenu, 2026-10-07
+
+The owner approved the desktop megamenu composition shown in the attachment
+`image(20261007-202618).png` on 2026-10-07: "compact wide panel, grouped
+columns, prominent main categories and quieter children." That description
+matches `issue-61-home-desktop-1440-catalog-popover-open.png` exactly — the
+only desktop open-menu capture in this manifest, showing the wide panel, a
+dedicated "All products" entry, bold root-category headings as the prominent
+elements and lighter-weight child links beneath them, with empty space left
+empty rather than filled with filler panels.
+
+This file's status changes to **Owner-approved baseline**, scoped **only** to
+that desktop open-menu state. This does **not** extend to:
+
+- `issue-61-home-mobile-390-drawer-open.png` (mobile drawer) — still
+  *Model-reviewed*;
+- any `issue-63-*`/`issue-64-*` results/search capture — still
+  *Model-reviewed*;
+- any future homepage capture — not yet built.
+
+Per the owner's instruction, the approved menu composition itself is
+**preserved unchanged** in this pass — no redesign of `catalog-sidebar.tsx`'s
+desktop megamenu or `store-navigation.tsx` was made; only the shared
+results/search surface described below was added underneath it.
+
+### #63 shared results + #64 search/facets pass (this round)
+
+Builds the compact shared results surface (desktop sidebar, mobile drawer,
+compact cards, sorting, bounded pagination) used by category pages and
+`/catalog/all-products` (#63), and the real query input, URL-backed
+query/filter/sort/page state and debounced suggestions on `/search` sharing
+that same surface (#64). The approved megamenu above is unchanged; this round
+only concerns the page content beneath it.
+
+Consequences for this manifest:
+
+- `issue-63-category-desktop-1440-default.png` and
+  `issue-63-category-mobile-390-default.png` are **replaced in place**: the
+  owner-rejected button-row composition is gone, superseding their
+  *Owner-rejected composition* status with a new *Model-reviewed* sidebar
+  (desktop) / drawer-trigger (mobile) composition, per the planned invalidation
+  recorded below. They still own #63; "Last updated by" becomes `#63, #64`.
+- `issue-63-catalog-desktop-1440-list-loading.png` is **replaced in place**
+  again: same route and loading-skeleton intent, now showing the sidebar
+  layout's skeleton instead of the previous button-row page's skeleton.
+- `issue-63-category-mobile-390-filters-open.png` is **new**: the mobile
+  categories-and-filters drawer, open, showing the current category
+  highlighted, the up-link, sibling categories and the real `minPrice`/
+  `maxPrice` + attribute facets.
+- `issue-64-search-desktop-1440-default.png` and
+  `issue-64-search-desktop-1440-suggestions-open.png` are **new**: `/search`
+  rendering the exact same sidebar/grid/toolbar components as category pages,
+  with a real visible query input, and the debounced name/slug-only suggestion
+  popup open with keyboard-navigable results.
+- `issue-63-category-desktop-1440-empty.png` and
+  `issue-63-category-mobile-390-empty.png` are **replaced in place** with a
+  genuine empty category from the live dev dataset (`/catalog/tarkvara`, a
+  leaf category with 0 direct products) — the old route (`/catalog/monitorid`-
+  equivalent) no longer has zero products in the current dev data either, so
+  this recapture fixes two problems (sidebar layout, stale product count) at
+  once.
+- `issue-63-category-desktop-1440-list.png`, `issue-63-category-mobile-390-list.png`,
+  `issue-63-category-desktop-1440-loading.png`, `issue-63-category-desktop-1440-parent-empty.png`,
+  `issue-63-category-mobile-390-parent-empty.png` and
+  `issue-63-category-desktop-1440-error.png` are **honestly left stale this
+  round, not falsely marked unchanged**: `CatalogPageContent` is one shared
+  component, so the sidebar now wraps every one of these states too — they do
+  **not** show the current composition. They were not recaptured because the
+  live dev dataset cannot currently reproduce what they need: every live
+  category now fits on one page (≤20 items, so no real second-page list/loading
+  state), no live parent category has zero direct products while still having
+  children (every parent in the current dev data carries its own direct
+  products alongside its children), and an out-of-range page number now
+  redirects to a valid page instead of surfacing a backend error. The original
+  captures for these four states most likely came from the isolated fixture
+  recipe below (`laptops`/`monitors`/`gaming`, which doesn't exist in live dev
+  data), the same stack this manifest has repeatedly reported as unavailable
+  here. They need the fixture stack (or a live dataset with >20 products in one
+  category, a parent-without-direct-products, and a reproducible backend
+  failure) to recapture honestly — fabricating them from the current dataset
+  was deliberately avoided.
+- `issue-63-category-desktop-1440-not-found.png` and
+  `issue-63-category-mobile-390-not-found.png` are **genuinely unaffected**:
+  `catalog/not-found.tsx` is a standalone page with no sidebar, untouched by
+  this change — confirmed by reading its source, not assumed.
+
+**Data source:** the same local development stack as prior rounds (Postgres +
+Spring backend + Hive on `:4002`) — development data, read-only. The isolated
+fixture stack required by `catalog-smoke.mjs` was not available this round
+either (same documented gap); the script was statically updated for the new
+sidebar/drawer DOM but not executed end-to-end. The equivalent behavior —
+sidebar/drawer category and filter navigation, search submission, suggestions,
+URL-state restoration on reload/back-forward, missing-category 404, rapid
+pagination without debouncing, drawer dismissal and focus restoration — was
+independently verified with a standalone Playwright script against the live
+development stack (all checks passed, zero unexpected console/runtime/
+hydration errors; the one logged console entry is the deliberate
+missing-category 404 resource response) and with the full
+`storefront-smoke.mjs` suite (11 scenarios passed, including real Chromium
+200% zoom and JavaScript-disabled SSR).
+
+**No owner visual approval** is claimed for any of the five #63/#64 files
+above. They remain *Model-reviewed — awaiting owner approval*.
+
 | File | Owns | Route | Viewport | State | Covers | Status | Last updated by |
 |---|---|---|---|---|---|---|---|
 | `issue-61-home-desktop-1440-default.png` | #61 | `/` | 1440×900, full page | Default | Header, PageContainer, corrected home/footer availability copy | Model-reviewed — awaiting owner approval | #63 |
 | `issue-61-home-mobile-390-default.png` | #61 | `/` | 390×844, full page | Default | Mobile shell, stacked home, footer | Model-reviewed — awaiting owner approval | #63 |
-| `issue-61-home-desktop-1440-catalog-popover-open.png` | #61 | `/` | 1440×900 | Catalog popover open | Nonmodal popover, grouped multi-column panel with a dedicated "All products" entry above the groups, root headings that are themselves links, children beneath them, empty space left empty | Model-reviewed — awaiting owner approval | #61, #63 |
+| `issue-61-home-desktop-1440-catalog-popover-open.png` | #61 | `/` | 1440×900 | Catalog popover open | Nonmodal popover, grouped multi-column panel with a dedicated "All products" entry above the groups, root headings that are themselves links, children beneath them, empty space left empty | **Owner-approved baseline** (2026-10-07, desktop open-menu state only — see note above) | #61, #63 |
 | `issue-61-home-desktop-1440-account-popover-open.png` | #61 | `/` | 1440×900 | Account popover open | Existing account overlay, unchanged by the grouped-navigation correction except the shared header trigger | Model-reviewed — awaiting owner approval | #61 |
 | `issue-61-home-mobile-390-drawer-open.png` | #61 | `/` | 390×844 | Drawer open | Modal drawer with a dedicated "All products" entry above the grouped roots, each root with separate link and expand controls, all roots visible without scrolling | Model-reviewed — awaiting owner approval | #61, #63 |
 | `issue-61-home-narrow-320-default.png` | #61 | `/` | 320×640 | Default | Narrow header/Search accessible-name behavior, corrected copy | Model-reviewed — awaiting owner approval | #63 |
-| `issue-63-category-desktop-1440-default.png` | #63 | `/catalog/laptops` | 1440×900, full page | Grid | Ancestor breadcrumbs, sibling links, 20 of 23 products | Owner-rejected composition — before-evidence only | #63 |
-| `issue-63-category-mobile-390-default.png` | #63 | `/catalog/laptops` | 390×844, full page | Grid | Mobile names/price alignment and category context | Owner-rejected composition — before-evidence only | #63 |
-| `issue-63-category-desktop-1440-list.png` | #63 | `/catalog/laptops?page=2&view=list` | 1440×900, full page | List | URL-backed selected view, three remaining items, previous/next | Owner-rejected composition — before-evidence only | #63 |
-| `issue-63-category-mobile-390-list.png` | #63 | `/catalog/laptops?page=2&view=list` | 390×844, full page | List | Compact image/text rows, long names, unknown stock | Owner-rejected composition — before-evidence only | #63 |
-| `issue-63-category-desktop-1440-loading.png` | #63 | `/catalog/laptops` → page 2 | 1440×900 | Loading grid | Retained category context, matching grid skeleton | Owner-rejected composition — before-evidence only | #63 |
-| `issue-63-catalog-desktop-1440-list-loading.png` | #63 | `/catalog/all-products?view=list` → page 2 | 1440×900 | Loading list | "All products" listing at its stable route, non-linked "Catalog" breadcrumb crumb (§9.3), matching list skeleton | Model-reviewed — awaiting owner approval | #61, #63 |
-| `issue-63-category-desktop-1440-empty.png` | #63 | `/catalog/monitors` | 1440×900, full page | Empty | Zero result count, alternate categories, all-products recovery | Owner-rejected composition — before-evidence only | #63 |
-| `issue-63-category-mobile-390-empty.png` | #63 | `/catalog/monitors` | 390×844, full page | Empty | Mobile empty state and wrapping | Owner-rejected composition — before-evidence only | #63 |
-| `issue-63-category-desktop-1440-parent-empty.png` | #63 | `/catalog/gaming` | 1440×900, full page | Parent empty | Honest direct-membership scope and child destination | Owner-rejected composition — before-evidence only | #63 |
-| `issue-63-category-mobile-390-parent-empty.png` | #63 | `/catalog/gaming` | 390×844, full page | Parent empty | Mobile scope explanation and child link | Owner-rejected composition — before-evidence only | #63 |
-| `issue-63-category-desktop-1440-error.png` | #63 | `/catalog/laptops?page=777` | 1440×900, full page | Controlled error | Safe localized GraphQL failure, working explicit Retry | Owner-rejected composition — before-evidence only | #63 |
+| `issue-63-category-desktop-1440-default.png` | #63 | `/catalog/sulearvutid` | 1440×900, full page | Grid | Sidebar with current-category highlight, up-link, related categories, real min/max + attribute facets; compact three-column grid with reduced placeholder | Model-reviewed — awaiting owner approval | #63, #64 |
+| `issue-63-category-mobile-390-default.png` | #63 | `/catalog/sulearvutid` | 390×844, full page | Grid | Mobile toolbar wrapping, "Categories & filters" drawer trigger replacing the rejected button row | Model-reviewed — awaiting owner approval | #63, #64 |
+| `issue-63-category-mobile-390-filters-open.png` | #63 | `/catalog/sulearvutid` | 390×844 | Filters drawer open | Accessible modal drawer: current category highlighted, up-link to All categories, sibling categories, min/max price fields, attribute facets | Model-reviewed — awaiting owner approval | #63, #64 |
+| `issue-63-category-desktop-1440-list.png` | #63 | `/catalog/laptops?page=2&view=list` | 1440×900, full page | List | URL-backed selected view, three remaining items, previous/next | Stale — the sidebar now wraps this state too; not re-shown. Needs a real category with >20 products or the isolated fixture stack to recapture honestly (current dev data: every category fits on one page) | #63 |
+| `issue-63-category-mobile-390-list.png` | #63 | `/catalog/laptops?page=2&view=list` | 390×844, full page | List | Compact image/text rows, long names, unknown stock | Stale — as above | #63 |
+| `issue-63-category-desktop-1440-loading.png` | #63 | `/catalog/laptops` → page 2 | 1440×900 | Loading grid | Retained category context, matching grid skeleton | Stale — as above | #63 |
+| `issue-63-catalog-desktop-1440-list-loading.png` | #63 | `/catalog/all-products?view=list` → page 2 | 1440×900 | Loading list | "All products" listing at its stable route, sidebar-aware list skeleton matching the new layout | Model-reviewed — awaiting owner approval | #61, #63, #64 |
+| `issue-64-search-desktop-1440-default.png` | #64 | `/search?q=Dell` | 1440×900, full page | Query results | Real visible query input, the same sidebar/grid/toolbar components as category pages, result count, sort, facets | Model-reviewed — awaiting owner approval | #64 |
+| `issue-64-search-desktop-1440-suggestions-open.png` | #64 | `/search` | 1440×900 | Suggestions open | Debounced name/slug-only suggestion popup with keyboard-navigable results beneath the query input | Model-reviewed — awaiting owner approval | #64 |
+| `issue-63-category-desktop-1440-empty.png` | #63 | `/catalog/tarkvara` | 1440×900, full page | Empty | Zero result count, honest "No products yet" copy, all-products recovery, sidebar with the empty category highlighted | Model-reviewed — awaiting owner approval | #63, #64 |
+| `issue-63-category-mobile-390-empty.png` | #63 | `/catalog/tarkvara` | 390×844, full page | Empty | Mobile empty state and wrapping, "Categories & filters" drawer trigger | Model-reviewed — awaiting owner approval | #63, #64 |
+| `issue-63-category-desktop-1440-parent-empty.png` | #63 | `/catalog/gaming` | 1440×900, full page | Parent empty | Honest direct-membership scope and child destination | Stale — the sidebar now wraps this state too; not re-shown. No live category currently has children while itself having zero direct products, so this needs the isolated fixture stack to recapture honestly | #63 |
+| `issue-63-category-mobile-390-parent-empty.png` | #63 | `/catalog/gaming` | 390×844, full page | Parent empty | Mobile scope explanation and child link | Stale — as above | #63 |
+| `issue-63-category-desktop-1440-error.png` | #63 | `/catalog/laptops?page=777` | 1440×900, full page | Controlled error | Safe localized GraphQL failure, working explicit Retry | Stale — the sidebar now wraps this state too; not re-shown. An out-of-range page now redirects to a valid page against the live backend instead of erroring, so this needs the isolated fixture stack (or its `CATALOG_TEST_CONTROL` error mode) to recapture honestly | #63 |
 | `issue-63-category-desktop-1440-not-found.png` | #63 | `/catalog/missing-category` | 1440×900, full page | HTTP 404 | Category-specific dark not-found, catalog recovery/noindex | Owner-rejected composition — before-evidence only | #63 |
 | `issue-63-category-mobile-390-not-found.png` | #63 | `/catalog/missing-category` | 390×844, full page | HTTP 404 | Mobile missing-category recovery/footer | Owner-rejected composition — before-evidence only | #63 |
 
@@ -276,19 +383,19 @@ both change the shell and therefore touch every capture in the set.
 | `issue-61-home-mobile-390-drawer-open.png` | **1** grouped navigation | Flat category list becomes grouped sections in the drawer | Modal drawer semantics retained — **done, replaced in place**; refined again (megamenu-only correction) with a dedicated "All products" entry |
 | ~~`issue-63-catalog-desktop-1440-default.png`~~ | **2** catalog discovery | `/catalog` stopped being a flat all-products grid, then the owner reversed the standalone discovery page entirely | **Removed** — the composition it showed no longer exists at any route; see "Megamenu-only discovery correction" above |
 | ~~`issue-63-catalog-mobile-390-default.png`~~ | **2** catalog discovery | As above, mobile | **Removed** — as above |
-| `issue-63-catalog-desktop-1440-list-loading.png` | **2**, **3** | The all-products listing moves to `/catalog/all-products`; skeleton must match the new layout | Loading-state coverage retained — **done, relocated capture replaced in place**; recaptured again for the non-linked breadcrumb crumb (megamenu-only correction) |
-| `issue-63-category-desktop-1440-default.png` | **3** sidebar + compact results | Button row replaced by the sidebar; placeholder reduced; three columns | Replaced |
-| `issue-63-category-mobile-390-default.png` | **3** | Filter/category drawer replaces the wrapped button row | Replaced; add a drawer-open capture |
-| `issue-63-category-desktop-1440-list.png` | **3** | List view inside the new two-region layout | View-toggle + pagination coverage retained |
-| `issue-63-category-mobile-390-list.png` | **3** | As above, mobile | Retained |
-| `issue-63-category-desktop-1440-loading.png` | **3** | Skeleton must match the sidebar layout | Retained |
-| `issue-63-category-desktop-1440-empty.png` | **3** | Layout only | **Yes** — zero-count copy and recovery links were not rejected |
-| `issue-63-category-mobile-390-empty.png` | **3** | Layout only | **Yes** |
-| `issue-63-category-desktop-1440-parent-empty.png` | **3** | Layout only | **Yes** — the honest direct-membership explanation is still required |
-| `issue-63-category-mobile-390-parent-empty.png` | **3** | Layout only | **Yes** |
-| `issue-63-category-desktop-1440-error.png` | **3** | Layout only | **Yes** — controlled failure + working Retry still required |
-| `issue-63-category-desktop-1440-not-found.png` | **3** (shell), **4** (header) | Shell/header only | **Yes** — HTTP 404 + noindex behaviour unchanged |
-| `issue-63-category-mobile-390-not-found.png` | **3**, **4** | Shell/header only | **Yes** |
+| `issue-63-catalog-desktop-1440-list-loading.png` | **2**, **3** | The all-products listing moves to `/catalog/all-products`; skeleton must match the new layout | Loading-state coverage retained — **done, replaced in place again** for the sidebar-aware list skeleton |
+| `issue-63-category-desktop-1440-default.png` | **3** sidebar + compact results | Button row replaced by the sidebar; placeholder reduced; three columns | Replaced — **done, replaced in place** |
+| `issue-63-category-mobile-390-default.png` | **3** | Filter/category drawer replaces the wrapped button row | Replaced — **done, replaced in place**; drawer-open capture added separately |
+| `issue-63-category-desktop-1440-list.png` | **3** | List view inside the new two-region layout | View-toggle + pagination semantics retained, but the capture itself is now **stale** (sidebar not shown) — needs >20 products in one category or the fixture stack to recapture |
+| `issue-63-category-mobile-390-list.png` | **3** | As above, mobile | Stale, same reason |
+| `issue-63-category-desktop-1440-loading.png` | **3** | Skeleton must match the sidebar layout | Stale, same reason |
+| `issue-63-category-desktop-1440-empty.png` | **3** | Layout only | **Done, replaced in place** at `/catalog/tarkvara` (the old route is no longer empty in live dev data either) |
+| `issue-63-category-mobile-390-empty.png` | **3** | Layout only | **Done, replaced in place**, same route |
+| `issue-63-category-desktop-1440-parent-empty.png` | **3** | Layout only | Honest direct-membership semantics still required, but the capture is **stale** — no live category currently has children with zero direct products; needs the fixture stack |
+| `issue-63-category-mobile-390-parent-empty.png` | **3** | Layout only | Stale, same reason |
+| `issue-63-category-desktop-1440-error.png` | **3** | Layout only | Stale — an out-of-range page now redirects instead of erroring against the live backend; needs the fixture stack's `CATALOG_TEST_CONTROL` error mode |
+| `issue-63-category-desktop-1440-not-found.png` | **3** (shell), **4** (header) | Shell/header only | **Yes** — HTTP 404 + noindex behaviour unchanged; confirmed unaffected by reading `catalog/not-found.tsx` (no sidebar) |
+| `issue-63-category-mobile-390-not-found.png` | **3**, **4** | Shell/header only | **Yes**, same confirmation |
 | `issue-61-home-desktop-1440-default.png` | **4** header search input, **7** home replacement | Header gains a real field; the holding home composition is replaced outright | Replaced |
 | `issue-61-home-mobile-390-default.png` | **4**, **7** | As above, mobile | Replaced |
 | `issue-61-home-narrow-320-default.png` | **4** | The <22rem Search-label rule and the <16rem stacking rule must be re-proven against a real input | Narrow-width coverage retained |
@@ -301,13 +408,19 @@ add an image only where it proves something the rows above do not:
 
 | Planned file | Step | Proves |
 |---|---|---|
-| `issue-61-home-desktop-1440-catalog-popover-open.png` *(replaced in place)* | 1, megamenu-only correction | Grouped multi-column navigation, headings as links, empty space left empty, dedicated "All products" entry — **done** |
+| `issue-61-home-desktop-1440-catalog-popover-open.png` *(replaced in place)* | 1, megamenu-only correction | Grouped multi-column navigation, headings as links, empty space left empty, dedicated "All products" entry — **done**; subsequently **owner-approved**, 2026-10-07 |
 | ~~`issue-63-catalog-desktop-1440-default.png`~~ *(removed)* | 2 (superseded) | Was category discovery at a standalone `/catalog` page; the owner reversed this before review — the megamenu is the sole discovery surface instead |
-| `issue-63-category-desktop-1440-default.png` *(replaced in place)* | 3 | Sidebar with in-context category navigation beside a compact product area |
-| `issue-63-category-mobile-390-filters-open.png` *(new)* | 3 | The mobile filter/navigation drawer with its active-filter count |
-| `issue-64-search-desktop-1440-default.png` *(new)* | 5 | The shared results surface under a search URL, with real facets |
-| `issue-64-search-desktop-1440-suggestions-open.png` *(new)* | 6 | Suggestion popup built only from `name`/`slug`, with keyboard selection |
+| `issue-63-category-desktop-1440-default.png` *(replaced in place)* | 3 | Sidebar with in-context category navigation beside a compact product area — **done** |
+| `issue-63-category-mobile-390-filters-open.png` *(new)* | 3 | The mobile filter/navigation drawer with its active-filter count — **done** |
+| `issue-64-search-desktop-1440-default.png` *(new)* | 5 | The shared results surface under a search URL, with real facets — **done** |
+| `issue-64-search-desktop-1440-suggestions-open.png` *(new)* | 6 | Suggestion popup built only from `name`/`slug`, with keyboard selection — **done** |
 | `issue-86-home-desktop-1440-default.png` *(new)* | 7 | Category entry points and accurately labelled discovery sections |
+
+Still outstanding from this round (not fabricated; needs either a live-data
+change or the isolated fixture stack): a second-page list/loading capture, a
+parent-with-children-but-no-direct-products capture, and a controlled
+backend-error capture, all under the new sidebar layout — see the "Stale"
+entries in the invalidation table above.
 
 Captures still owned by #61 and #63 keep those IDs when refreshed; the
 refreshing ticket goes in *Last updated by*.
