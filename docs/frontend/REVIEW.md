@@ -78,7 +78,7 @@ shell work. Skip entirely otherwise.**
 
 - [ ] Category navigation is **grouped and informative**, not a single narrow list or a row of filter-like buttons. Headings link to their own category.
 - [ ] Every navigation surface works by **click, keyboard and touch**. Hover is an enhancement only, guarded by `(hover: hover) and (pointer: fine)`, and never the sole path.
-- [ ] The catalog root leads with category discovery; "All products" is present but explicitly secondary.
+- [ ] Category discovery lives in the header's catalog megamenu, not a second standalone `/catalog` page; "All products" is present there but explicitly secondary. A bare `/catalog` request is a compatibility redirect, not a discovery surface.
 - [ ] Category and search results use **one** results implementation and the same URL-backed query/filter/sort/view/page state. Back/forward restores it; page resets on query/filter change; pagination is immediate.
 - [ ] Desktop results have a left sidebar with category navigation **and real filters**; mobile has an accessible modal drawer, not a stacked sidebar.
 - [ ] Every filter, sort and label maps to a real backend capability in §9.0. No "In stock" while availability is unknown; no featured/popular/trending/new/recommended/deals; no fabricated counts or category imagery.
@@ -151,11 +151,12 @@ routine edit.
 >    *Popular* or *Recommended* that no query computes, or an unavailable feature
 >    presented as working.
 > 3. **Navigation and discovery requirements** — for catalog, search, home or
->    shell work, check each §9 convention: grouped category navigation;
->    discovery before a flat grid; one shared results implementation with
->    URL-backed state; desktop sidebar and mobile drawer; a real header search
->    input; a media placeholder that does not dominate the card. A documented,
->    explained departure is a judgement call; an undocumented one is a defect.
+>    shell work, check each §9 convention: grouped category navigation in the
+>    header megamenu (not a second standalone discovery page); one shared
+>    results implementation with URL-backed state; desktop sidebar and mobile
+>    drawer; a real header search input; a media placeholder that does not
+>    dominate the card. A documented, explained departure is a judgement call;
+>    an undocumented one is a defect.
 > 4. Hierarchy — is the most important action the most prominent one? Does
 >    anything compete with it?
 > 5. Consistency with the established design — tokens, control sizing, spacing

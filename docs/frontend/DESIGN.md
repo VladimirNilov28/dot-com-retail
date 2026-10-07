@@ -745,6 +745,11 @@ without a new owner decision:**
   focus is moved back. Both workarounds required patching library internals. Add
   hover only if a future HeroUI release makes dialog auto-focus opt-out; click,
   keyboard and touch already satisfy every requirement.
+- **"All products" is the panel/drawer's own entry, independent of the
+  category fetch.** It renders as a fixed link to `/catalog/all-products` above
+  the grouped categories in both the desktop panel and the mobile drawer, and
+  stays present even when category data is loading, empty or failed — it is
+  not conditioned on the taxonomy rendering successfully.
 
 ### 9.2 Home — category entry points and real discovery
 
@@ -777,28 +782,62 @@ already requires a documented selection source). Keep the sections few; with a
 small catalogue the quieter answer is the right one. Remove the temporary
 "Available now" list as the features it names become real.
 
-### 9.3 Catalog root — discovery before a product grid
+### 9.3 Catalog root — compatibility route, not a second discovery surface
 
-`/catalog` is a **category and subcategory discovery page**. A flat grid of
-unrelated products is not the default shopping entry.
+**Status: superseded, owner correction.** The requirement below ("`/catalog` is
+a category and subcategory discovery page") was implemented in #63 step 2 and
+then **rejected by the owner**: a standalone discovery page sitting behind the
+header megamenu duplicates what #61 already built and was not what the owner
+wanted. Category and subcategory discovery now lives **only** in the header's
+catalog megamenu (§9.1). `/catalog` itself is a thin compatibility route with
+no discovery content of its own — do not revive the standalone discovery page
+or its `catalog-discovery.tsx`/`catalogDiscoveryHref()` without a new, explicit
+owner decision.
 
-- Lead with the taxonomy: top-level groups, each heading linking to its category,
-  children listed beneath. This reuses the taxonomy already fetched — no new
-  query.
-- **"All products" stays available as an explicit, visibly secondary option**,
-  labelled plainly, going to the shared results surface with no category filter.
-- Keep the breadcrumb, the heading and the honest copy about direct membership.
+**Current, binding behavior:**
 
-**Resolved during implementation (#63, §9.8 step 2) — do not re-litigate without
-new information.** The previous root behavior (an unfiltered listing at bare
-`/catalog`) relocated to the dedicated static route **`/catalog/all-products`**,
-rather than to `/search` with no query (§9.4's recommended-routes table below
-predates this decision and is superseded by this note for that one row). Reasons:
+- A bare `/catalog` request (no `page`/`view` query) redirects to the homepage
+  (`/`). This is a plain, unconditional redirect — it does not depend on #86's
+  home redesign landing first, and it must never auto-open an overlay instead.
+- Bookmarked/legacy `/catalog?page=…`/`?view=…` links keep working exactly as
+  before #63 step 2's reversal: `/catalog` forwards the exact query string
+  (including invalid values) to `/catalog/all-products`, which still owns the
+  existing invalid-URL recovery flow.
+- `/catalog/all-products` (the bounded, unfiltered listing) and `/catalog/<slug>`
+  (category results, direct-membership semantics, unchanged) are unaffected —
+  both predate this reversal and survive it unchanged.
+- The breadcrumb's "Catalog" crumb is a **plain, non-linked label**. There is no
+  discovery destination to link it to, and linking it to the redirecting bare
+  route would just bounce the visitor to the homepage from inside a category
+  page — worse than a non-interactive label.
+- The reserved `all-products` static segment still shadows `/catalog/<slug>`
+  for that exact slug (§9.4's table note, unchanged); audited against the real
+  taxonomy, no category currently uses that slug.
+
+**Superseded original requirement, kept for history — do not implement:**
+
+> `/catalog` is a category and subcategory discovery page. A flat grid of
+> unrelated products is not the default shopping entry. Lead with the taxonomy:
+> top-level groups, each heading linking to its category, children listed
+> beneath, reusing the already-fetched taxonomy. "All products" stays available
+> as an explicit, visibly secondary option. Keep the breadcrumb, the heading and
+> the honest copy about direct membership.
+
+### 9.3a History — why the catalog root went from a listing, to its own
+discovery page, to a compatibility redirect
+
+**#63 step 1 → step 2 (superseded by §9.3 above):** The previous root behavior
+(an unfiltered listing at bare `/catalog`) relocated to the dedicated static
+route **`/catalog/all-products`**, rather than to `/search` with no query
+(§9.4's recommended-routes table predates this decision). Reasons, still valid
+for why `/catalog/all-products` exists as its own route even though the
+discovery page above it did not survive:
 
 - A query-parameter marker (e.g. `?products=1`) is ambiguous exactly when a
   control returns to its default — switching the view toggle back to grid at
   page 1 omits every param, so the marker disappears and the page would
-  silently fall back to discovery. A stable path has no such failure mode.
+  silently fall back to whatever renders at the bare route. A stable path has
+  no such failure mode.
 - `/search` is reserved for step 4/5's query-driven results surface (§9.6);
   conflating "no query" on that route with "all products" would make the
   search URL contract read two different ways depending on whether `q` is
@@ -807,8 +846,8 @@ predates this decision and is superseded by this note for that one row). Reasons
 - **Accepted trade-off:** `/catalog/all-products` is a reserved static segment
   that takes routing priority over `/catalog/<slug>`, so a real category whose
   slug is ever `all-products` becomes permanently unreachable at `/catalog/<slug>`.
-  No such category exists today. If one is ever introduced, this reservation
-  must be revisited.
+  No such category exists today (audited against the live taxonomy). If one is
+  ever introduced, this reservation must be revisited.
 - Bookmarked/legacy `/catalog?page=…`/`?view=…` links still work: `/catalog`
   forwards their exact query string (including invalid values) to
   `/catalog/all-products`, so the existing invalid-URL recovery flow is
@@ -853,8 +892,8 @@ document it and must still have exactly one results implementation):
 
 | Route | Renders |
 |---|---|
-| `/catalog` | Category discovery (§9.3) |
-| `/catalog/all-products` | "All products" — the shared results surface, no category filter (§9.3 resolved this; superseding this table's original `/search`-with-no-`q` suggestion for this one row) |
+| `/catalog` | No discovery content of its own (§9.3, superseded): redirects to `/` (bare request) or forwards legacy `page`/`view` query to `/catalog/all-products` |
+| `/catalog/all-products` | "All products" — the shared results surface, no category filter (§9.3) |
 | `/catalog/<slug>` | Category results — sidebar + results |
 | `/search?q=…` | Search results — the same sidebar + results |
 
@@ -929,8 +968,8 @@ Small and sequential; each step is independently reviewable.
 
 | # | Step | Ticket | Depends on |
 |---|---|---|---|
-| 1 | Grouped category navigation panel + mobile drawer grouping (§9.1) | #61 | — (taxonomy already fetched) |
-| 2 | `/catalog` becomes category discovery with an explicit "All products" (§9.3) | #63 | 1 for consistent grouping |
+| 1 | Grouped category navigation panel + mobile drawer grouping, with an explicit "All products" entry in the panel/drawer itself (§9.1) | #61 | — (taxonomy already fetched) |
+| 2 | Megamenu is the sole category/subcategory discovery surface; `/catalog` is a compatibility redirect, not a second discovery page (§9.1, §9.3) | #61, #63 | 1 |
 | 3 | Shared results implementation: sidebar, mobile drawer, URL-backed state, compact product area and reduced placeholder (§9.4, §9.5) | #63 | 2 |
 | 4 | Real header search input and plain submission (§9.6) | #61 → #64 | 3 (results route must exist) |
 | 5 | Query results and real facets in the shared sidebar/drawer (§9.0, §9.4) | #64 | 3, 4 |
