@@ -45,15 +45,25 @@ async function inspect(page, route, mobile) {
   assert.equal(await page.getByRole("contentinfo").count(), 1);
   assert.equal(await page.locator('a[href="#main-content"]').count(), 1);
   assert.equal(await page.getByRole("heading", { level: 1 }).textContent(), route.heading);
-  if (route.path !== "/" && route.path !== "/catalog") {
+  if (route.path !== "/" && route.path !== "/catalog" && route.path !== "/catalog/all-products") {
     assert.match(await page.locator("main").textContent(), /not available yet/i);
     assert.equal(await page.locator("main input, main form, main button").count(), 0);
     assert.equal(await page.getByRole("link", { name: "Return to home" }).getAttribute("href"), "/");
     assert.equal(await page.title(), `${route.label} | ByteCore`);
   }
   if (route.path === "/catalog") {
-    await page.getByRole("group", { name: "Product view" }).waitFor();
+    // Catalog discovery (#63 step 2): real categories first, "All products" as
+    // an explicit secondary action, not the default product feed.
     assert.equal(await page.title(), "Catalog | ByteCore");
+    const categories = page.getByRole("navigation", { name: "Categories" });
+    if (await categories.count() > 0) {
+      assert.ok(await categories.locator(".catalog-discovery-group").count() > 0, "Discovery renders at least one category group");
+    }
+    assert.equal(await page.getByRole("link", { name: "All products", exact: true }).count(), 1, "An explicit, secondary All products action is always present");
+  }
+  if (route.path === "/catalog/all-products") {
+    await page.getByRole("group", { name: "Product view" }).waitFor();
+    assert.equal(await page.title(), "All products | ByteCore");
     const list = new URL(page.url()).searchParams.get("view") === "list";
     assert.equal(await page.getByRole("button", { name: "Grid view" }).getAttribute("aria-pressed"), String(!list));
     assert.equal(await page.getByRole("button", { name: "List view" }).getAttribute("aria-pressed"), String(list));
@@ -428,6 +438,14 @@ try {
         if (mobile) await checkMobile(page, route);
         else await assertActive(page, route);
       }
+      // All products (#63 step 2): the relocated bounded listing. Not in the
+      // primary nav, so it is checked directly rather than through
+      // verifyNavigation's nav-click/active-state assumptions.
+      const allProducts = { path: "/catalog/all-products", label: "All products", heading: "All products" };
+      assert.equal((await page.goto(`${baseURL}${allProducts.path}`)).status(), 200);
+      await inspect(page, allProducts, mobile);
+      assert.equal((await page.reload()).status(), 200);
+      await inspect(page, allProducts, mobile);
       await page.goto(baseURL);
       await page.keyboard.press("Tab");
       const skip = page.getByRole("link", { name: "Skip to content" });
@@ -554,13 +572,15 @@ try {
       assert.equal((await page.goto(`${baseURL}${route.path}`)).status(), 200);
       await inspect(page, route, true);
       await checkMobile(page, route);
-      if (route.path === "/catalog") {
-        await page.getByRole("button", { name: "List view" }).click();
-        await page.waitForURL(`${baseURL}/catalog?view=list`);
-        await inspect(page, route, true);
-        await checkMobile(page, route);
-      }
     }
+    // All products (#63 step 2) at 200% zoom: not in the primary nav, so it is
+    // exercised directly rather than through the route/checkMobile loop above.
+    const allProductsZoom = { path: "/catalog/all-products", label: "All products", heading: "All products" };
+    assert.equal((await page.goto(`${baseURL}${allProductsZoom.path}`)).status(), 200);
+    await inspect(page, allProductsZoom, true);
+    await page.getByRole("button", { name: "List view" }).click();
+    await page.waitForURL(`${baseURL}/catalog/all-products?view=list`);
+    await inspect(page, allProductsZoom, true);
     await verifyNavigation(page, true);
     if (artifacts) await page.screenshot({ path: join(artifacts, `${width}-200-percent-browser-zoom.png`) });
     results.push(`PASS actual Chromium 200% browser zoom: CSS viewport ${width} -> ${width / 2}, DPR doubled, all routes/menu/navigation without overflow`);

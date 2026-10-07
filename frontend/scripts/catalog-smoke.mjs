@@ -90,10 +90,22 @@ try {
     await page.waitForURL(`${base}/catalog/computers?view=list`); await loaded(page);
     assert.match(await page.locator("ul.catalog-products .product-card").textContent(), /Modular Computer Kit.*Price unavailable.*Availability unknown/);
     assert.equal(await page.locator("ul.catalog-products .product-card").count(), 1, "Parent includes direct members only");
-    await page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Catalog", exact: true }).click();
-    await page.waitForURL(`${base}/catalog?view=list`);
+    // The "All products" CTA leads to the relocated bounded listing (#63 step 2);
+    // it is no longer the catalog root.
+    await page.locator(".catalog-categories").getByRole("link", { name: "All products", exact: true }).click();
+    await page.waitForURL(`${base}/catalog/all-products?view=list`);
     await loaded(page);
     assert.equal(await page.getByRole("button", { name: "List view" }).getAttribute("aria-pressed"), "true");
+    // The breadcrumb's "Catalog" crumb now leads to category discovery, not a listing.
+    await page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Catalog", exact: true }).click();
+    await page.waitForURL(`${base}/catalog`);
+    const categories = page.getByRole("navigation", { name: "Categories" });
+    await categories.waitFor();
+    assert.equal(await categories.getByRole("link", { name: "Computers", exact: true }).count(), 1);
+    assert.equal(await categories.getByRole("link", { name: "Laptops", exact: true }).count(), 1, "Deeper categories stay reachable from discovery");
+    assert.equal(await page.getByRole("link", { name: "All products", exact: true }).count(), 1);
+    await fits(page);
+    await capture(page, "catalog", viewport, "default");
     await page.goto(`${base}/catalog/gaming`); await loaded(page);
     assert.equal(await page.locator("ul.catalog-products .product-card").count(), 0);
     assert.equal(await page.getByRole("list", { name: "Products" }).count(), 0);
@@ -109,10 +121,12 @@ try {
     assert.equal(await page.locator('meta[name="robots"]').getAttribute("content"), "noindex");
     await fits(page); await capture(page, "category", viewport, "not-found");
     await page.goto(`${base}/catalog?page=0`);
+    // Legacy bookmarked query strings, including invalid ones, still reach the
+    // relocated listing's recovery flow (#63 step 2).
+    await page.waitForURL(`${base}/catalog/all-products?page=0`);
     await page.getByRole("heading", { name: "Invalid catalog URL" }).waitFor();
     await page.getByRole("link", { name: "Go to first page" }).click();
-    await page.waitForURL(`${base}/catalog`); await loaded(page);
-    await capture(page, "catalog", viewport, "default");
+    await page.waitForURL(`${base}/catalog/all-products`); await loaded(page);
     await page.close();
     results.push(`PASS ${width}px: real bounded prices, direct categories, pagination/reload/history, keyboard view controls, empty/not-found and overflow`);
   }
@@ -142,14 +156,14 @@ try {
     await page.reload(); await loaded(page);
     const reused = await mode("normal");
     assert.equal(reused.counts.CatalogListing, stable.counts.CatalogListing, "Validated success reused within freshness interval");
-    await page.goto(`${base}/catalog?view=list`);
+    await page.goto(`${base}/catalog/all-products?view=list`);
     await loaded(page);
     await mode("delay");
     await page.getByRole("navigation", { name: "Pagination" }).getByRole("link", { name: "Next", exact: true }).click();
     await page.locator(".catalog-transition-loading").waitFor({ state: "visible" });
     assert.equal(await page.locator(".catalog-transition-loading .product-card").first().evaluate((element) => getComputedStyle(element).flexDirection), "row");
     await capture(page, "catalog", "desktop-1440", "list-loading", false);
-    await page.waitForURL(`${base}/catalog?page=2&view=list`);
+    await page.waitForURL(`${base}/catalog/all-products?page=2&view=list`);
     await loaded(page);
     await mode("normal");
     await page.close();
