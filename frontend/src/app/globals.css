@@ -143,6 +143,8 @@
   }
 
   .store-popover { width: min(20rem, calc(100vw - 2rem)); overflow-wrap: anywhere; padding: 1rem; }
+  /* The catalog panel sizes to its grouped content instead of a fixed narrow column. */
+  .store-catalog-popover { width: auto; max-width: min(var(--page-max-width), calc(100vw - 2rem)); }
   .store-drawer-content { width: min(20rem, 90vw); max-width: 100vw; }
   .store-drawer-dialog { min-width: 0; overflow-wrap: anywhere; }
   .store-drawer-header { display: flex; align-items: center; gap: 0.5rem; padding: 1rem; }
@@ -155,9 +157,99 @@
   .store-drawer-body { min-width: 0; padding: 1rem; overflow-y: auto; }
   .store-footer { display: grid; gap: 2rem; }
 
-  .store-category-links { display: grid; gap: 0.75rem; max-height: 50dvh; overflow-y: auto; }
-  .store-category-links > div > a:first-child { color: var(--foreground); font-weight: 600; }
-  .store-category-links > div > a:not(:first-child) { padding-inline-start: 1.5rem; }
+  .store-category-panel { max-height: min(60dvh, 32rem); overflow-y: auto; }
+
+  /* Multi-column packing keeps each group whole (heading with its own children)
+     and lets short groups sit directly under tall ones instead of leaving a
+     row-sized hole. The column count comes from the real group count, so a small
+     taxonomy produces a small panel; the column width makes it reflow when the
+     viewport is narrower than the preferred width. */
+  .store-category-panel .store-category-groups {
+    display: block;
+    width: calc(var(--store-category-columns, 1) * 13.5rem);
+    max-width: 100%;
+    columns: var(--store-category-columns, 1) 11rem;
+    column-gap: 1.5rem;
+  }
+
+  .store-category-panel .store-category-group {
+    break-inside: avoid;
+    margin-block-end: 1.25rem;
+  }
+
+  .store-category-groups { display: grid; }
+  .store-category-group { min-width: 0; }
+
+  .store-category-group-heading,
+  .store-category-row { display: flex; align-items: center; gap: 0.25rem; min-width: 0; font-size: 1rem; }
+  .store-category-row { justify-content: space-between; }
+
+  .store-category-root-link {
+    flex: 1;
+    min-width: 0;
+    padding: 0.375rem 0.5rem;
+    border-radius: var(--radius-sm);
+    color: var(--foreground);
+    font-weight: 600;
+  }
+
+  .store-category-link {
+    display: block;
+    min-width: 0;
+    padding: 0.3125rem 0.5rem;
+    border-radius: var(--radius-sm);
+    color: var(--muted);
+    font-size: 0.875rem;
+    font-weight: 400;
+  }
+
+  .store-category-root-link:hover,
+  .store-category-link:hover { background: var(--surface); color: var(--foreground); }
+
+  .store-category-root-link[aria-current="page"],
+  .store-category-link[aria-current="page"] {
+    background: var(--surface-secondary);
+    color: var(--accent);
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 0.25em;
+  }
+
+  .store-category-subtree { display: grid; }
+  /* Depth is shown with a rule rather than deeper indentation so a tall tree
+     cannot push links out of a column. */
+  .store-category-subtree[data-depth="1"] { margin-block-start: 0.125rem; }
+  .store-category-subtree:not([data-depth="1"]) {
+    margin-inline-start: 0.5rem;
+    padding-inline-start: 0.5rem;
+    border-inline-start: 1px solid var(--border);
+  }
+  .store-category-subtree:not([data-depth="1"]) .store-category-link { font-size: 0.8125rem; }
+
+  .store-category-toggle {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.75rem;
+    min-height: var(--control-height);
+    border-radius: var(--radius-lg);
+    color: var(--muted);
+  }
+  .store-category-toggle:hover { background: var(--surface); color: var(--foreground); }
+  .store-category-toggle .store-icon { transition: transform 150ms ease; }
+  .store-category-toggle .store-icon[data-expanded="true"] { transform: rotate(180deg); }
+
+  .store-category-tree .store-category-group + .store-category-group { margin-block-start: 0.125rem; }
+  .store-category-disclosure-body { padding-inline-start: 0.5rem; }
+
+  /* The catalog entry stays a distinct destination above the groups. */
+  .store-category-entry {
+    margin-block-end: 0.75rem;
+    padding-block-end: 0.75rem;
+    border-block-end: 1px solid var(--border);
+  }
+  .store-category-entry .store-nav-link { color: var(--foreground); font-weight: 600; }
 
   .catalog-breadcrumb { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; font-size: 0.875rem; color: var(--muted); }
   .catalog-link-pending { margin-inline-start: 0.5rem; font-size: 0.75rem; color: var(--muted); }
@@ -266,6 +358,9 @@
   .store-brand:focus-visible,
   .store-nav-link:focus-visible,
   .store-action:focus-visible,
+  .store-category-root-link:focus-visible,
+  .store-category-link:focus-visible,
+  .store-category-toggle:focus-visible,
   .store-cta:focus-visible,
   .store-link:focus-visible {
     outline: 2px solid var(--focus);
