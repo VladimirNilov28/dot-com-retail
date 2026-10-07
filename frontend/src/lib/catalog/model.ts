@@ -1,8 +1,9 @@
-import type { CatalogCategoriesQuery, CatalogListingQuery } from "@/lib/graphql/generated";
-import type { Decimal } from "@/lib/graphql/scalars";
+import type { CatalogCategoriesQuery, CatalogListingQuery, ProductSort } from "@/lib/graphql/generated";
+import { decimal, type Decimal } from "@/lib/graphql/scalars";
 
 export type Category = CatalogCategoriesQuery["categories"][number];
 export type CatalogProduct = CatalogListingQuery["searchProducts"]["items"][number];
+export type CatalogFacets = CatalogListingQuery["searchProducts"]["facets"];
 export type View = "grid" | "list";
 export const PAGE_SIZE = 20;
 
@@ -14,6 +15,100 @@ export function listingState(parameters: Record<string, string | string[] | unde
     return null;
   }
   return { page: Number(page), view };
+}
+
+/** Sorts actually supported by `searchProducts` (backend schema `ProductSort`).
+ * RELEVANCE only has a defined meaning with a non-blank query, matching the
+ * backend's documented ranking contract. */
+export const SORTS: readonly ProductSort[] = ["RELEVANCE", "PRICE_ASC", "PRICE_DESC", "RATING_DESC"];
+export const DEFAULT_SORT: ProductSort = "PRICE_ASC";
+export const ATTRIBUTE_PARAM_PREFIX = "attr.";
+export const MAX_QUERY_LENGTH = 200;
+export const MAX_ATTRIBUTE_FILTERS = 20;
+
+export interface AttributeFilter { readonly name: string; readonly value: string }
+
+export interface ResultsState {
+  readonly page: number;
+  readonly view: View;
+  readonly sort: ProductSort;
+  readonly query: string;
+  readonly minPrice?: Decimal;
+  readonly maxPrice?: Decimal;
+  readonly attributes: readonly AttributeFilter[];
+}
+
+function parsePriceParam(value: string | string[] | undefined): Decimal | null | undefined {
+  if (value === undefined) return undefined;
+  if (Array.isArray(value)) return null;
+  try {
+    const parsed = decimal(value);
+    return Number(parsed) >= 0 ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The shared URL-state contract for category pages, "All products" and
+ * search (§9.4/§9.6): query/sort/filters/page/view all live in the URL so
+ * results are reload- and back/forward-restorable, and category browsing and
+ * search share one state shape instead of a second, inconsistent interface. */
+export function resultsState(parameters: Record<string, string | string[] | undefined>): ResultsState | null {
+  const base = listingState(parameters);
+  if (!base) return null;
+  const rawQuery = parameters.q;
+  if (Array.isArray(rawQuery)) return null;
+  const query = (rawQuery ?? "").trim();
+  if (query.length > MAX_QUERY_LENGTH) return null;
+  const rawSort = parameters.sort;
+  if (Array.isArray(rawSort)) return null;
+  const sort = (rawSort ?? (query ? "RELEVANCE" : DEFAULT_SORT)) as ProductSort;
+  if (!SORTS.includes(sort) || (sort === "RELEVANCE" && !query)) return null;
+  const minPrice = parsePriceParam(parameters.minPrice);
+  const maxPrice = parsePriceParam(parameters.maxPrice);
+  if (minPrice === null || maxPrice === null) return null;
+  if (minPrice !== undefined && maxPrice !== undefined && Number(minPrice) > Number(maxPrice)) return null;
+  const attributes: AttributeFilter[] = [];
+  for (const [key, value] of Object.entries(parameters)) {
+    if (!key.startsWith(ATTRIBUTE_PARAM_PREFIX)) continue;
+    if (Array.isArray(value) || !value) return null;
+    const name = key.slice(ATTRIBUTE_PARAM_PREFIX.length);
+    if (!name || name.length > 100 || value.length > 200) return null;
+    attributes.push({ name, value });
+  }
+  if (attributes.length > MAX_ATTRIBUTE_FILTERS) return null;
+  attributes.sort((a, b) => a.name.localeCompare(b.name, "en"));
+  return {
+    ...base, sort, query,
+    ...(minPrice === undefined ? {} : { minPrice }),
+    ...(maxPrice === undefined ? {} : { maxPrice }),
+    attributes,
+  };
+}
+
+const RESET_ON_KEYS = ["sort", "query", "minPrice", "maxPrice", "attributes"] as const;
+
+/** Builds a URL for `route` from `current` state with `changes` applied.
+ * Sort/query/filter changes reset pagination to page 1 (a new result set);
+ * view and plain page navigation do not reset anything else (§9.4). */
+export function resultsHref(route: string, current: ResultsState, changes: Partial<ResultsState> = {}) {
+  const next: ResultsState = { ...current, ...changes };
+  const resets = RESET_ON_KEYS.some((key) => key in changes);
+  const page = changes.page !== undefined ? changes.page : (resets ? 1 : current.page);
+  const query = new URLSearchParams();
+  if (page !== 1) query.set("page", String(page));
+  if (next.view !== "grid") query.set("view", next.view);
+  const defaultSort = next.query ? "RELEVANCE" : DEFAULT_SORT;
+  if (next.sort !== defaultSort) query.set("sort", next.sort);
+  if (next.query) query.set("q", next.query);
+  if (next.minPrice) query.set("minPrice", next.minPrice);
+  if (next.maxPrice) query.set("maxPrice", next.maxPrice);
+  for (const attribute of next.attributes) query.set(`${ATTRIBUTE_PARAM_PREFIX}${attribute.name}`, attribute.value);
+  return query.size ? `${route}?${query}` : route;
+}
+
+export function hasActiveFilters(state: ResultsState) {
+  return state.minPrice !== undefined || state.maxPrice !== undefined || state.attributes.length > 0;
 }
 
 /** `/catalog` itself no longer renders a product listing or a discovery page;

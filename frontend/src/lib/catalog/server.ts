@@ -6,8 +6,9 @@ import { catalogCategories, catalogListing } from "@/lib/graphql/operations";
 import { hiveConfig, requestHive } from "@/lib/graphql/server";
 import { failure, type SafeFailure } from "@/lib/graphql/errors";
 import type { Result } from "@/lib/graphql/transport";
-import { categoryIndex, productPrice, PAGE_SIZE } from "./model";
-import type { CatalogCategoriesQuery, CatalogListingQuery } from "@/lib/graphql/generated";
+import { categoryIndex, productPrice, PAGE_SIZE, type AttributeFilter } from "./model";
+import type { CatalogCategoriesQuery, CatalogListingQuery, ProductSort } from "@/lib/graphql/generated";
+import type { Decimal } from "@/lib/graphql/scalars";
 
 class CatalogFailure extends Error {
   constructor(readonly safe: SafeFailure) { super(safe.message); }
@@ -37,9 +38,22 @@ const cachedCategories = unstable_cache(async (endpoint: string, origin: string)
   return data;
 }, ["catalog-categories-v1"], { revalidate: 60 });
 
-const cachedListing = unstable_cache(async (endpoint: string, origin: string, page: number, categoryId?: string) => {
+const cachedListing = unstable_cache(async (
+  endpoint: string, origin: string, page: number, sort: ProductSort, query: string,
+  categoryId?: string, minPrice?: Decimal, maxPrice?: Decimal, attributesKey?: string,
+) => {
+  const attributes: AttributeFilter[] | undefined = attributesKey ? JSON.parse(attributesKey) : undefined;
+  const hasFilters = categoryId !== undefined || minPrice !== undefined || maxPrice !== undefined ||
+    (attributes !== undefined && attributes.length > 0);
   const { result } = await requestHive(catalogListing, { input: {
-    page, size: PAGE_SIZE, sort: "PRICE_ASC", ...(categoryId ? { filters: { categoryId } } : {}),
+    page, size: PAGE_SIZE, sort,
+    ...(query ? { query } : {}),
+    ...(hasFilters ? { filters: {
+      ...(categoryId === undefined ? {} : { categoryId }),
+      ...(minPrice === undefined ? {} : { minPrice }),
+      ...(maxPrice === undefined ? {} : { maxPrice }),
+      ...(attributes === undefined ? {} : { attributes }),
+    } } : {}),
   } }, { endpoint, origin }, { kind: "public" });
   const data = success(result);
   try {
@@ -50,7 +64,7 @@ const cachedListing = unstable_cache(async (endpoint: string, origin: string, pa
     throw new CatalogFailure(failure("protocol", true));
   }
   return data;
-}, ["catalog-listing-v1"], { revalidate: 60 });
+}, ["catalog-listing-v2"], { revalidate: 60 });
 
 async function read<Data>(request: (endpoint: string, origin: string) => Promise<Data>): Promise<Result<Data>> {
   try {
@@ -64,6 +78,19 @@ async function read<Data>(request: (endpoint: string, origin: string) => Promise
   }
 }
 
+export interface ListingQuery {
+  readonly page: number;
+  readonly sort: ProductSort;
+  readonly query?: string;
+  readonly categoryId?: string;
+  readonly minPrice?: Decimal;
+  readonly maxPrice?: Decimal;
+  readonly attributes?: readonly AttributeFilter[];
+}
+
 export const getCategories = cache((): Promise<Result<CatalogCategoriesQuery>> => read(cachedCategories));
-export const getListing = cache((page: number, categoryId?: string): Promise<Result<CatalogListingQuery>> =>
-  read((endpoint, origin) => cachedListing(endpoint, origin, page, categoryId)));
+export const getListing = cache((input: ListingQuery): Promise<Result<CatalogListingQuery>> =>
+  read((endpoint, origin) => cachedListing(
+    endpoint, origin, input.page, input.sort, input.query ?? "", input.categoryId, input.minPrice, input.maxPrice,
+    input.attributes && input.attributes.length ? JSON.stringify(input.attributes) : undefined,
+  )));

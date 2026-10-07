@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { catalogHref, categoryIndex, formatPrice, listingState, productPrice } from "./model";
+import {
+  catalogHref, categoryIndex, formatPrice, hasActiveFilters, listingState, productPrice, resultsHref, resultsState,
+} from "./model";
 import { decimal } from "@/lib/graphql/scalars";
 
 describe("catalog URL state", () => {
@@ -21,6 +23,46 @@ describe("catalog URL state", () => {
     expect(listingState({ page: ["1", "2"] })).toBeNull();
     expect(listingState({ view: ["grid"] })).toBeNull();
     expect(listingState({ view: "table" })).toBeNull();
+  });
+});
+
+describe("shared results state (category pages, All products, search)", () => {
+  test("defaults sort by query presence and round trips through resultsHref", () => {
+    expect(resultsState({})).toEqual({ page: 1, view: "grid", sort: "PRICE_ASC", query: "", attributes: [] });
+    expect(resultsState({ q: "cable" })).toEqual({ page: 1, view: "grid", sort: "RELEVANCE", query: "cable", attributes: [] });
+    expect(resultsState({ q: "  cable  " }).query).toBe("cable");
+  });
+  test("rejects RELEVANCE without a query, inverted/negative prices and oversized input", () => {
+    expect(resultsState({ sort: "RELEVANCE" })).toBeNull();
+    expect(resultsState({ sort: "NEWEST", q: "x" })).toBeNull();
+    expect(resultsState({ minPrice: "10", maxPrice: "5" })).toBeNull();
+    expect(resultsState({ minPrice: "-1" })).toBeNull();
+    expect(resultsState({ q: "x".repeat(201) })).toBeNull();
+    expect(resultsState({ q: ["a", "b"] })).toBeNull();
+    expect(resultsState({ "attr.color": ["red", "blue"] })).toBeNull();
+    expect(resultsState({ "attr.": "red" })).toBeNull();
+  });
+  test("parses attribute filters, sorts them by name and bounds their count", () => {
+    const state = resultsState({ "attr.color": "red", "attr.size": "M" });
+    expect(state.attributes).toEqual([{ name: "color", value: "red" }, { name: "size", value: "M" }]);
+    const many = Object.fromEntries(Array.from({ length: 21 }, (_, index) => [`attr.k${index}`, "v"]));
+    expect(resultsState(many)).toBeNull();
+  });
+  test("resultsHref omits default values and resets pagination only for filter/sort/query changes", () => {
+    const base = resultsState({ page: "3" });
+    expect(resultsHref("/catalog/laptops", base, { view: "list" })).toBe("/catalog/laptops?page=3&view=list");
+    expect(resultsHref("/catalog/laptops", base, { sort: "PRICE_DESC" })).toBe("/catalog/laptops?sort=PRICE_DESC");
+    expect(resultsHref("/catalog/laptops", base, { minPrice: decimal("10") })).toBe("/catalog/laptops?minPrice=10");
+    expect(resultsHref("/catalog/laptops", base, { minPrice: undefined })).toBe("/catalog/laptops");
+    // Changing only the query does not itself change sort — RELEVANCE must be
+    // selected explicitly, since it is otherwise undefined without a query.
+    expect(resultsHref("/search", resultsState({}), { query: "cable" })).toBe("/search?sort=PRICE_ASC&q=cable");
+  });
+  test("hasActiveFilters only reports price/attribute filters, not sort/query/page/view", () => {
+    expect(hasActiveFilters(resultsState({}))).toBe(false);
+    expect(hasActiveFilters(resultsState({ q: "cable", page: "2" }))).toBe(false);
+    expect(hasActiveFilters(resultsState({ minPrice: "5" }))).toBe(true);
+    expect(hasActiveFilters(resultsState({ "attr.color": "red" }))).toBe(true);
   });
 });
 

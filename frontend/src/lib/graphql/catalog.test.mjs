@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { catalogCategories, catalogListing, shippingOptions } from "./operations";
+import { catalogCategories, catalogListing, catalogSuggestions, shippingOptions } from "./operations";
 import { execute } from "./transport";
 import { requestHive } from "./server-transport";
 import { handleGuestRequest } from "./proxy";
@@ -7,7 +7,7 @@ import { parseJson } from "./scalars";
 
 const config = { endpoint: "http://localhost:4063/graphql", origin: "http://localhost:3000" };
 const variables = { input: { page: 0, size: 20, sort: "PRICE_ASC" } };
-const body = '{"data":{"searchProducts":{"items":[{"id":"1","name":"Actual name","slug":"actual","variants":[{"id":"2","price":9999999999999999999.99,"isActive":true}]}],"pageInfo":{"page":0,"size":20,"totalItems":1,"totalPages":1}}}}';
+const body = '{"data":{"searchProducts":{"items":[{"id":"1","name":"Actual name","slug":"actual","averageRating":4.5,"ratingCount":3,"variants":[{"id":"2","price":9999999999999999999.99,"isActive":true}]}],"pageInfo":{"page":0,"size":20,"totalItems":1,"totalPages":1},"facets":{"categories":[],"attributes":[],"price":{"min":null,"max":null}}}}}';
 const response = (source = body, headers = {}) => new Response(source, { headers: { "Content-Type": "application/json", ...headers } });
 const request = (operation = catalogListing, input = variables, headers = {}) => new Request("http://localhost:3000/graphql", {
   method: "POST", headers: { "Content-Type": "application/json", ...headers },
@@ -53,12 +53,36 @@ test.each([
   { page: 0, size: 20, sort: "RELEVANCE" },
   { page: 0, size: 20, sort: "PRICE_ASC", filters: { inStock: true } },
   { page: 0, size: 20, sort: "PRICE_ASC", filters: { categoryId: "bad" } },
+  { page: 0, size: 20, sort: "NEWEST" },
+  { page: 0, size: 20, sort: "PRICE_ASC", filters: { minPrice: "-1.00" } },
+  { page: 0, size: 20, sort: "PRICE_ASC", filters: { attributes: [{ name: "", value: "x" }] } },
+  { page: 0, size: 20, sort: "PRICE_ASC", filters: { attributes: Array(21).fill({ name: "colour", value: "black" }) } },
 ])("rejects unsupported listing input without dispatch", async (input) => {
   let calls = 0;
   const result = await handleGuestRequest(request(catalogListing, { input }), config,
     async () => { calls++; return response(); });
   expect(result.status).toBe(400);
   expect(calls).toBe(0);
+});
+test("accepts real search/sort/filter combinations and decodes facets/rating", async () => {
+  const input = {
+    page: 0, size: 20, sort: "RATING_DESC", query: "cable",
+    filters: { categoryId: "3", minPrice: "5.00", maxPrice: "99.99", attributes: [{ name: "colour", value: "black" }] },
+  };
+  const result = await execute(catalogListing, { input }, { endpoint: config.endpoint, fetch: async () => response() });
+  expect(result.status).toBe("success");
+  expect(result.data.searchProducts.items[0].averageRating).toBe(4.5);
+  expect(result.data.searchProducts.items[0].ratingCount).toBe(3);
+  expect(result.data.searchProducts.facets.categories).toEqual([]);
+  expect(result.data.searchProducts.facets.price).toEqual({ min: null, max: null });
+});
+test("suggestions validate a bounded, non-blank query and decode real fields only", () => {
+  expect(() => catalogSuggestions.variables({ query: "" })).toThrow();
+  expect(() => catalogSuggestions.variables({ query: "a".repeat(201) })).toThrow();
+  expect(() => catalogSuggestions.variables({ query: "usb", limit: 11 })).toThrow();
+  expect(catalogSuggestions.variables({ query: "usb" })).toEqual({ query: "usb" });
+  expect(catalogSuggestions.decode({ productSearchSuggestions: [{ productId: "1", name: "USB cable", slug: "usb-cable" }] })
+    .productSearchSuggestions).toHaveLength(1);
 });
 test("rejects arbitrary catalog documents and public bearer forwarding", async () => {
   const arbitrary = new Request("http://localhost:3000/graphql", { method: "POST",

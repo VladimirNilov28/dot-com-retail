@@ -73,8 +73,9 @@ export async function handleGuestRequest(request: Request, config: HiveConfig, f
   if (envelope.operationName === shipping.name) return dispatch(shipping);
   if (envelope.operationName === cart.name) return dispatch(cart);
   if (envelope.operationName === order.name) return dispatch(order);
-  const [categories, listing] = publicOperations;
+  const [categories, listing, suggestions] = publicOperations;
   if (envelope.operationName === categories.name) return dispatch(categories);
   if (envelope.operationName === listing.name) return dispatch(listing);
+  if (envelope.operationName === suggestions.name) return dispatch(suggestions);
   return proxyFailure(failure("validation", false), 400);
 }

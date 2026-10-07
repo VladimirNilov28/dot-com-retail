@@ -47,8 +47,23 @@ query CatalogListing($input: ProductSearchInput!) {
       id
       name
       slug
+      averageRating
+      ratingCount
       variants { id price isActive }
     }
     pageInfo { page size totalItems totalPages }
+    facets {
+      categories { id name count }
+      attributes { name values { value count } }
+      price { min max }
+    }
+  }
+}
+
+query CatalogSuggestions($query: String!, $limit: Int) {
+  productSearchSuggestions(query: $query, limit: $limit) {
+    productId
+    name
+    slug
   }
 }

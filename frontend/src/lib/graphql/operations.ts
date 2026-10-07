@@ -1,10 +1,13 @@
 import {
   CatalogCategoriesSource,
   CatalogListingSource,
+  CatalogSuggestionsSource,
   type CatalogCategoriesQuery,
   type CatalogCategoriesQueryVariables,
   type CatalogListingQuery,
   type CatalogListingQueryVariables,
+  type CatalogSuggestionsQuery,
+  type CatalogSuggestionsQueryVariables,
   IntegrationGuestCartSource,
   IntegrationGuestOrderSource,
   IntegrationShippingOptionsSource,
@@ -16,8 +19,9 @@ import {
   type IntegrationShippingOptionsQuery,
   type IntegrationShippingOptionsQueryVariables,
   type OrderStatus,
+  type ProductSort,
 } from "./generated";
-import { boolean, decimal, integer, json, list, object, text, uuid } from "./scalars";
+import { boolean, decimal, float, integer, json, list, object, text, uuid } from "./scalars";
 
 export interface Operation<Data, Variables> {
   readonly name: string;
@@ -43,6 +47,52 @@ function orderStatus(value: unknown): OrderStatus {
   if (value === "PENDING" || value === "PAID" || value === "SHIPPING" ||
       value === "COMPLETED" || value === "CANCELLED") return value;
   throw new TypeError("Unknown order status");
+}
+
+function productSort(value: unknown): ProductSort {
+  if (value === "RELEVANCE" || value === "PRICE_ASC" || value === "PRICE_DESC" || value === "RATING_DESC") return value;
+  throw new TypeError("Unknown product sort");
+}
+
+function nullableFloat(value: unknown): number | null {
+  return value === null ? null : float(value);
+}
+
+function attributeFilter(value: unknown) {
+  const input = variables(value, ["name", "value"]);
+  const name = text(input.name);
+  const attributeValue = text(input.value);
+  if (!name || name.length > 100 || !attributeValue || attributeValue.length > 200) {
+    throw new TypeError("Invalid attribute filter");
+  }
+  return { name, value: attributeValue };
+}
+
+function categoryFacet(value: unknown) {
+  const facet = object(value);
+  const count = integer(facet.count);
+  if (count < 0) throw new TypeError("Invalid facet count");
+  return { id: text(facet.id), name: text(facet.name), count };
+}
+
+function attributeValueFacet(value: unknown) {
+  const facet = object(value);
+  const count = integer(facet.count);
+  if (count < 0) throw new TypeError("Invalid facet count");
+  return { value: text(facet.value), count };
+}
+
+function attributeFacet(value: unknown) {
+  const facet = object(value);
+  return { name: text(facet.name), values: list(facet.values, attributeValueFacet) };
+}
+
+function priceFacet(value: unknown) {
+  const facet = object(value);
+  return {
+    min: facet.min === null ? null : decimal(facet.min),
+    max: facet.max === null ? null : decimal(facet.max),
+  };
 }
 
 export const shippingOptions: Operation<IntegrationShippingOptionsQuery, IntegrationShippingOptionsQueryVariables> = {
@@ -140,15 +190,34 @@ export const catalogListing: Operation<CatalogListingQuery, CatalogListingQueryV
   name: "CatalogListing", source: CatalogListingSource, kind: "query", access: "public",
   variables(value) {
     const root = variables(value, ["input"]);
-    const input = variables(root.input, ["page", "size", "sort", "filters"]);
+    const input = variables(root.input, ["page", "size", "sort", "query", "filters"]);
     const page = integer(input.page);
-    if (page < 0 || integer(input.size) !== 20 || input.sort !== "PRICE_ASC") throw new TypeError("Invalid listing input");
-    const filters = input.filters === undefined ? undefined : variables(input.filters, ["categoryId"]);
-    const categoryId = filters ? text(filters.categoryId) : undefined;
+    if (page < 0 || integer(input.size) !== 20) throw new TypeError("Invalid listing input");
+    const sort = productSort(input.sort);
+    const query = input.query === undefined ? undefined : text(input.query).trim();
+    if (query !== undefined && (query.length > 200)) throw new TypeError("Invalid search query");
+    if (sort === "RELEVANCE" && !query) throw new TypeError("RELEVANCE requires a non-blank query");
+    const filters = input.filters === undefined ? undefined
+      : variables(input.filters, ["categoryId", "minPrice", "maxPrice", "attributes"]);
+    const categoryId = filters?.categoryId === undefined ? undefined : text(filters.categoryId);
     if (categoryId !== undefined && !/^[1-9]\d*$/.test(categoryId)) throw new TypeError("Invalid category id");
+    const minPrice = filters?.minPrice === undefined ? undefined : decimal(filters.minPrice);
+    const maxPrice = filters?.maxPrice === undefined ? undefined : decimal(filters.maxPrice);
+    if ((minPrice !== undefined && Number(minPrice) < 0) || (maxPrice !== undefined && Number(maxPrice) < 0)) {
+      throw new TypeError("Invalid price bound");
+    }
+    const attributes = filters?.attributes === undefined ? undefined : list(filters.attributes, attributeFilter);
+    if (attributes !== undefined && attributes.length > 20) throw new TypeError("Too many attribute filters");
+    const hasFilters = categoryId !== undefined || minPrice !== undefined || maxPrice !== undefined || attributes !== undefined;
     return { input: {
-      page, size: 20, sort: "PRICE_ASC",
-      ...(categoryId === undefined ? {} : { filters: { categoryId } }),
+      page, size: 20, sort,
+      ...(query ? { query } : {}),
+      ...(hasFilters ? { filters: {
+        ...(categoryId === undefined ? {} : { categoryId }),
+        ...(minPrice === undefined ? {} : { minPrice }),
+        ...(maxPrice === undefined ? {} : { maxPrice }),
+        ...(attributes === undefined ? {} : { attributes }),
+      } } : {}),
     } };
   },
   decode(value) {
@@ -164,8 +233,11 @@ export const catalogListing: Operation<CatalogListingQuery, CatalogListingQueryV
     }
     const items = list(result.items, (value) => {
       const product = object(value);
+      const ratingCount = integer(product.ratingCount);
+      if (ratingCount < 0) throw new TypeError("Invalid rating count");
       return {
         id: text(product.id), name: text(product.name), slug: text(product.slug),
+        averageRating: nullableFloat(product.averageRating), ratingCount,
         variants: list(product.variants, (value) => {
           const variant = object(value);
           return { id: text(variant.id), price: decimal(variant.price), isActive: boolean(variant.isActive) };
@@ -173,8 +245,32 @@ export const catalogListing: Operation<CatalogListingQuery, CatalogListingQueryV
       };
     });
     if (items.length > pageInfo.size) throw new TypeError("Unbounded listing response");
-    return { searchProducts: { items, pageInfo } };
+    const facets = object(result.facets);
+    return { searchProducts: { items, pageInfo, facets: {
+      categories: list(facets.categories, categoryFacet),
+      attributes: list(facets.attributes, attributeFacet),
+      price: priceFacet(facets.price),
+    } } };
   },
 };
 
-export const publicOperations = [catalogCategories, catalogListing] as const;
+export const catalogSuggestions: Operation<CatalogSuggestionsQuery, CatalogSuggestionsQueryVariables> = {
+  name: "CatalogSuggestions", source: CatalogSuggestionsSource, kind: "query", access: "public",
+  variables(value) {
+    const root = variables(value, ["query", "limit"]);
+    const query = text(root.query).trim();
+    if (!query || query.length > 200) throw new TypeError("Invalid suggestion query");
+    if (root.limit === undefined) return { query };
+    const limit = integer(root.limit);
+    if (limit < 1 || limit > 10) throw new TypeError("Invalid suggestion limit");
+    return { query, limit };
+  },
+  decode(value) {
+    return { productSearchSuggestions: list(object(value).productSearchSuggestions, (value) => {
+      const suggestion = object(value);
+      return { productId: text(suggestion.productId), name: text(suggestion.name), slug: text(suggestion.slug) };
+    }) };
+  },
+};
+
+export const publicOperations = [catalogCategories, catalogListing, catalogSuggestions] as const;

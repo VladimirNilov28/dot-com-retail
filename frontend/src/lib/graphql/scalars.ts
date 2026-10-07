@@ -75,6 +75,16 @@ export function integer(value: unknown): number {
   throw new TypeError("Expected a GraphQL Int");
 }
 
+export function float(value: unknown): number {
+  const source = value instanceof LosslessNumber ? value.value : value;
+  if (typeof source === "string" && /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(source)) {
+    const parsed = Number(source);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  if (typeof source === "number" && Number.isFinite(source)) return source;
+  throw new TypeError("Expected a GraphQL Float");
+}
+
 export function json(value: unknown, depth = 0): JsonValue {
   if (depth > 64) throw new TypeError("JSON nesting is too deep");
   if (value === null || typeof value === "string" || typeof value === "boolean") return value;
