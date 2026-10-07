@@ -21,6 +21,11 @@ const routes = [
 const popovers = { Catalog: "Category navigation", Account: "Account navigation" };
 // Shell slots that exist only at the desktop breakpoint.
 const DESKTOP_ONLY = ".store-catalog-slot, .store-actions";
+// Mirrors lib/catalog/model.ts#isResultsRoute: the results surfaces render
+// their own visible search input, so the header's quick action is absent there.
+function isResultsRoute(path) {
+  return path === "/search" || path.startsWith("/catalog/");
+}
 const errors = [];
 const results = [];
 const browser = await chromium.launch();
@@ -105,7 +110,8 @@ async function inspect(page, route, mobile) {
       };
     }),
   );
-  assert.equal(icons.filter((icon) => icon.scope === "shell").length, 7, "Stable shell icons");
+  assert.equal(icons.filter((icon) => icon.scope === "shell").length, isResultsRoute(route.path) ? 6 : 7,
+    "Stable shell icons (results routes omit the header's search control)");
   assert.equal(icons.some((icon) => icon.scope === "unexpected"), false, "Additional icons belong only to mounted overlays");
   for (const icon of icons) {
     assert.equal(icon.hidden, "true");
@@ -120,16 +126,21 @@ async function inspect(page, route, mobile) {
       assert.equal(icon.fits, true, "Icon fits inside its control");
     }
   }
-  for (const label of ["Search", "Cart"]) {
+  const resultsRoute = isResultsRoute(route.path);
+  for (const label of resultsRoute ? ["Cart"] : ["Search", "Cart"]) {
     const link = page.locator(label === "Search" ? ".store-search-slot" : ".store-actions")
       .getByRole("link", { name: label, exact: true, includeHidden: true });
     assert.equal(await link.locator(".store-icon").count(), 1);
+  }
+  if (resultsRoute) {
+    assert.equal(await page.locator(".store-search-slot a").count(), 0,
+      "Results routes render the page's own search field instead of the header's");
   }
   // The header is a single row: the brand and every control share one baseline.
   // Below 16rem the deliberate stacking fallback takes over, so skip it there.
   const row = await page.getByRole("banner").evaluate((banner) => {
     const header = banner.querySelector(".store-header");
-    const controls = [...header.querySelectorAll(".store-brand, .store-catalog-trigger, .store-search-slot > a, .store-panel-trigger, .store-actions > a, .store-mobile-trigger")]
+    const controls = [...header.querySelectorAll(".store-brand, .store-catalog-trigger, .store-search-slot a, .store-panel-trigger, .store-actions > a, .store-mobile-trigger")]
       .map((element) => element.getBoundingClientRect())
       .filter((rect) => rect.width > 0 && rect.height > 0);
     const centers = controls.map((rect) => rect.y + rect.height / 2);
@@ -140,7 +151,7 @@ async function inspect(page, route, mobile) {
       spread: Math.max(...centers) - Math.min(...centers),
     };
   });
-  assert.ok(row.controls >= 3, `Header renders its controls (${row.controls})`);
+  assert.ok(row.controls >= (resultsRoute && mobile ? 2 : 3), `Header renders its controls (${row.controls})`);
   if (!row.stacked) {
     assert.ok(row.spread < 1, `Header controls share one row (spread ${row.spread}px)`);
     assert.ok(row.height < 90, `Header stays compact (${row.height}px)`);
@@ -181,6 +192,12 @@ async function assertActive(page, route) {
   const active = navigation.locator('[aria-current="page"]');
   if (route.path === "/") {
     assert.equal(await active.count(), 0, "Primary navigation does not repeat the home link");
+    return;
+  }
+  if (route.path === "/search" && !(await drawer.count())) {
+    // The results surface renders its own search field on /search; the
+    // header's desktop navigation has no search control to mark current.
+    assert.equal(await active.count(), 0, "Results routes have no header search control to mark active");
     return;
   }
   assert.equal(await active.count(), 1);
@@ -361,6 +378,14 @@ async function verifyNavigation(page, mobile) {
         .getByRole("button", { name: route.label, exact: true }).click();
       await page.getByRole("dialog", { name: popovers[route.label] })
         .getByRole("link", { name: route.label, exact: true }).click();
+    } else if (route.path === "/search") {
+      // The header's search control expands in place instead of navigating
+      // immediately on click; Enter in its field is what submits (§9.6).
+      await page.locator(".store-search-slot").getByRole("link", { name: "Search", exact: true }).click();
+      const field = page.locator(".store-search-overlay-form .results-search-input");
+      await field.waitFor();
+      await assertFocus(field);
+      await field.press("Enter");
     } else {
       await page.locator(".store-navigation")
         .getByRole("link", { name: route.label, exact: true }).click();

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
-  catalogHref, categoryIndex, formatPrice, hasActiveFilters, listingState, productPrice, resultsHref, resultsState,
+  attributeLabel, catalogHref, categoryIndex, formatPrice, hasActiveFilters, isResultsRoute, listingState,
+  productPrice, resultsHref, resultsState,
 } from "./model";
 import { decimal } from "@/lib/graphql/scalars";
 
@@ -63,6 +64,35 @@ describe("shared results state (category pages, All products, search)", () => {
     expect(hasActiveFilters(resultsState({ q: "cable", page: "2" }))).toBe(false);
     expect(hasActiveFilters(resultsState({ minPrice: "5" }))).toBe(true);
     expect(hasActiveFilters(resultsState({ "attr.color": "red" }))).toBe(true);
+  });
+});
+
+describe("search placement — listing vs. header route", () => {
+  test("results routes show the page's own search field, hiding the header's", () => {
+    expect(isResultsRoute("/search")).toBe(true);
+    expect(isResultsRoute("/catalog/all-products")).toBe(true);
+    expect(isResultsRoute("/catalog/laptops")).toBe(true);
+    expect(isResultsRoute("/")).toBe(false);
+    expect(isResultsRoute("/account")).toBe(false);
+    expect(isResultsRoute("/cart")).toBe(false);
+    // Must match by prefix, not substring, so sibling routes never collide.
+    expect(isResultsRoute("/searching")).toBe(false);
+    expect(isResultsRoute("/catalog")).toBe(false);
+  });
+});
+
+describe("attribute facet labels — readable, never a raw backend key", () => {
+  test("maps every known key to a human label without touching backend keys", () => {
+    expect(attributeLabel("refreshRate")).toBe("Refresh rate");
+    expect(attributeLabel("cpu")).toBe("Processor");
+    expect(attributeLabel("ram")).toBe("Memory (RAM)");
+    expect(attributeLabel("color")).toBe("Colour");
+  });
+  test("falls back to a humanized form for an unmapped key instead of the raw identifier", () => {
+    expect(attributeLabel("someFutureAttribute")).toBe("Some future attribute");
+    expect(attributeLabel("screen_size")).toBe("Screen size");
+    expect(attributeLabel("usb-ports")).toBe("Usb ports");
+    expect(attributeLabel("")).toBe("");
   });
 });
 
