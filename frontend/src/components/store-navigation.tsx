@@ -5,7 +5,7 @@ import { ChevronDown, Grid2X2, Menu, Search, ShoppingCart, UserRound, X } from "
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import type { Category } from "@/lib/catalog/model";
+import { catalogHref, type Category } from "@/lib/catalog/model";
 import { CatalogRetry } from "./catalog-retry";
 import { CategoryNavigation, isPlainClick } from "./category-navigation";
 
@@ -112,6 +112,25 @@ export function StoreNavigation({
     );
   }
 
+  // "All products" is the one explicit, secondary route into the bounded
+  // listing (§9.1): distinct from the grouped category links below it, and
+  // no longer aliased to the removed /catalog discovery page.
+  function allProductsLink() {
+    const href = catalogHref(undefined);
+    return (
+      <Link
+        href={href}
+        className="store-nav-link"
+        aria-current={current(href) ? "page" : undefined}
+        onClick={(event) => {
+          if (isPlainClick(event)) setOverlay(null);
+        }}
+      >
+        All products
+      </Link>
+    );
+  }
+
   function categoryNavigation(variant: "panel" | "drawer") {
     return (
       <CategoryNavigation
@@ -155,7 +174,7 @@ export function StoreNavigation({
               <Popover.Heading className="font-semibold">Your account</Popover.Heading>
             )}
             {status ? <p className={catalog ? "mb-3 text-sm text-muted" : "my-3 text-sm text-muted"}>{status}</p> : null}
-            <div className={catalog ? "store-category-entry" : undefined}>{navigationLink(destination)}</div>
+            <div className={catalog ? "store-category-entry" : undefined}>{catalog ? allProductsLink() : navigationLink(destination)}</div>
             {catalog && categoryNavigation("panel")}
             {catalog && categoryError && <CatalogRetry />}
           </Popover.Dialog>
@@ -189,11 +208,12 @@ export function StoreNavigation({
                 </Drawer.Header>
                 <Drawer.Body className="store-drawer-body">
                   <nav aria-label="Primary" className="store-mobile-panel">
-                    {destinations.map((destination) => navigationLink(destination))}
+                    {destinations.filter((_, index) => index !== CATALOG).map((destination) => navigationLink(destination))}
                   </nav>
                   {categoryStatus()
                     ? <p className="mt-6 mb-2 text-sm text-muted">{categoryStatus()}</p>
                     : null}
+                  <div className="store-category-entry">{allProductsLink()}</div>
                   {categoryNavigation("drawer")}
                   {categoryError && <CatalogRetry />}
                 </Drawer.Body>
