@@ -300,6 +300,45 @@ async function checkDesktopPopovers(page) {
   await page.waitForFunction((selector) => document.activeElement?.closest(selector) !== null, DESKTOP_ONLY);
 }
 
+async function checkCategoryNavigation(page, mobile) {
+  // Grouped catalog navigation (#61): roots are linked headings, their children
+  // are links beneath them, and on mobile each root with children carries an
+  // expansion control that is separate from its link.
+  const nav = page.getByRole("navigation", { name: "Catalog categories" });
+  if (await nav.count() === 0) return "grouped category navigation absent (no category data)";
+  const shape = await nav.evaluate((root) => {
+    const groups = [...root.querySelectorAll(":scope > ul > li")];
+    return {
+      groups: groups.length,
+      headed: groups.filter((g) => g.querySelector(":scope h2 a")).length,
+      links: root.querySelectorAll("a").length,
+      overflow: root.scrollWidth - root.clientWidth,
+    };
+  });
+  assert.ok(shape.groups > 0, "Catalog navigation renders groups");
+  assert.equal(shape.headed, shape.groups, "Every group heading is a link to its own category");
+  assert.ok(shape.links >= shape.groups, "Groups expose their category links");
+  assert.ok(shape.overflow <= 0, "Catalog navigation does not overflow horizontally");
+
+  const toggles = nav.getByRole("button", { name: /^Subcategories of / });
+  const count = await toggles.count();
+  if (!mobile) {
+    assert.equal(count, 0, "The desktop panel exposes children directly, without expand controls");
+    return `grouped panel: ${shape.groups} groups, ${shape.links} links`;
+  }
+  if (count === 0) return `grouped drawer: ${shape.groups} groups, no nested categories`;
+  const toggle = toggles.first();
+  assert.equal(await toggle.getAttribute("aria-expanded"), "false", "Drawer groups start collapsed");
+  const before = await nav.getByRole("link").count();
+  await toggle.click();
+  await page.waitForFunction(
+    (n) => document.querySelectorAll('[aria-label="Catalog categories"] a').length > n, before);
+  assert.equal(await toggle.getAttribute("aria-expanded"), "true", "The expansion control reports its state");
+  await toggle.click();
+  assert.equal(await toggle.getAttribute("aria-expanded"), "false", "The expansion control collapses again");
+  return `grouped drawer: ${shape.groups} groups, ${count} expandable`;
+}
+
 async function verifyNavigation(page, mobile) {
   for (const route of routes) {
     if (route.path === "/") {
@@ -380,6 +419,7 @@ try {
       const page = await context.newPage();
       captureErrors(page);
       const mobile = width < 768;
+      let categoryNavigation = "grouped category navigation not reached";
       for (const route of routes) {
         assert.equal((await page.goto(`${baseURL}${route.path}`)).status(), 200);
         await inspect(page, route, mobile);
@@ -414,11 +454,15 @@ try {
       if (!mobile) await checkDesktopPopovers(page);
       if (mobile) {
         await page.locator(".store-mobile-trigger").tap();
-        await page.getByRole("dialog", { name: "ByteCore navigation" }).getByRole("button", { name: "Close navigation" }).tap();
+        const drawer = page.getByRole("dialog", { name: "ByteCore navigation" });
+        await drawer.waitFor();
+        categoryNavigation = await checkCategoryNavigation(page, true);
+        await drawer.getByRole("button", { name: "Close navigation" }).tap();
         await assertFocused(page.locator(".store-mobile-trigger"));
       } else {
         await page.getByRole("button", { name: "Catalog", exact: true }).tap();
         await page.getByRole("dialog", { name: "Category navigation" }).waitFor();
+        categoryNavigation = await checkCategoryNavigation(page, false);
         await dismissOutside(page);
         await page.getByRole("dialog", { name: "Category navigation" }).waitFor({ state: "hidden" });
       }
@@ -462,7 +506,7 @@ try {
         assert.equal(frame.color, background);
         assert.equal(frame.scheme, "dark");
       }
-      results.push(`PASS ${width}px/${colorScheme}: routes, reloads, navigation, focus, skip link, dark paints, overflow${mobile ? ", modal drawer/history/resize/reduced motion" : ", nonmodal popovers"}`);
+      results.push(`PASS ${width}px/${colorScheme}: routes, reloads, navigation, focus, skip link, dark paints, overflow${mobile ? ", modal drawer/history/resize/reduced motion" : ", nonmodal popovers"}, ${categoryNavigation}`);
       await context.close();
     }
   }
