@@ -3,11 +3,12 @@
 import { Button, Drawer, Popover } from "@heroui/react";
 import { ChevronDown, Grid2X2, Menu, Search, ShoppingCart, UserRound, X } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { catalogHref, type Category } from "@/lib/catalog/model";
+import { catalogHref, isResultsRoute, type Category } from "@/lib/catalog/model";
 import { CatalogRetry } from "./catalog-retry";
 import { CategoryNavigation, isPlainClick } from "./category-navigation";
+import { useProductSuggestions } from "./search-form";
 
 const destinations = [
   { href: "/catalog", label: "Catalog" },
@@ -17,7 +18,6 @@ const destinations = [
 ] as const;
 
 const CATALOG = 0;
-const SEARCH = 1;
 const ACCOUNT = 2;
 const CART = 3;
 
@@ -26,15 +26,13 @@ const DESKTOP_ONLY = ".store-catalog-slot, .store-actions";
 const DESKTOP_LINKS = ".store-catalog-slot a, .store-actions a";
 const DESKTOP_BUTTONS = ".store-catalog-slot button, .store-actions button";
 
-type Overlay = "mobile" | "catalog" | "account" | null;
+type Overlay = "mobile" | "catalog" | "account" | "search" | null;
 
 export function StoreNavigation({
-  quickSearch,
   cartPreview,
   categories,
   categoryError,
 }: {
-  quickSearch?: ReactNode;
   cartPreview?: ReactNode;
   categories: Category[];
   categoryError: boolean;
@@ -89,6 +87,15 @@ export function StoreNavigation({
       breakpoint.removeEventListener("change", onBreakpointChange);
     };
   }, [pathname, drawerId]);
+
+  useEffect(() => {
+    // The expanded search takes over the header's whole row (§9.6): hide the
+    // brand/catalog/account/cart/menu controls from layout and assistive
+    // tech while it is open instead of squeezing them, so the only way to
+    // overflow at 390px would be the search field itself, which is bounded.
+    document.body.classList.toggle("store-search-expanded", state.overlay === "search");
+    return () => { document.body.classList.remove("store-search-expanded"); };
+  }, [state.overlay]);
 
   function current(href: string) {
     return pathname === href || pathname.startsWith(`${href}/`);
@@ -183,10 +190,23 @@ export function StoreNavigation({
     );
   }
 
+  // The results surface (category pages, "All products", search) already
+  // renders its own visible query input (§9.6); showing the header's quick
+  // action there too would be a second, duplicate search field.
+  const showHeaderSearch = !isResultsRoute(pathname);
+
   return (
     <nav aria-label="Primary" className="store-navigation">
       <div className="store-catalog-slot">{desktopPopover("catalog")}</div>
-      <div className="store-search-slot">{quickSearch ?? navigationLink(destinations[SEARCH], true)}</div>
+      <div className="store-search-slot">
+        {showHeaderSearch && (
+          <SearchControl
+            expanded={state.overlay === "search"}
+            onExpand={() => setOverlay("search")}
+            onCollapse={() => setOverlay(null)}
+          />
+        )}
+      </div>
       <div className="store-actions">
         {desktopPopover("account")}
         {cartPreview ?? navigationLink(destinations[CART], true)}
@@ -223,5 +243,127 @@ export function StoreNavigation({
         </Drawer>
       </div>
     </nav>
+  );
+}
+
+/** The header's expandable search (§9.6), used on every storefront page
+ * except the results surfaces (which render their own visible input
+ * instead). A real `<a href="/search">` is the no-JS fallback: with
+ * JavaScript, a plain click intercepts and smoothly expands the same spot
+ * into a search field instead of navigating away immediately. Reuses the
+ * shared suggestion hook — no second transport, no second search service. */
+function SearchControl({ expanded, onExpand, onCollapse }: {
+  expanded: boolean; onExpand: () => void; onCollapse: () => void;
+}) {
+  const router = useRouter();
+  const [value, setValue] = useState("");
+  const { suggestions, status, open, setOpen, active, setActive, schedule, reset } = useProductSuggestions();
+  const triggerRef = useRef<HTMLAnchorElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const inputId = useId();
+  const listboxId = useId();
+
+  useEffect(() => {
+    if (expanded) inputRef.current?.focus();
+  }, [expanded]);
+
+  function collapse() {
+    onCollapse();
+    reset();
+    setValue("");
+    // The overlay unmounts this frame; wait one so the trigger is focusable again.
+    requestAnimationFrame(() => triggerRef.current?.focus());
+  }
+
+  function submit(query: string) {
+    const trimmed = query.trim();
+    setOpen(false);
+    onCollapse();
+    // Global header search always searches the whole catalog, with no
+    // category/filter state carried over from wherever it was opened.
+    router.push(trimmed ? `/search?q=${encodeURIComponent(trimmed)}` : "/search");
+  }
+
+  function goToProduct(slug: string) {
+    setOpen(false);
+    onCollapse();
+    router.push(`/products/${encodeURIComponent(slug)}`);
+  }
+
+  return (
+    <div className="store-search-control">
+      <Link
+        ref={triggerRef}
+        href="/search"
+        className="store-action store-search-trigger"
+        aria-expanded={expanded}
+        onClick={(event) => {
+          if (!isPlainClick(event)) return;
+          event.preventDefault();
+          onExpand();
+        }}
+      >
+        <Search className="store-icon" size={20} strokeWidth={2} aria-hidden="true" focusable="false" />
+        <span className="store-action-label">Search</span>
+      </Link>
+      {expanded && (
+        <div className="store-search-overlay" role="search">
+          <form
+            className="store-search-overlay-form"
+            onSubmit={(event) => { event.preventDefault(); submit(value); }}
+          >
+            <Search size={18} strokeWidth={2} aria-hidden="true" focusable="false" className="results-search-icon" />
+            <label htmlFor={inputId} className="sr-only">Search the catalog</label>
+            <div className="results-search-field">
+              <input
+                ref={inputRef}
+                id={inputId}
+                type="search"
+                value={value}
+                autoComplete="off"
+                role="combobox"
+                aria-expanded={open && suggestions.length > 0}
+                aria-controls={listboxId}
+                aria-activedescendant={active >= 0 ? `${listboxId}-${active}` : undefined}
+                className="results-search-input"
+                placeholder="Search the catalog"
+                onChange={(event) => { setValue(event.target.value); schedule(event.target.value); }}
+                onFocus={() => { if (suggestions.length) setOpen(true); }}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    event.stopPropagation();
+                    if (open) { setOpen(false); return; }
+                    collapse();
+                    return;
+                  }
+                  if (!open || suggestions.length === 0) return;
+                  if (event.key === "ArrowDown") { event.preventDefault(); setActive((index) => (index + 1) % suggestions.length); }
+                  else if (event.key === "ArrowUp") { event.preventDefault(); setActive((index) => (index - 1 + suggestions.length) % suggestions.length); }
+                  else if (event.key === "Enter" && active >= 0) { event.preventDefault(); goToProduct(suggestions[active].slug); }
+                }}
+              />
+              {open && (
+                <ul id={listboxId} role="listbox" aria-label="Search suggestions" className="results-suggestions">
+                  {status === "error" && <li className="results-suggestion-status">Suggestions unavailable</li>}
+                  {status !== "error" && suggestions.length === 0 && <li className="results-suggestion-status">No suggestions</li>}
+                  {suggestions.map((suggestion, index) => (
+                    <li key={suggestion.productId} id={`${listboxId}-${index}`} role="option" aria-selected={index === active}
+                      className={index === active ? "results-suggestion results-suggestion-active" : "results-suggestion"}>
+                      <button type="button" className="results-suggestion-button" onClick={() => goToProduct(suggestion.slug)}>{suggestion.name}</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <button type="submit" className="store-search-overlay-submit" aria-label="Search">
+              <Search className="store-icon" size={18} strokeWidth={2} aria-hidden="true" focusable="false" />
+            </button>
+            <button type="button" className="store-search-overlay-close" aria-label="Close search" onClick={collapse}>
+              <X className="store-icon" size={18} strokeWidth={2} aria-hidden="true" focusable="false" />
+            </button>
+          </form>
+        </div>
+      )}
+    </div>
   );
 }

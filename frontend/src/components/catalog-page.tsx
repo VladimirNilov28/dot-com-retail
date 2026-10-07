@@ -61,9 +61,14 @@ export async function CatalogPageContent({ slug, isSearch = false, parameters }:
       </nav>
       <header className="catalog-heading">
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{heading}</h1>
-        {isSearch ? <SearchForm query={state.query} /> : <p className="text-sm text-muted">{category && children.length ?
-          "Products assigned directly to this category. Browse a subcategory for its products." :
-          "Every ByteCore product in one bounded, paginated list. Prices are shown in EUR."}</p>}
+        {/* One shared query input on every results surface (§9.6): visible
+            immediately, pre-populated from the URL, scoped to this route's
+            filters/view via `buildHref` so category search never jumps to an
+            unrelated global result set. */}
+        <SearchForm route={route} state={state} />
+        {!isSearch && category && children.length ? <p className="text-sm text-muted">
+          Products assigned directly to this category. Browse a subcategory for its products.
+        </p> : null}
       </header>
       <div className="results-layout">
         <ResultsSidebar route={route} state={state} category={category} links={links} linksLabel={linksLabel}

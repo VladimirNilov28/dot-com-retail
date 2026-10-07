@@ -127,6 +127,45 @@ export function catalogHref(slug?: string, page = 1, view: View = "grid") {
   return query.size ? `${route}?${query}` : route;
 }
 
+/** The shared results surface (category pages, "All products" and search)
+ * already renders its own visible, URL-populated query input (§9.6); the
+ * header's compact quick action is a duplicate field there, so it hides
+ * itself on these routes instead of stacking a second entry point. */
+export function isResultsRoute(pathname: string) {
+  return pathname === "/search" || pathname.startsWith("/catalog/");
+}
+
+/** Readable presentation labels for the real `searchProducts` attribute facet
+ * keys (backend schema has no label/metadata field of its own). Backend keys
+ * and URL serialization are unchanged by this map — it is display-only. */
+const ATTRIBUTE_LABELS: Record<string, string> = {
+  backlight: "Backlight", bands: "Bands", batteryLifeHours: "Battery life (hours)", capacity: "Capacity",
+  color: "Colour", connectivity: "Connectivity", cores: "Cores", cpu: "Processor", dpi: "Sensor DPI",
+  formFactor: "Form factor", fov: "Field of view", gpu: "Graphics card", interface: "Interface",
+  layout: "Layout", memory: "Memory", panel: "Panel type", radiatorSize: "Radiator size", ram: "Memory (RAM)",
+  rating: "Rating", refreshRate: "Refresh rate", resolution: "Resolution", size: "Size", socket: "Socket",
+  socketSupport: "Socket support", speed: "Speed", storage: "Storage", switchType: "Switch type",
+  threads: "Threads", type: "Type", wattage: "Wattage", weightGrams: "Weight (grams)", wifiStandard: "Wi-Fi standard",
+};
+
+/** Falls back to a camelCase/snake_case/kebab-case-to-words formatter for any
+ * attribute key not yet in the table above, so an unmapped key still reads as
+ * words instead of a raw identifier. */
+export function attributeLabel(name: string): string {
+  const known = ATTRIBUTE_LABELS[name];
+  if (known) return known;
+  const words = name
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!words.length) return name;
+  return words.map((word, index) => (index === 0
+    ? word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+    : word.toLowerCase())).join(" ");
+}
+
 export function categoryIndex(categories: Category[]) {
   const byId = new Map<string, Category>();
   const bySlug = new Map<string, Category>();
