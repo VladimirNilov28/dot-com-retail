@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCategories, getListing } from "@/lib/catalog/server";
-import { catalogDiscoveryHref, catalogHref, categoryIndex, listingState, type View } from "@/lib/catalog/model";
+import { catalogHref, categoryIndex, listingState, type View } from "@/lib/catalog/model";
 import { CatalogControls } from "./catalog-controls";
 import { CatalogLink } from "./catalog-link";
 import { CatalogRetry } from "./catalog-retry";
@@ -33,7 +33,10 @@ export async function CatalogPageContent({ slug, parameters }: {
     <div className={`catalog-page catalog-${state.view}`}>
       <nav aria-label="Breadcrumb" className="catalog-breadcrumb">
         <Link href="/" className="store-link">Home</Link><span aria-hidden="true">/</span>
-        <CatalogLink href={catalogDiscoveryHref()} className="store-link">Catalog</CatalogLink>
+        {/* "Catalog" has no discovery page of its own to link to any more
+            (that composition moved into the header megamenu); it stays a
+            plain ancestor label instead of a dead link. */}
+        <span>Catalog</span>
         {trail.map((ancestor) => <span key={ancestor.id} className="contents">
           <span aria-hidden="true">/</span><CatalogLink href={catalogHref(ancestor.slug, 1, state.view)} className="store-link">{ancestor.name}</CatalogLink>
         </span>)}

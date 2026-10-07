@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { catalogDiscoveryHref, catalogHref, categoryIndex, formatPrice, listingState, productPrice } from "./model";
+import { catalogHref, categoryIndex, formatPrice, listingState, productPrice } from "./model";
 import { decimal } from "@/lib/graphql/scalars";
 
 describe("catalog URL state", () => {
@@ -8,11 +8,11 @@ describe("catalog URL state", () => {
     expect(listingState({ page: "2", view: "list" })).toEqual({ page: 2, view: "list" });
     expect(catalogHref("laptops", 2, "list")).toBe("/catalog/laptops?page=2&view=list");
     expect(catalogHref("A/B")).toBe("/catalog/A%2FB");
-    // /catalog is category discovery (#63 step 2); the bounded all-products
-    // listing moved to its own static route.
+    // /catalog itself no longer renders a listing or discovery page (the
+    // owner's revised megamenu decision); the bounded all-products listing
+    // lives at this reserved static route.
     expect(catalogHref()).toBe("/catalog/all-products");
     expect(catalogHref(undefined, 2, "list")).toBe("/catalog/all-products?page=2&view=list");
-    expect(catalogDiscoveryHref()).toBe("/catalog");
   });
   test.each(["0", "-1", "2.5", "Infinity", "2147483648", "01", "", "1e2"])("rejects invalid page %s", (page) => {
     expect(listingState({ page })).toBeNull();

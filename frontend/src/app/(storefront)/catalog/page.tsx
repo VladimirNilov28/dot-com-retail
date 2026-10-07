@@ -1,18 +1,14 @@
-import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { CatalogDiscovery } from "@/components/catalog-discovery";
 
-export const metadata: Metadata = {
-  title: "Catalog",
-  description: "Find a ByteCore category, or browse every product in one bounded, paginated list.",
-};
-
+// Category discovery now lives in the header's catalog megamenu
+// (store-navigation.tsx), and the bounded "all products" listing lives at
+// /catalog/all-products. This route renders nothing of its own: it only
+// preserves bookmarked pagination/view links (including invalid values,
+// which still reach the existing recovery flow at their new address) by
+// forwarding the exact query string, and otherwise sends a bare request to
+// the homepage rather than reviving the removed discovery composition.
 export default async function CatalogPage({ searchParams }: PageProps<"/catalog">) {
   const parameters = await searchParams;
-  // `/catalog` is category discovery; the bounded listing it used to render at
-  // the bare root moved to /catalog/all-products. Preserve bookmarked
-  // pagination/view links (including invalid values, which still reach the
-  // existing recovery flow there) by forwarding the exact query string.
   if ("page" in parameters || "view" in parameters) {
     const query = new URLSearchParams();
     for (const [key, value] of Object.entries(parameters)) {
@@ -20,5 +16,5 @@ export default async function CatalogPage({ searchParams }: PageProps<"/catalog"
     }
     redirect(`/catalog/all-products${query.size ? `?${query}` : ""}`);
   }
-  return <CatalogDiscovery />;
+  redirect("/");
 }
