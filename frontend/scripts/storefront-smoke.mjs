@@ -13,7 +13,6 @@ const artifacts = process.env.BROWSER_ARTIFACTS;
 if (artifacts) await mkdir(artifacts, { recursive: true });
 const routes = [
   { path: "/", label: "Home", heading: "Electronics, clearly connected." },
-  { path: "/catalog", label: "Catalog", heading: "Catalog" },
   { path: "/search", label: "Search", heading: "Search" },
   { path: "/account", label: "Account", heading: "Account" },
   { path: "/cart", label: "Cart", heading: "Cart" },
@@ -45,21 +44,11 @@ async function inspect(page, route, mobile) {
   assert.equal(await page.getByRole("contentinfo").count(), 1);
   assert.equal(await page.locator('a[href="#main-content"]').count(), 1);
   assert.equal(await page.getByRole("heading", { level: 1 }).textContent(), route.heading);
-  if (route.path !== "/" && route.path !== "/catalog" && route.path !== "/catalog/all-products") {
+  if (route.path !== "/" && route.path !== "/catalog/all-products") {
     assert.match(await page.locator("main").textContent(), /not available yet/i);
     assert.equal(await page.locator("main input, main form, main button").count(), 0);
     assert.equal(await page.getByRole("link", { name: "Return to home" }).getAttribute("href"), "/");
     assert.equal(await page.title(), `${route.label} | ByteCore`);
-  }
-  if (route.path === "/catalog") {
-    // Catalog discovery (#63 step 2): real categories first, "All products" as
-    // an explicit secondary action, not the default product feed.
-    assert.equal(await page.title(), "Catalog | ByteCore");
-    const categories = page.getByRole("navigation", { name: "Categories" });
-    if (await categories.count() > 0) {
-      assert.ok(await categories.locator(".catalog-discovery-group").count() > 0, "Discovery renders at least one category group");
-    }
-    assert.equal(await page.getByRole("link", { name: "All products", exact: true }).count(), 1, "An explicit, secondary All products action is always present");
   }
   if (route.path === "/catalog/all-products") {
     await page.getByRole("group", { name: "Product view" }).waitFor();
@@ -215,7 +204,7 @@ async function checkMobile(page, route) {
   assert.equal(await page.locator("main").evaluate((element) => element.closest('[inert], [aria-hidden="true"]') !== null), true,
     "Modal hides background content from assistive technology");
   await assertActive(page, route);
-  const first = dialog.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Catalog", exact: true });
+  const first = dialog.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Search", exact: true });
   await first.focus();
   await assertFocus(first);
   for (let i = 0; i < 9; i++) {
@@ -239,11 +228,13 @@ async function checkMobile(page, route) {
   const panel = dialog.getByRole("navigation", { name: "Primary" });
   if (route.path === "/") {
     // Home has no drawer entry; verify a destination link closes the drawer and
-    // that the wordmark is the way back home.
-    await panel.getByRole("link", { name: "Catalog", exact: true }).click();
+    // that the wordmark is the way back home. "Catalog" is no longer a direct
+    // link in the drawer's primary nav (it redirects away from categories), so
+    // "Search" exercises the same close-on-navigate behavior instead.
+    await panel.getByRole("link", { name: "Search", exact: true }).click();
     await dialog.waitFor({ state: "hidden" });
     assert.equal(await menu.getAttribute("aria-expanded"), "false", "Navigation closes the menu");
-    await page.waitForURL(`${baseURL}/catalog`);
+    await page.waitForURL(`${baseURL}/search`);
     await page.locator(".store-brand").click();
     await page.waitForURL(`${baseURL}/`);
     await page.getByRole("heading", { level: 1, name: route.heading, exact: true }).waitFor();
@@ -280,6 +271,9 @@ async function dismissOutside(page) {
 }
 
 async function checkDesktopPopovers(page) {
+  // The catalog dialog's own focusable entry is "All products", not a link
+  // named "Catalog" (that destination no longer renders inside the dialog).
+  const popoverLinks = { Catalog: "All products", Account: "Account" };
   for (const [buttonName, dialogName] of Object.entries(popovers)) {
     const button = page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: buttonName, exact: true });
     await button.focus();
@@ -288,7 +282,7 @@ async function checkDesktopPopovers(page) {
     await dialog.waitFor();
     assert.notEqual(await dialog.getAttribute("aria-modal"), "true");
     assert.equal(await page.getByRole("main").count(), 1, "Nonmodal popover leaves background exposed");
-    const link = dialog.getByRole("link", { name: buttonName, exact: true });
+    const link = dialog.getByRole("link", { name: popoverLinks[buttonName], exact: true });
     await link.focus();
     await assertFocus(link);
     await page.keyboard.press("Escape");
@@ -314,6 +308,10 @@ async function checkCategoryNavigation(page, mobile) {
   // Grouped catalog navigation (#61): roots are linked headings, their children
   // are links beneath them, and on mobile each root with children carries an
   // expansion control that is separate from its link.
+  // "All products" (§9.1): a single, explicit secondary entry above the
+  // grouped categories, not one of the grouped category links itself.
+  assert.equal(await page.getByRole("link", { name: "All products", exact: true }).count(), 1,
+    "All products is an explicit secondary entry above the grouped categories");
   const nav = page.getByRole("navigation", { name: "Catalog categories" });
   if (await nav.count() === 0) return "grouped category navigation absent (no category data)";
   const shape = await nav.evaluate((root) => {
@@ -446,6 +444,20 @@ try {
       await inspect(page, allProducts, mobile);
       assert.equal((await page.reload()).status(), 200);
       await inspect(page, allProducts, mobile);
+      // /catalog compatibility (owner's revised megamenu decision): the
+      // removed discovery page is never revived. A bare request redirects to
+      // the homepage; a bookmarked legacy pagination/view link is preserved by
+      // redirecting to /catalog/all-products with the same query, including
+      // invalid values that still reach the existing recovery flow there.
+      assert.equal((await page.goto(`${baseURL}/catalog`)).status(), 200);
+      await page.waitForURL(`${baseURL}/`);
+      await inspect(page, routes[0], mobile);
+      assert.equal((await page.goto(`${baseURL}/catalog?page=1`)).status(), 200);
+      await page.waitForURL(`${baseURL}/catalog/all-products?page=1`);
+      await inspect(page, allProducts, mobile);
+      assert.equal((await page.goto(`${baseURL}/catalog?page=0`)).status(), 200);
+      await page.waitForURL(`${baseURL}/catalog/all-products?page=0`);
+      await page.getByRole("heading", { level: 1, name: "Invalid catalog URL", exact: true }).waitFor();
       await page.goto(baseURL);
       await page.keyboard.press("Tab");
       const skip = page.getByRole("link", { name: "Skip to content" });
@@ -488,7 +500,7 @@ try {
       if (mobile) {
         const menu = page.getByRole("button", { name: "Menu", exact: true });
         await menu.click();
-        await page.locator(".store-mobile-panel").getByRole("link", { name: "Catalog", exact: true }).focus();
+        await page.locator(".store-mobile-panel").getByRole("link", { name: "Account", exact: true }).focus();
         if (artifacts) await page.screenshot({ path: join(artifacts, `${width}-${colorScheme}-menu.png`), fullPage: true });
         await page.setViewportSize({ width: 1440, height: 1000 });
         await page.waitForFunction((selector) => document.activeElement?.closest(selector) !== null, DESKTOP_ONLY);

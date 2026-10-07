@@ -96,16 +96,18 @@ try {
     await page.waitForURL(`${base}/catalog/all-products?view=list`);
     await loaded(page);
     assert.equal(await page.getByRole("button", { name: "List view" }).getAttribute("aria-pressed"), "true");
-    // The breadcrumb's "Catalog" crumb now leads to category discovery, not a listing.
-    await page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Catalog", exact: true }).click();
-    await page.waitForURL(`${base}/catalog`);
-    const categories = page.getByRole("navigation", { name: "Categories" });
-    await categories.waitFor();
-    assert.equal(await categories.getByRole("link", { name: "Computers", exact: true }).count(), 1);
-    assert.equal(await categories.getByRole("link", { name: "Laptops", exact: true }).count(), 1, "Deeper categories stay reachable from discovery");
-    assert.equal(await page.getByRole("link", { name: "All products", exact: true }).count(), 1);
+    // The breadcrumb's "Catalog" crumb has no discovery page to link to any
+    // more (that composition moved into the header megamenu); it is a plain,
+    // non-linked label now, not a dead link to a removed page.
+    const breadcrumb = page.getByRole("navigation", { name: "Breadcrumb" });
+    assert.equal(await breadcrumb.getByRole("link", { name: "Catalog", exact: true }).count(), 0,
+      "The Catalog crumb is a plain label, not a link to a removed page");
+    assert.match(await breadcrumb.textContent(), /Catalog/);
+    // A bare /catalog request redirects to the homepage; the standalone
+    // discovery page is never revived (owner's revised megamenu decision).
+    await page.goto(`${base}/catalog`);
+    await page.waitForURL(`${base}/`);
     await fits(page);
-    await capture(page, "catalog", viewport, "default");
     await page.goto(`${base}/catalog/gaming`); await loaded(page);
     assert.equal(await page.locator("ul.catalog-products .product-card").count(), 0);
     assert.equal(await page.getByRole("list", { name: "Products" }).count(), 0);
