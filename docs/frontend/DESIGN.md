@@ -789,6 +789,35 @@ unrelated products is not the default shopping entry.
   labelled plainly, going to the shared results surface with no category filter.
 - Keep the breadcrumb, the heading and the honest copy about direct membership.
 
+**Resolved during implementation (#63, §9.8 step 2) — do not re-litigate without
+new information.** The previous root behavior (an unfiltered listing at bare
+`/catalog`) relocated to the dedicated static route **`/catalog/all-products`**,
+rather than to `/search` with no query (§9.4's recommended-routes table below
+predates this decision and is superseded by this note for that one row). Reasons:
+
+- A query-parameter marker (e.g. `?products=1`) is ambiguous exactly when a
+  control returns to its default — switching the view toggle back to grid at
+  page 1 omits every param, so the marker disappears and the page would
+  silently fall back to discovery. A stable path has no such failure mode.
+- `/search` is reserved for step 4/5's query-driven results surface (§9.6);
+  conflating "no query" on that route with "all products" would make the
+  search URL contract read two different ways depending on whether `q` is
+  present, which §9.4 explicitly rules out ("a second, differently-behaving
+  shopping interface is not" acceptable).
+- **Accepted trade-off:** `/catalog/all-products` is a reserved static segment
+  that takes routing priority over `/catalog/<slug>`, so a real category whose
+  slug is ever `all-products` becomes permanently unreachable at `/catalog/<slug>`.
+  No such category exists today. If one is ever introduced, this reservation
+  must be revisited.
+- Bookmarked/legacy `/catalog?page=…`/`?view=…` links still work: `/catalog`
+  forwards their exact query string (including invalid values) to
+  `/catalog/all-products`, so the existing invalid-URL recovery flow is
+  preserved at the new address.
+- `/search` with no `q` is unresolved by this step — it belongs to step 4/5
+  (§9.6). Whatever it does, it must not become a second "all products" entry
+  with different behavior; redirecting it to `/catalog/all-products` is one
+  reasonable option, left to that step.
+
 ### 9.4 Category and results pages — sidebar, filters, one implementation
 
 **Desktop (≥48rem, or a wider breakpoint if you justify it):** two regions.
@@ -825,9 +854,9 @@ document it and must still have exactly one results implementation):
 | Route | Renders |
 |---|---|
 | `/catalog` | Category discovery (§9.3) |
+| `/catalog/all-products` | "All products" — the shared results surface, no category filter (§9.3 resolved this; superseding this table's original `/search`-with-no-`q` suggestion for this one row) |
 | `/catalog/<slug>` | Category results — sidebar + results |
 | `/search?q=…` | Search results — the same sidebar + results |
-| `/search` with no `q` | The same surface as **"All products"** |
 
 ### 9.5 Reduce placeholder dominance
 
