@@ -31,6 +31,21 @@ async function loaded(page) {
 async function fits(page) {
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth), false);
 }
+/** The results sidebar/drawer (#63 §9.4) renders the same category-navigation
+ * and filter markup twice: a static desktop <aside> (always in the DOM,
+ * hidden via CSS below 48rem) and an accessible HeroUI Drawer body for
+ * narrower viewports. Scope queries to whichever one is relevant per
+ * viewport, opening the drawer first on mobile, so assertions never match
+ * both copies at once. */
+async function sidebarScope(page, width) {
+  if (width === 1440) return page.locator(".results-sidebar");
+  const dialog = page.getByRole("dialog", { name: "Categories & filters" });
+  if (!(await dialog.isVisible().catch(() => false))) {
+    await page.getByRole("button", { name: /Categories & filters/ }).click();
+    await dialog.waitFor({ state: "visible" });
+  }
+  return dialog;
+}
 try {
   if (control) await mode("normal");
   for (const width of [1440, 390]) {
@@ -50,7 +65,7 @@ try {
     await categoryLink.press("Enter");
     await dialog.waitFor({ state: "hidden" });
     assert.equal(await page.getByRole("list", { name: "Products" }).getByRole("listitem").count(), 20);
-    assert.match(await page.locator(".catalog-page > .catalog-toolbar").textContent(), /1–20 of 23 products/);
+    assert.match(await page.locator(".catalog-toolbar").textContent(), /1–20 of 23 products/);
     assert.equal(await page.title(), "Laptops | ByteCore");
     assert.equal(await page.locator("ul.catalog-products .product-card").first().getByRole("link").getAttribute("href"), "/products/laptop-1");
     assert.match(await page.locator("ul.catalog-products .product-card").first().textContent(), /From €499.00.*Availability unknown/);
@@ -70,7 +85,7 @@ try {
     await loaded(page);
     if (control) await mode("normal");
     assert.equal(await page.getByRole("list", { name: "Products" }).getByRole("listitem").count(), 3);
-    assert.match(await page.locator(".catalog-page > .catalog-toolbar").textContent(), /21–23 of 23/);
+    assert.match(await page.locator(".catalog-toolbar").textContent(), /21–23 of 23/);
     await page.reload(); await loaded(page);
     assert.match(page.url(), /page=2$/);
     await page.getByRole("button", { name: "List view" }).focus();
@@ -91,8 +106,11 @@ try {
     assert.match(await page.locator("ul.catalog-products .product-card").textContent(), /Modular Computer Kit.*Price unavailable.*Availability unknown/);
     assert.equal(await page.locator("ul.catalog-products .product-card").count(), 1, "Parent includes direct members only");
     // The "All products" CTA leads to the relocated bounded listing (#63 step 2);
-    // it is no longer the catalog root.
-    await page.locator(".catalog-categories").getByRole("link", { name: "All products", exact: true }).click();
+    // it is no longer the catalog root. Computers is itself top-level, so the
+    // results sidebar/drawer's "up" link reads "All categories" and goes
+    // straight to the all-products listing (§9.4 CategoryContext).
+    const computersSidebar = await sidebarScope(page, width);
+    await computersSidebar.getByRole("link", { name: "↑ All categories", exact: true }).click();
     await page.waitForURL(`${base}/catalog/all-products?view=list`);
     await loaded(page);
     assert.equal(await page.getByRole("button", { name: "List view" }).getAttribute("aria-pressed"), "true");
@@ -112,7 +130,12 @@ try {
     assert.equal(await page.locator("ul.catalog-products .product-card").count(), 0);
     assert.equal(await page.getByRole("list", { name: "Products" }).count(), 0);
     assert.match(await page.locator("main").textContent(), /No products assigned directly/);
-    assert.equal(await page.getByRole("navigation", { name: "Subcategories" }).getByRole("link", { name: "Components" }).count(), 1);
+    // Subcategories are listed inside the sidebar/drawer's single "Category
+    // navigation" region (grouped under a plain "Subcategories" label, not a
+    // separate nav landmark) rather than the old discovery page's own nav.
+    const gamingSidebar = await sidebarScope(page, width);
+    assert.equal(await gamingSidebar.getByRole("navigation", { name: "Category navigation" })
+      .getByRole("link", { name: "Components", exact: true }).count(), 1);
     await capture(page, "category", viewport, "parent-empty");
     await page.goto(`${base}/catalog/monitors`); await loaded(page);
     assert.match(await page.locator("main").textContent(), /0 products.*No products yet/);
