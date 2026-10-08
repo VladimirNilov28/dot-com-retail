@@ -110,6 +110,19 @@ shell work. Skip entirely otherwise.**
 - [ ] New captures marked "Model-reviewed — awaiting owner approval", not "baseline".
 - [ ] Captures of a composition the owner rejected were not cited as a standard, and were replaced rather than matched.
 
+**Product details and variants (#65)**
+
+- [ ] Options are actual backend variant records, not fabricated combinations.
+- [ ] Price, SKU, attributes and grams all match the URL-selected record in initial HTML and after hydration.
+- [ ] Exact cheapest-active default and numeric-ID tie-break are deterministic; repeated/malformed/removed/foreign IDs recover visibly.
+- [ ] Shared URLs, refresh, rapid navigation and Back/Forward preserve selection; links work without JavaScript.
+- [ ] Inactive is labelled Unavailable, availability stays unknown, and no private inventory is queried.
+- [ ] Single/multiple/no-variant/all-inactive and absent optional data are honest; required null price is a service/protocol failure.
+- [ ] Real missing lookup returns HTTP 404/noindex, while service failure has separate Retry and a no-JavaScript reload link.
+- [ ] Pending price/specifications hide together without footer/layout collapse; keyboard focus remains visible.
+- [ ] Missing media uses the existing placeholder; no invented ratings, cart CTA or deferred commerce features.
+- [ ] Desktop/mobile exceptional states are inspected; absent rated-browser fixtures are not claimed as aggregate rendering proof.
+
 ---
 
 ## 2. Visual-review prompt

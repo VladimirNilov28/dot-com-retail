@@ -447,14 +447,34 @@ plain headings; `1a_product_page_description` uses tabs and three columns. The
 stacked version is simpler — prefer it unless the content genuinely needs
 separating.*
 
-- The gallery and the purchase panel are the two anchors; everything else is
-  secondary.
-- **This page has a genuine primary action.** *Add to cart* takes primary
-  emphasis — see §3.
-- An unavailable variant must not look purchasable. Use `--danger`/`--warning`
-  for that signal.
-- *Example:* two columns on desktop (gallery left, sticky purchase panel right),
-  stacking to gallery-then-panel on mobile.
+- Current #65 scope is **viewing and selecting real variants**, not purchasing.
+  Omit Add to cart until #73 provides its action; no disabled purchase panel,
+  quantity stepper or development-status paragraph. A future working purchase
+  action takes primary emphasis under §3.
+- Breadcrumbs and one title lead two desktop regions: honest media placeholder
+  left, product information and variant links right. Mobile stacks them naturally.
+  Description and full-width readable label/value specifications follow. Reuse
+  the shell PageContainer, tokens, ImageUnavailable and Lucide; don't manufacture
+  a gallery when the public schema has no media.
+- Each option represents **one actual ProductVariant**, with readable differing
+  attributes and SKU disambiguation. Never synthesize a dimension combination.
+  Ordinary `?variant=<real ID>` links remain usable without JavaScript; price,
+  SKU and specifications derive together from the server-selected record.
+- Default to the cheapest active variant, comparing exact decimals and breaking
+  ties by numeric ID. Invalid, repeated, removed and foreign-product identifiers
+  recover visibly to that default, with a canonical recovery link. Explicit
+  inactive records remain inspectable and labelled **Unavailable**, never
+  **Out of stock**. Without an active default, show **Price unavailable**.
+- Availability is **unknown**, not inferred from `isActive` or privileged
+  inventory. Omit absent ratings; show only real aggregates. Missing description,
+  optional specifications and imagery have concise honest states. Weight uses
+  canonical grams; brand/dimensions/conversions remain #97, media #96/#81 and
+  public stock #95.
+- Initial content is buffered server HTML, with real HTTP 404/noindex for a
+  successful missing lookup and distinct Product unavailable/Retry for service
+  failure. Enhanced variant loading hides the old price and specifications
+  together, preserves their footprint, and announces loading. Refresh and
+  Back/Forward restore the URL selection; no-JavaScript recovery reloads the page.
 
 ### Forms (#66–#68, #71, #74)
 
@@ -771,8 +791,10 @@ without a new owner decision:**
    meaningful region, each linking to its category page; children may appear as
    quiet secondary links. The owner's subsequent #86 refinement replaces loose
    text groups with compact bordered tiles: modest decorative Lucide icons,
-   linked headings, two initially visible direct children and native disclosures
-   for the rest. Two readable columns at 390px, four on desktop, with intact
+   linked headings. The owner's subsequent `3f94137` refinement removes child
+   shortcuts and native disclosures: preserve **root-only** tiles, with deeper
+   navigation in the megamenu/category pages. Two readable columns at 390px,
+   four on desktop, with intact
    column-flow groups rather than stretched grid rows. No fixed tile heights.
    Semantic slug aliases select presentation-only icons; a neutral fallback
    handles unknown categories without database-ID assumptions. The API has no
@@ -978,7 +1000,7 @@ the page's own `SearchForm` is the single search entry point:
   (`page` dropped from the URL) while preserving compatible active
   filters/sort/view.
 
-**Every other route** (home, account, cart, product detail once it exists) —
+**Every other route** (home, account, cart, product detail) —
 the header keeps a real `<Link href="/search">` trigger labelled "Search" for
 no-JS users, but a plain click intercepts navigation and instead:
 

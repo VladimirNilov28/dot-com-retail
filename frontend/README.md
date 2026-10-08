@@ -5,14 +5,14 @@ typed Hive access for [#62](https://github.com/VladimirNilov28/dot-com-retail/is
 and public catalog browsing for [#63](https://github.com/VladimirNilov28/dot-com-retail/issues/63),
 built on the [#60](https://github.com/VladimirNilov28/dot-com-retail/issues/60) foundation.
 The HeroUI v3 Card/Button demonstration lives at `/dev/foundation`. Catalog,
-search and category-based homepage discovery use real anonymous Hive data.
-Account, cart, checkout and product details remain unimplemented.
+search, category-based homepage discovery and product details/variant selection
+use real anonymous Hive data. Account, cart and checkout remain unimplemented.
 
 ## #86 homepage discovery contract
 
-Home leads with compact main-category tiles and two direct child shortcuts per
-group; native `details` disclosures expose every remaining direct child without
-JavaScript. CSS columns keep each tile together without grid-row gaps between
+Home leads with compact **root-only** main-category tiles, preserving the owner's
+`3f94137` refinement. Child navigation remains in the megamenu/category pages;
+do not restore homepage shortcuts/disclosures. CSS columns keep tiles together without grid-row gaps between
 unequal groups: two columns at 390px, four on desktop, one below 352px.
 Root links have decorative Lucide icons mapped by semantic slug aliases
 (English/Estonian), never database IDs; unknown slugs use the neutral Grid2X2
@@ -52,7 +52,65 @@ are logged safely and are not cached as successes or permanent error prerenders.
 Raw/private transport stays no-store. Metadata and categories/products are
 server-rendered. Existing expanded-header Search is unchanged on home; listing
 pages keep their default-visible input. Product links use actual slugs at
-`/products/[slug]`; successful product detail rendering remains deferred to #65.
+`/products/[slug]`, now rendered by #65.
+
+## #65 product details and variant URL contract
+
+`/products/[slug]?variant=<real ID>` resolves one public `ProductDetail` operation.
+The server selects price, SKU and specifications from the same actual record;
+there is no browser detail fetch, inventory query or added proxy dispatch.
+Plain variant anchors are enhanced by Next navigation, preserve other query
+parameters, push history and remain usable without JavaScript.
+
+Without a parameter, the default is the exact lowest-priced active variant,
+then lowest numeric ID. Empty, malformed, repeated, nonexistent, removed or
+foreign IDs recover visibly to that default; a valid-link action canonicalizes
+the URL without automatic replacement. Explicit inactive records remain
+inspectable and unavailable, not out of stock. All-inactive/no-variant products
+have no default and show Price unavailable. Required `price: BigDecimal!`
+cannot legitimately be absent: null/missing price is a protocol/service error.
+
+Anonymous product fields include descriptions, categories, aggregate ratings
+and variants with price, JSON attributes, activity, SKU, optional barcode/grams.
+The schema has no images, brand, dimensions or customer stock. Use the existing
+placeholder and unknown availability, omit absent rating aggregates, and defer
+media to #96/#81, units/brand/dimensions to #97 and public stock to #95.
+No Add to cart until #73; no auth, wishlist, checkout or review submission.
+
+React request caching deduplicates layout/page/metadata lookup. Public successes
+use endpoint/origin/slug-keyed **60-second stale-while-revalidate**, not a hard
+freshness maximum. Failures and successful missing lookups are not persisted as
+successes. Resolve existence before streaming so missing products return a real
+404/noindex and initial HTML stays visible without JavaScript. Service failure
+renders Product unavailable, HeroUI Retry and a no-JavaScript reload link.
+Enhanced loading hides price/specifications together without collapsing layout.
+
+Product fixtures extend the existing exact 9-category/30-product isolated recipe,
+not owner data. Import `seedProductFixture` from
+`scripts/product-fixture-data.mjs` and call it with
+`http://127.0.0.1:4063/graphql` and the privately issued supported setup token.
+It enriches existing laptop attributes/grams/description and creates/deletes one
+real variant, returning `removedVariantId`; it does not add products/change prices.
+Use a fresh matching build/server origin to avoid cached success hiding failures.
+
+```bash
+bun test src/lib scripts/catalog-fixture-data.test.mjs scripts/product-fixture-data.test.mjs
+PLAYWRIGHT_MODULE=<authorized-external-playwright-index.mjs> \
+  FRONTEND_URL=<isolated-production-origin> \
+  PRODUCT_REMOVED_VARIANT=<returned-real-ID> \
+  CATALOG_TEST_CONTROL=http://127.0.0.1:4064/control \
+  BROWSER_ARTIFACTS=<temporary-capture-directory> node scripts/product-smoke.mjs
+# Read-only live verification instead:
+PLAYWRIGHT_MODULE=<authorized-external-playwright-index.mjs> \
+  FRONTEND_URL=<live-production-origin> PRODUCT_TEST_HIVE=http://localhost:4002/graphql \
+  PRODUCT_LIVE_SLUG=kingston-fury-beast-16gb-ddr4 node scripts/product-smoke.mjs
+```
+
+Only product errors/delays are injected by the bridge; normal data comes from
+real disposable Hive. Positive aggregate shapes are unit-covered, but fixtures
+are unrated and **rated-browser rendering is not claimed**. Run existing
+storefront/catalog/home checks as well; home smoke now requires successful
+product destinations and the preserved root-only composition.
 
 ### Reproducible isolated catalog verification
 
@@ -109,9 +167,9 @@ explicit setup failure; changing the test to a live slug would invalidate its
 search, price/attribute facets, sorts and URL restoration. Unrated rating-sort
 fixtures check ID tie-break only, not rated ordering.
 
-### Verified coordinated pass, 2026-10-08
+### Historical coordinated pass, 2026-10-08 — before #65
 
-The earlier tooling/seeding blocks are resolved. On source `663de45`, the full
+The earlier tooling/seeding blocks were resolved. On source `663de45`, the full
 catalog smoke, all 11 storefront smoke scenarios and homepage browser matrix
 passed against production builds. Anonymous live Hive additionally passed home
 category/subcategory/product-destination navigation, header suggestions and
@@ -161,11 +219,12 @@ retains the single skip link and deterministic dark theme.
 
 | Route | Current behavior |
 |---|---|
-| `/` | Real main/child category entry points and up to three deterministic direct-category product selections |
+| `/` | Real root-only category tiles and up to three deterministic direct-category product selections |
 | `/catalog` | Compatibility redirect to home, or legacy listing query forwarded to `/catalog/all-products` |
 | `/catalog/all-products` | Bounded shared results, grid/list, supported facets/sorts and URL-backed state |
 | `/catalog/[slug]` | Direct category members, ancestors/child links, real metadata and missing-category 404 |
 | `/search` | Default-visible search input and shared URL-backed catalog results/facets/sorts/suggestions |
+| `/products/[slug]` | Server product details, real URL-backed variants, HTTP 404 and service-error/Retry |
 | `/account` | Honest unavailable page; no fake sign-in |
 | `/cart` | Honest unavailable page; no counts, cart contents, preview or checkout |
 | `/dev/foundation` | `noindex, nofollow` component playground; not linked from shell navigation |
