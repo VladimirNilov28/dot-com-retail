@@ -792,6 +792,22 @@ already requires a documented selection source). Keep the sections few; with a
 small catalogue the quieter answer is the right one. Remove the temporary
 "Available now" list as the features it names become real.
 
+Implemented selection contract: one anonymous size-one category-facet probe,
+positive direct-membership IDs matched to the taxonomy and ordered by
+English-locale name/ID, at most three categories with four `PRICE_ASC` products
+each. Visible labels say **Browse <category>** and **Directly assigned products,
+lowest price first**. One deduplicated taxonomy plus probe plus parallel
+selections caps cold reads at five and cards at twelve. Existing 60-second
+stale-while-revalidate caches validated public success, not failures.
+
+Discovery is buffered before returning initial markup, rather than streamed
+through Suspense: production live-data verification found hidden cards without
+JavaScript in the streamed version. All cards are now visibly server-rendered.
+Initial navigation uses native page loading, and Retry retains context with
+disabled pending feedback through HeroUI/React Aria. Sparse desktop sections
+occupy only their actual card-count columns; mobile stacks sections without
+filler. This does not change the approved megamenu or expanded-header search.
+
 ### 9.3 Catalog root — compatibility route, not a second discovery surface
 
 **Status: superseded, owner correction.** The requirement below ("`/catalog` is
@@ -1026,7 +1042,7 @@ Small and sequential; each step is independently reviewable.
 | 4 | Real header search input and plain submission (§9.6) | #61 → #64 | 3 (results route must exist) | **Done** — listing routes show the page's own search field by default (header trigger hidden there); other routes get an expandable header overlay reusing the same suggestion hook and canonical `/search` route — awaiting owner visual review |
 | 5 | Query results and real facets in the shared sidebar/drawer (§9.0, §9.4) | #64 | 3, 4 | **Done** at `/search`, ahead of step 4 (the owner authorized #63+#64 together; the search page itself carries its own input) — awaiting owner visual review |
 | 6 | Debounced suggestions with keyboard selection (§9.6) | #64 | 5 | **Done** at `/search` — awaiting owner visual review |
-| 7 | Home category entry points and labelled discovery sections (§9.2) | #86 | 3 (shared card), 1 | Implemented locally; real HTTP/SSR checks pass, browser verification and fresh screenshots blocked -- see manifest |
+| 7 | Home category entry points and labelled discovery sections (§9.2) | #86 | 3 (shared card), 1 | Implemented and production-browser verified; desktop/mobile and data-state captures Model-reviewed — awaiting owner approval |
 
 Steps 5 and 6 landed on the `/search` results page ahead of step 4 because the
 owner authorized #63 and #64 together for one coherent results interface; the

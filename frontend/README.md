@@ -31,9 +31,14 @@ request-deduplicated taxonomy shared with the header, one probe and up to three
 parallel selections, with at most twelve product cards. There is no per-category
 probe loop, unbounded products query or fallback all-products feed. Empty
 selections are omitted; safe probe/category/section errors have explicit Retry
-and do not masquerade as successful empty data. Local server Suspense fallbacks
-reuse the final grid geometry; no client-only catalog fetching or production
-fixtures are introduced.
+and do not masquerade as successful empty data. The bounded discovery result
+is fully awaited before returning initial markup: streamed Suspense sections
+left real live-data cards hidden without JavaScript. Buffered SSR now renders
+every selection visibly without JavaScript, matching catalog rendering.
+Initial navigation uses native page loading; explicit Retry transitions retain
+context and show disabled **Retrying…** through HeroUI/React Aria's supported
+`isPending` accessibility contract. No global loading boundary, client-only
+catalog fetching or production fixtures are introduced.
 
 Validated public successes reuse endpoint/origin/input-keyed caching with
 **60-second stale-while-revalidate**, not a hard maximum age guarantee. Failures
@@ -98,13 +103,44 @@ explicit setup failure; changing the test to a live slug would invalidate its
 search, price/attribute facets, sorts and URL restoration. Unrated rating-sort
 fixtures check ID tie-break only, not rated ordering.
 
-**Current delivery limitations:** browser tooling installation and privileged
-fixture-seeding execution were denied by the execution approval checks with
-the owner unavailable. The empty isolated real stack was verified responsive,
-but populated fixtures, the two Playwright smoke suites and fresh screenshots
-have not yet been verified in this pass. No screenshot is newly promoted.
-Read the latest issue report and manifest rather than treating earlier
-successful runs or the checks below as this pass's full acceptance evidence.
+### Verified coordinated pass, 2026-10-08
+
+The earlier tooling/seeding blocks are resolved. On source `663de45`, the full
+catalog smoke, all 11 storefront smoke scenarios and homepage browser matrix
+passed against production builds. Anonymous live Hive additionally passed home
+category/subcategory/product-destination navigation, header suggestions and
+submission, keyboard focus, two-stage Escape and visible no-JavaScript cards.
+Native search Escape now dismisses suggestions without clearing the query.
+Product destinations are checked as actual slug links; their expected 404 is
+not presented as implemented product details.
+
+The isolated matrix used real supported fixtures: 9 categories/30 products,
+0/0, 2/1 and 2/0. Only failures/delays were injected by the forwarding bridge;
+these are not GraphQL data stubs. Homepage cold counts were exactly one taxonomy,
+one probe and three selections; warm reload added zero requests, and every home
+operation type really revalidated after 61 seconds. A readiness request to
+`GET /graphql` (expected 405) avoids warming taxonomy; `/dev/foundation` does not.
+For cold measurement, build a fresh origin during `categories-error`, restore
+`normal`, check readiness, then use `HOME_VERIFY_COLD=1` and
+`HOME_VERIFY_REVALIDATION=1` with `scripts/home-smoke.mjs`.
+
+For homepage controlled states use a new matching build/server origin for each:
+`categories-error`, `home-error` (probe failure), or `home-section-error` with
+`categoryId=2` (Accessories in the exact fixture). Run home smoke with the
+corresponding `HOME_TEST_STATE=categories-error|probe-error|section-error`.
+For `HOME_TEST_STATE=loading`, start with `home-error`; the script switches to
+`home-delay` on Retry, verifies pending/disabled feedback, then real recovery.
+`HOME_TEST_STATE=empty|sparse|no-products` requires genuinely matching disposable
+data, not a fault response relabelled empty. The runner's `--empty` supports
+starting those fresh databases; use supported setup mutations only.
+
+Lint, typecheck, generated-operation consistency, production builds and all
+115 affected tests (368 Bun expectations) passed. Dependencies did not change.
+The screenshot manifest records 29 inspected new/replacement captures, original
+approval scopes, real versus controlled provenance and resolved Stale states.
+New images await owner approval. Public stock (#95), images (#81/#96), details
+(#65), authentication/cart/checkout and genuinely rated ordering remain deferred;
+the rating-sort fixture proves only unrated wiring and ID tie-break.
 
 **Before changing storefront UI, read [`docs/frontend/DESIGN.md`](../docs/frontend/DESIGN.md)**
 — the approved design, its reasoning and extension guidance — and look at the
