@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { connection } from "next/server";
-import { catalogCategories, catalogListing } from "@/lib/graphql/operations";
+import { catalogCategories, catalogListing, homeDiscovery, homeCategoryProducts } from "@/lib/graphql/operations";
 import { hiveConfig, requestHive } from "@/lib/graphql/server";
 import { failure, type SafeFailure } from "@/lib/graphql/errors";
 import type { Result } from "@/lib/graphql/transport";
@@ -66,6 +66,21 @@ const cachedListing = unstable_cache(async (
   return data;
 }, ["catalog-listing-v2"], { revalidate: 60 });
 
+const cachedHomeDiscovery = unstable_cache(async (endpoint: string, origin: string) =>
+  success((await requestHive(homeDiscovery, {}, { endpoint, origin }, { kind: "public" })).result),
+["home-discovery-v1"], { revalidate: 60 });
+
+const cachedHomeProducts = unstable_cache(async (endpoint: string, origin: string, categoryId: string) => {
+  const data = success((await requestHive(homeCategoryProducts, { categoryId },
+    { endpoint, origin }, { kind: "public" })).result);
+  try { data.searchProducts.items.forEach(productPrice); }
+  catch (error) {
+    if (!(error instanceof TypeError)) throw error;
+    throw new CatalogFailure(failure("protocol", true));
+  }
+  return data;
+}, ["home-products-v1"], { revalidate: 60 });
+
 async function read<Data>(request: (endpoint: string, origin: string) => Promise<Data>): Promise<Result<Data>> {
   try {
     const config = configuration();
@@ -89,6 +104,9 @@ export interface ListingQuery {
 }
 
 export const getCategories = cache((): Promise<Result<CatalogCategoriesQuery>> => read(cachedCategories));
+export const getHomeDiscovery = cache(() => read(cachedHomeDiscovery));
+export const getHomeProducts = cache((categoryId: string) =>
+  read((endpoint, origin) => cachedHomeProducts(endpoint, origin, categoryId)));
 export const getListing = cache((input: ListingQuery): Promise<Result<CatalogListingQuery>> =>
   read((endpoint, origin) => cachedListing(
     endpoint, origin, input.page, input.sort, input.query ?? "", input.categoryId, input.minPrice, input.maxPrice,

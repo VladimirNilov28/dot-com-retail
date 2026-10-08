@@ -12,7 +12,7 @@ const baseURL = process.env.FRONTEND_URL ?? "http://127.0.0.1:3100";
 const artifacts = process.env.BROWSER_ARTIFACTS;
 if (artifacts) await mkdir(artifacts, { recursive: true });
 const routes = [
-  { path: "/", label: "Home", heading: "Electronics, clearly connected." },
+  { path: "/", label: "Home", heading: "Find your next connection." },
   { path: "/search", label: "Search", heading: "Search" },
   { path: "/account", label: "Account", heading: "Account" },
   { path: "/cart", label: "Cart", heading: "Cart" },
@@ -49,6 +49,21 @@ async function inspect(page, route, mobile) {
   assert.equal(await page.getByRole("contentinfo").count(), 1);
   assert.equal(await page.locator('a[href="#main-content"]').count(), 1);
   assert.equal(await page.getByRole("heading", { level: 1 }).textContent(), route.heading);
+  if (route.path === "/") {
+    assert.equal(await page.title(), "Browse electronics | ByteCore");
+    assert.doesNotMatch(await page.locator("main").textContent(), /Search is not available yet|being built one part at a time/);
+    const categories = page.getByRole("navigation", { name: "Shop by category" });
+    if (await categories.count()) {
+      assert.ok(await categories.getByRole("link").count() > 0);
+      assert.equal(await categories.getByRole("img").count(), 0, "No fabricated category imagery");
+    }
+    if (await page.locator(".home-loading").count()) {
+      await page.waitForFunction(() => !document.querySelector(".home-loading"));
+    }
+    assert.ok(await page.locator(".home-selection").count() <= 3);
+    assert.ok(await page.locator(".home-selection .product-card").count() <= 12);
+    assert.equal(await page.locator(".home-selection .product-card h2").count(), 0, "Product headings sit below section h2s");
+  }
   if (route.path !== "/" && route.path !== "/catalog/all-products" && route.path !== "/search") {
     assert.match(await page.locator("main").textContent(), /not available yet/i);
     assert.equal(await page.locator("main input, main form, main button").count(), 0);

@@ -1,4 +1,10 @@
 import {
+  HomeDiscoverySource,
+  HomeCategoryProductsSource,
+  type HomeDiscoveryQuery,
+  type HomeDiscoveryQueryVariables,
+  type HomeCategoryProductsQuery,
+  type HomeCategoryProductsQueryVariables,
   CatalogCategoriesSource,
   CatalogListingSource,
   CatalogSuggestionsSource,
@@ -92,6 +98,20 @@ function priceFacet(value: unknown) {
   return {
     min: facet.min === null ? null : decimal(facet.min),
     max: facet.max === null ? null : decimal(facet.max),
+  };
+}
+
+function catalogProduct(value: unknown) {
+  const product = object(value);
+  const ratingCount = integer(product.ratingCount);
+  if (ratingCount < 0) throw new TypeError("Invalid rating count");
+  return {
+    id: text(product.id), name: text(product.name), slug: text(product.slug),
+    averageRating: nullableFloat(product.averageRating), ratingCount,
+    variants: list(product.variants, (value) => {
+      const variant = object(value);
+      return { id: text(variant.id), price: decimal(variant.price), isActive: boolean(variant.isActive) };
+    }),
   };
 }
 
@@ -231,19 +251,7 @@ export const catalogListing: Operation<CatalogListingQuery, CatalogListingQueryV
         pageInfo.totalPages !== Math.ceil(pageInfo.totalItems / pageInfo.size)) {
       throw new TypeError("Invalid pagination");
     }
-    const items = list(result.items, (value) => {
-      const product = object(value);
-      const ratingCount = integer(product.ratingCount);
-      if (ratingCount < 0) throw new TypeError("Invalid rating count");
-      return {
-        id: text(product.id), name: text(product.name), slug: text(product.slug),
-        averageRating: nullableFloat(product.averageRating), ratingCount,
-        variants: list(product.variants, (value) => {
-          const variant = object(value);
-          return { id: text(variant.id), price: decimal(variant.price), isActive: boolean(variant.isActive) };
-        }),
-      };
-    });
+    const items = list(result.items, catalogProduct);
     if (items.length > pageInfo.size) throw new TypeError("Unbounded listing response");
     const facets = object(result.facets);
     return { searchProducts: { items, pageInfo, facets: {
@@ -273,4 +281,38 @@ export const catalogSuggestions: Operation<CatalogSuggestionsQuery, CatalogSugge
   },
 };
 
-export const publicOperations = [catalogCategories, catalogListing, catalogSuggestions] as const;
+export const homeDiscovery: Operation<HomeDiscoveryQuery, HomeDiscoveryQueryVariables> = {
+  name: "HomeDiscovery", source: HomeDiscoverySource, kind: "query", access: "public",
+  variables(value) { variables(value, []); return {}; },
+  decode(value) {
+    const facets = object(object(object(value).searchProducts).facets);
+    return { searchProducts: { facets: { categories: list(facets.categories, categoryFacet) } } };
+  },
+};
+
+export const homeCategoryProducts: Operation<HomeCategoryProductsQuery, HomeCategoryProductsQueryVariables> = {
+  name: "HomeCategoryProducts", source: HomeCategoryProductsSource, kind: "query", access: "public",
+  variables(value) {
+    const input = variables(value, ["categoryId"]);
+    const categoryId = text(input.categoryId);
+    if (!/^[1-9]\d*$/.test(categoryId)) throw new TypeError("Invalid category id");
+    return { categoryId };
+  },
+  decode(value) {
+    const result = object(object(value).searchProducts);
+    const info = object(result.pageInfo);
+    const pageInfo = {
+      page: integer(info.page), size: integer(info.size),
+      totalItems: integer(info.totalItems), totalPages: integer(info.totalPages),
+    };
+    const items = list(result.items, catalogProduct);
+    if (pageInfo.page !== 0 || pageInfo.size !== 4 || pageInfo.totalItems < 0 ||
+        pageInfo.totalPages !== Math.ceil(pageInfo.totalItems / 4) || items.length > 4 ||
+        items.length !== Math.min(4, pageInfo.totalItems)) {
+      throw new TypeError("Invalid home selection");
+    }
+    return { searchProducts: { items, pageInfo } };
+  },
+};
+
+export const publicOperations = [catalogCategories, catalogListing, catalogSuggestions, homeDiscovery, homeCategoryProducts] as const;

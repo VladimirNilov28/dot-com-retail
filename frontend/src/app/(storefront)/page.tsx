@@ -1,58 +1,52 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+import { Suspense } from "react";
+import { HomeDiscovery, HomeDiscoveryLoading, HomeReadError } from "@/components/home-discovery";
+import { categoryIndex, catalogHref } from "@/lib/catalog/model";
+import { getCategories } from "@/lib/catalog/server";
 
-const availability = [
-  {
-    area: "Catalog",
-    status: "Browse products and categories from the catalog.",
-  },
-  {
-    area: "Search",
-    status: "Search is not available yet.",
-  },
-  {
-    area: "Account and cart",
-    status: "Sign-in, cart and checkout are not available yet.",
-  },
-];
+export const metadata: Metadata = {
+  title: "Browse electronics | ByteCore",
+  description: "Explore electronics by category and browse real products, with clear prices and useful category shortcuts.",
+};
 
-export default function Home() {
-  return (
-    <div className="grid gap-10 lg:grid-cols-2 lg:items-start lg:gap-16">
-      <section className="max-w-xl space-y-4">
-        <p className="text-sm font-semibold tracking-widest text-accent uppercase">
-          ByteCore
-        </p>
-        <h1 className="text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">
-          Electronics, clearly connected.
-        </h1>
-        <p className="text-lg text-muted">
-          The storefront is being built one part at a time. Everything shown
-          here is real; nothing is simulated while a feature is still missing.
-        </p>
-        <Link href="/catalog/all-products" className="store-cta mt-2">
-          Browse the catalog
-        </Link>
-      </section>
-
-      <section aria-labelledby="availability-heading" className="max-w-xl">
-        <h2
-          id="availability-heading"
-          className="text-sm font-semibold tracking-widest text-muted uppercase"
-        >
-          Available now
-        </h2>
-        <dl className="mt-4 divide-y divide-separator border-t border-separator text-sm">
-          {availability.map((entry) => (
-            <div
-              key={entry.area}
-              className="grid gap-1 py-3 sm:grid-cols-[10rem_minmax(0,1fr)] sm:gap-4"
-            >
-              <dt className="font-medium text-foreground">{entry.area}</dt>
-              <dd className="text-muted">{entry.status}</dd>
-            </div>
-          ))}
-        </dl>
-      </section>
-    </div>
-  );
+export default async function Home() {
+  const result = await getCategories();
+  const categories = result.status === "success" ? result.data.categories : [];
+  const index = categoryIndex(categories);
+  const roots = index.children();
+  return <div className="home-page">
+    <header className="home-heading">
+      <div className="space-y-2">
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Find your next connection.</h1>
+        <p className="text-muted">Explore electronics by category.</p>
+      </div>
+      <Link href="/catalog/all-products" className="store-link">All products</Link>
+    </header>
+    {result.status !== "success" ? <HomeReadError title="Categories unavailable" message={result.error.message} /> :
+      roots.length ? <>
+        <nav aria-label="Shop by category" className="home-categories">
+          {roots.map((category) => {
+            const children = index.children(category.id);
+            return <section key={category.id} className="home-category">
+              <h2 className="text-base font-semibold tracking-tight">
+                <Link href={catalogHref(category.slug)} prefetch={false} className="home-category-link">{category.name}</Link>
+              </h2>
+              {children.length > 0 && <ul className="home-subcategories">
+                {children.slice(0, 4).map((child) => <li key={child.id}>
+                  <Link href={catalogHref(child.slug)} prefetch={false} className="home-category-link">{child.name}</Link>
+                </li>)}
+                {children.length > 4 && <li>
+                  <Link href={catalogHref(category.slug)} prefetch={false} className="home-category-link">All {category.name} categories</Link>
+                </li>}
+              </ul>}
+            </section>;
+          })}
+        </nav>
+        <Suspense fallback={<HomeDiscoveryLoading />}><HomeDiscovery categories={categories} /></Suspense>
+      </> : <section className="space-y-2">
+        <h2 className="text-xl font-semibold tracking-tight">No categories yet</h2>
+        <p className="text-sm text-muted">You can still browse all available products or search the catalog.</p>
+      </section>}
+  </div>;
 }

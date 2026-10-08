@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { catalogCategories, catalogListing, catalogSuggestions, shippingOptions } from "./operations";
+import { catalogCategories, catalogListing, catalogSuggestions, shippingOptions, homeDiscovery, homeCategoryProducts } from "./operations";
 import { execute } from "./transport";
 import { requestHive } from "./server-transport";
 import { handleGuestRequest } from "./proxy";
@@ -109,4 +109,49 @@ test("HTTP-200 GraphQL errors and excessive item counts never become full public
   const selection = catalogListing.decode(parseJson(body).data);
   selection.searchProducts.items = Array(21).fill(selection.searchProducts.items[0]);
   expect(() => catalogListing.decode(selection)).toThrow();
+});
+
+test("home discovery probe has immutable size-one selection and real category facets only", () => {
+  expect(homeDiscovery.source).toContain("size: 1");
+  expect(homeDiscovery.source).not.toContain("items");
+  expect(homeDiscovery.variables({})).toEqual({});
+  expect(() => homeDiscovery.variables({ size: 100 })).toThrow();
+  expect(homeDiscovery.decode({ searchProducts: { facets: { categories: [{ id: "2", name: "Laptops", count: 23 }] } } })
+    .searchProducts.facets.categories).toEqual([{ id: "2", name: "Laptops", count: 23 }]);
+  expect(() => homeDiscovery.decode({ searchProducts: { facets: { categories: [{ id: "2", name: "Laptops", count: -1 }] } } })).toThrow();
+});
+
+test("home category selections enforce page-zero/four-card bounds without relaxing listings", () => {
+  expect(homeCategoryProducts.variables({ categoryId: "2" })).toEqual({ categoryId: "2" });
+  expect(() => homeCategoryProducts.variables({ categoryId: "2", size: 20 })).toThrow();
+  expect(() => homeCategoryProducts.variables({ categoryId: "bad" })).toThrow();
+  expect(() => catalogListing.variables({ input: { page: 0, size: 4, sort: "PRICE_ASC" } })).toThrow();
+  const product = catalogListing.decode(parseJson(body).data).searchProducts.items[0];
+  const selected = { searchProducts: {
+    items: [product], pageInfo: { page: 0, size: 4, totalItems: 1, totalPages: 1 },
+  } };
+  expect(homeCategoryProducts.decode(selected).searchProducts.items[0].variants[0].price).toBe("9999999999999999999.99");
+  expect(() => homeCategoryProducts.decode({ searchProducts: { ...selected.searchProducts,
+    items: Array(5).fill(product) } })).toThrow();
+  expect(() => homeCategoryProducts.decode({ searchProducts: { ...selected.searchProducts,
+    pageInfo: { page: 1, size: 4, totalItems: 1, totalPages: 1 } } })).toThrow();
+  expect(homeCategoryProducts.decode({ searchProducts: { items: [],
+    pageInfo: { page: 0, size: 4, totalItems: 0, totalPages: 0 } } }).searchProducts.items).toEqual([]);
+});
+
+test("home public reads omit private browser/server credentials and surface partial failures", async () => {
+  const upstream = '{"data":{"searchProducts":{"facets":{"categories":[]}}}}';
+  const { result } = await requestHive(homeDiscovery, {}, config,
+    { kind: "authenticated", accessToken: "setup-only-token", guestCookieHeader: "private=owner" },
+    { fetch: async (_, options) => {
+      expect(options.headers.has("Authorization")).toBe(false);
+      expect(options.headers.has("Cookie")).toBe(false);
+      expect(options.credentials).toBe("omit");
+      return response(upstream);
+    } });
+  expect(result.status).toBe("success");
+  const partial = await execute(homeDiscovery, {}, { endpoint: config.endpoint,
+    fetch: async () => response('{"data":{"searchProducts":{"facets":{"categories":[]}}},"errors":[{"message":"private detail"}]}') });
+  expect(partial.status).toBe("partial");
+  expect(JSON.stringify(partial)).not.toContain("private detail");
 });

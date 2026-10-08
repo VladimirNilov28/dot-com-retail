@@ -67,3 +67,23 @@ query CatalogSuggestions($query: String!, $limit: Int) {
     slug
   }
 }
+
+query HomeDiscovery {
+  searchProducts(input: {page: 0, size: 1, sort: PRICE_ASC}) {
+    facets { categories { id name count } }
+  }
+}
+
+query HomeCategoryProducts($categoryId: ID!) {
+  searchProducts(input: {page: 0, size: 4, sort: PRICE_ASC, filters: {categoryId: $categoryId}}) {
+    items {
+      id
+      name
+      slug
+      averageRating
+      ratingCount
+      variants { id price isActive }
+    }
+    pageInfo { page size totalItems totalPages }
+  }
+}

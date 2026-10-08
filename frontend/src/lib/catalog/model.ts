@@ -6,6 +6,14 @@ export type CatalogProduct = CatalogListingQuery["searchProducts"]["items"][numb
 export type CatalogFacets = CatalogListingQuery["searchProducts"]["facets"];
 export type View = "grid" | "list";
 export const PAGE_SIZE = 20;
+export const HOME_SECTION_LIMIT = 3;
+
+export function homeCategories(categories: Category[], facets: CatalogFacets["categories"]): Category[] {
+  const eligible = new Set(facets.filter((facet) => facet.count > 0).map((facet) => facet.id));
+  return categories.filter((category) => eligible.has(category.id))
+    .sort((a, b) => a.name.localeCompare(b.name, "en") || a.id.localeCompare(b.id, "en"))
+    .slice(0, HOME_SECTION_LIMIT);
+}
 
 export function listingState(parameters: Record<string, string | string[] | undefined>): { page: number; view: View } | null {
   const page = parameters.page ?? "1";

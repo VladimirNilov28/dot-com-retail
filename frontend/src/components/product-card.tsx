@@ -15,16 +15,17 @@ function Rating({ product }: { product: CatalogProduct }) {
   );
 }
 
-export function ProductCard({ product }: { product: CatalogProduct }) {
+export function ProductCard({ product, headingLevel = 2 }: { product: CatalogProduct; headingLevel?: 2 | 3 }) {
+  const Heading = headingLevel === 3 ? "h3" : "h2";
   return (
     <li className="product-card">
       <ImageUnavailable />
       <div className="product-card-copy">
-        <h2 className="font-semibold tracking-tight">
+        <Heading className="product-card-heading font-semibold tracking-tight">
           <Link href={`/products/${encodeURIComponent(product.slug)}`} prefetch={false} className="product-name">
             {product.name}
           </Link>
-        </h2>
+        </Heading>
         <p className="product-price">{productPrice(product)}</p>
         <Rating product={product} />
         <p className="text-sm text-muted">Availability unknown</p>

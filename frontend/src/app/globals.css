@@ -395,7 +395,8 @@
      name wraps to one line or two (§9.4 visual refinement). A plain flex
      column — not a CSS Grid row-track trick, which only equalises height
      within a single card's own box and cannot align across sibling cards. */
-  .catalog-grid .product-card h2 { min-height: 3.2em; }
+  .catalog-grid .product-card-heading,
+  .home-products .product-card-heading { min-height: 3.2em; }
   .product-card-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 0.5rem; }
   .product-name { border-radius: var(--radius-sm); overflow-wrap: anywhere; }
   .product-name:hover { text-decoration: underline; text-underline-offset: 0.25em; }
@@ -406,6 +407,23 @@
   .catalog-pagination { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 1rem; margin-top: 2rem; }
   .catalog-disabled { color: var(--muted); padding: 0.5rem 0.75rem; }
   .catalog-state { padding-block: 2.5rem; max-width: 36rem; }
+  .home-page { display: grid; gap: 2.5rem; }
+  .home-heading, .home-section-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 1rem; }
+  .home-categories { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; padding-block: 1.5rem; border-block: 1px solid var(--separator); }
+  .home-category { min-width: 0; }
+  .home-category-link { display: inline-block; border-radius: var(--radius-sm); overflow-wrap: anywhere; }
+  .home-category-link:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 0.25em; }
+  .home-category-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; }
+  .home-subcategories { display: grid; gap: 0.25rem; margin-block-start: 0.5rem; color: var(--muted); font-size: 0.875rem; }
+  .home-products { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem 1rem; }
+  .home-selection, .home-loading { display: grid; gap: 1.5rem; }
+  @media (min-width: 48rem) {
+    .home-categories { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .home-products { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.5rem; }
+  }
+  @media (max-width: 22rem) {
+    .home-categories, .home-products { grid-template-columns: minmax(0, 1fr); }
+  }
   .catalog-retry { min-height: var(--control-height); }
   .catalog-list .catalog-products { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
   .catalog-list .product-card { flex-direction: row; align-items: center; gap: 1rem; }

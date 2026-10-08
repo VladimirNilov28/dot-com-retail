@@ -1,9 +1,30 @@
 import { describe, expect, test } from "bun:test";
 import {
   attributeLabel, catalogHref, categoryIndex, formatPrice, hasActiveFilters, isResultsRoute, listingState,
-  productPrice, resultsHref, resultsState,
+  productPrice, resultsHref, resultsState, homeCategories,
 } from "./model";
 import { decimal } from "@/lib/graphql/scalars";
+
+describe("bounded homepage category selections", () => {
+  const categories = [
+    { id: "1", name: "Computers", slug: "computers", parent: null },
+    { id: "2", name: "Laptops", slug: "laptops", parent: { id: "1" } },
+    { id: "3", name: "Audio", slug: "audio", parent: null },
+    { id: "4", name: "Accessories", slug: "accessories", parent: null },
+    { id: "5", name: "Monitors", slug: "monitors", parent: null },
+  ];
+  test("selects at most three real positive direct memberships in stable name/id order", () => {
+    const facets = ["1", "2", "3", "4", "5", "unknown"].map((id) => ({ id, name: "Ignored facet label", count: 1 }));
+    expect(homeCategories(categories, facets).map(({ slug }) => slug)).toEqual(["accessories", "audio", "computers"]);
+    expect(homeCategories([...categories].reverse(), [...facets].reverse())).toEqual(homeCategories(categories, facets));
+  });
+  test("does not infer parent products from children or pad empty selections", () => {
+    expect(homeCategories(categories, [{ id: "2", name: "Laptops", count: 23 }]).map(({ slug }) => slug)).toEqual(["laptops"]);
+    expect(homeCategories(categories, [{ id: "1", name: "Computers", count: 0 }])).toEqual([]);
+    expect(homeCategories(categories, [])).toEqual([]);
+    expect(homeCategories([], [{ id: "2", name: "Laptops", count: 23 }])).toEqual([]);
+  });
+});
 
 describe("catalog URL state", () => {
   test("uses one-based pages and URL-restorable views", () => {
