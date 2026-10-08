@@ -1,5 +1,14 @@
 import { expect, test } from "bun:test";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { fixtureSlugs, seedFixture, verifyFixture } from "./catalog-fixture-data.mjs";
+
+for (const script of ["catalog-fixtures.mjs", "catalog-smoke.mjs", "storefront-smoke.mjs", "home-smoke.mjs"]) {
+  test(`${script} parses under its documented Node runtime without starting resources`, () => {
+    const path = fileURLToPath(new URL(script, import.meta.url));
+    expect(() => execFileSync("node", ["--check", path], { stdio: "pipe" })).not.toThrow();
+  });
+}
 
 test("fixture mutations reject owner and non-loopback endpoints before any request", async () => {
   await expect(seedFixture("http://127.0.0.1:4002/graphql", "test-only-token")).rejects.toThrow("restricted to isolated Hive");

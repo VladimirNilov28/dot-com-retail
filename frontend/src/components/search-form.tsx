@@ -118,7 +118,7 @@ export function SearchForm({ route, state }: { route: string; state: ResultsStat
             onChange={(event) => { setValue(event.target.value); schedule(event.target.value); }}
             onFocus={() => { if (suggestions.length) setOpen(true); }}
             onKeyDown={(event) => {
-              if (event.key === "Escape") { setOpen(false); return; }
+              if (event.key === "Escape") { event.preventDefault(); setOpen(false); return; }
               if (!open || suggestions.length === 0) return;
               if (event.key === "ArrowDown") { event.preventDefault(); setActive((index) => (index + 1) % suggestions.length); }
               else if (event.key === "ArrowUp") { event.preventDefault(); setActive((index) => (index - 1 + suggestions.length) % suggestions.length); }

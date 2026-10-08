@@ -17,6 +17,7 @@ let bridge;
 let stopping = false;
 const counts = {};
 let mode = "normal";
+let failureCategoryId;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const endpoint = "http://127.0.0.1:4063/graphql";
 
@@ -46,7 +47,6 @@ async function cleanup() {
 
 function docker(environment, ...args) {
   try {
-    await requireFreePorts();
     const id = execFileSync("docker", ["run", "--detach", ...args],
       { encoding: "utf8", env: { ...process.env, ...environment } }).trim();
     containers.push(id);
@@ -95,8 +95,16 @@ async function handle(request, response) {
       }
       mode = next;
     }
+    const categoryId = url.searchParams.get("categoryId");
+    if (categoryId !== null) {
+      assert.match(categoryId, /^[1-9]\d*$/, "Expected an isolated category ID");
+      failureCategoryId = categoryId;
+    }
+    if (url.searchParams.get("reset") === "1") {
+      for (const name of Object.keys(counts)) delete counts[name];
+    }
     response.setHeader("Content-Type", "application/json");
-    response.end(JSON.stringify({ identity, mode, counts })); return;
+    response.end(JSON.stringify({ identity, mode, counts, failureCategoryId })); return;
   }
   if (url.pathname !== "/graphql" || request.method !== "POST") {
     response.writeHead(404); response.end(); return;
@@ -113,7 +121,8 @@ async function handle(request, response) {
   if ((current === "delay" && listing) || (current === "home-delay" && home)) await sleep(2500);
   if ((current === "error" && listing) || (current === "categories-error" && name === "CatalogCategories") ||
       (current === "home-error" && name === "HomeDiscovery") ||
-      (current === "home-section-error" && name === "HomeCategoryProducts")) {
+      (current === "home-section-error" && name === "HomeCategoryProducts" &&
+        (!failureCategoryId || payload.variables?.categoryId === failureCategoryId))) {
     response.setHeader("Content-Type", "application/json");
     response.end(JSON.stringify({ errors: [{ message: "Controlled verification failure", extensions: { errorType: "INTERNAL" } }] }));
     return;
@@ -124,6 +133,7 @@ async function handle(request, response) {
 }
 
 try {
+  await requireFreePorts();
   const password = randomBytes(24).toString("hex");
   const database = docker({ POSTGRES_PASSWORD: password }, "--name", `${identity}-postgres`, "--publish", "127.0.0.1:5463:5432",
     "--env", "POSTGRES_DB=catalog_verification", "--env", "POSTGRES_USER=catalog_verification",

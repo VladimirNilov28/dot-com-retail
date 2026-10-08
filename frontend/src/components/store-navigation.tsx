@@ -331,6 +331,7 @@ function SearchControl({ expanded, onExpand, onCollapse }: {
                 onFocus={() => { if (suggestions.length) setOpen(true); }}
                 onKeyDown={(event) => {
                   if (event.key === "Escape") {
+                    event.preventDefault();
                     event.stopPropagation();
                     if (open) { setOpen(false); return; }
                     collapse();
