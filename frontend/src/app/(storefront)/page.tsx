@@ -29,7 +29,7 @@ export default function Home() {
           The storefront is being built one part at a time. Everything shown
           here is real; nothing is simulated while a feature is still missing.
         </p>
-        <Link href="/catalog" className="store-cta mt-2">
+        <Link href="/catalog/all-products" className="store-cta mt-2">
           Browse the catalog
         </Link>
       </section>
