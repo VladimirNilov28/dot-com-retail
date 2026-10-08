@@ -112,6 +112,13 @@ export type HomeCategoryProductsQueryVariables = Exact<{
 
 export type HomeCategoryProductsQuery = { searchProducts: { items: Array<{ id: string, name: string, slug: string, averageRating: number | null, ratingCount: number, variants: Array<{ id: string, price: Decimal, isActive: boolean }> }>, pageInfo: { page: number, size: number, totalItems: number, totalPages: number } } };
 
+export type ProductDetailQueryVariables = Exact<{
+  slug: string;
+}>;
+
+
+export type ProductDetailQuery = { product: { id: string, name: string, slug: string, description: string | null, averageRating: number | null, ratingCount: number, categories: Array<{ id: string, name: string, slug: string }>, variants: Array<{ id: string, sku: string, price: Decimal, attributes: JsonValue, isActive: boolean, barcode: string | null, weightGrams: number | null }> } | null };
+
 export const IntegrationShippingOptionsSource = "query IntegrationShippingOptions($countryCode: String) {\n  checkoutShippingOptions(countryCode: $countryCode) {\n    method\n    charge\n    currency\n    estimate\n    supportedCountries\n  }\n}";
 export const IntegrationGuestCartSource = "query IntegrationGuestCart {\n  guestCart {\n    id\n    expiresAt\n    totals {\n      subtotal\n      currency\n    }\n    items {\n      id\n      quantity\n      subtotal\n      productVariant {\n        id\n        sku\n        price\n        attributes\n        isActive\n      }\n    }\n  }\n}";
 export const IntegrationGuestOrderSource = "query IntegrationGuestOrder($publicId: UUID, $requestId: UUID) {\n  guestOrder(publicId: $publicId, requestId: $requestId) {\n    publicId\n    requestId\n    status\n    totals {\n      merchandiseSubtotal\n      shippingCharge\n      total\n      currency\n    }\n  }\n}";
@@ -120,3 +127,4 @@ export const CatalogListingSource = "query CatalogListing($input: ProductSearchI
 export const CatalogSuggestionsSource = "query CatalogSuggestions($query: String!, $limit: Int) {\n  productSearchSuggestions(query: $query, limit: $limit) {\n    productId\n    name\n    slug\n  }\n}";
 export const HomeDiscoverySource = "query HomeDiscovery {\n  searchProducts(input: {page: 0, size: 1, sort: PRICE_ASC}) {\n    facets {\n      categories {\n        id\n        name\n        count\n      }\n    }\n  }\n}";
 export const HomeCategoryProductsSource = "query HomeCategoryProducts($categoryId: ID!) {\n  searchProducts(\n    input: {page: 0, size: 4, sort: PRICE_ASC, filters: {categoryId: $categoryId}}\n  ) {\n    items {\n      id\n      name\n      slug\n      averageRating\n      ratingCount\n      variants {\n        id\n        price\n        isActive\n      }\n    }\n    pageInfo {\n      page\n      size\n      totalItems\n      totalPages\n    }\n  }\n}";
+export const ProductDetailSource = "query ProductDetail($slug: String!) {\n  product(slug: $slug) {\n    id\n    name\n    slug\n    description\n    categories {\n      id\n      name\n      slug\n    }\n    averageRating\n    ratingCount\n    variants {\n      id\n      sku\n      price\n      attributes\n      isActive\n      barcode\n      weightGrams\n    }\n  }\n}";

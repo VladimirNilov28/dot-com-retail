@@ -1,4 +1,7 @@
 import {
+  ProductDetailSource,
+  type ProductDetailQuery,
+  type ProductDetailQueryVariables,
   HomeDiscoverySource,
   HomeCategoryProductsSource,
   type HomeDiscoveryQuery,
@@ -28,6 +31,8 @@ import {
   type ProductSort,
 } from "./generated";
 import { boolean, decimal, float, integer, json, list, object, text, uuid } from "./scalars";
+import { variantId } from "@/lib/product/model";
+import { comparePrice } from "@/lib/catalog/model";
 
 export interface Operation<Data, Variables> {
   readonly name: string;
@@ -315,4 +320,50 @@ export const homeCategoryProducts: Operation<HomeCategoryProductsQuery, HomeCate
   },
 };
 
-export const publicOperations = [catalogCategories, catalogListing, catalogSuggestions, homeDiscovery, homeCategoryProducts] as const;
+export const productDetail: Operation<ProductDetailQuery, ProductDetailQueryVariables> = {
+  name: "ProductDetail", source: ProductDetailSource, kind: "query", access: "public",
+  variables(value) {
+    const input = variables(value, ["slug"]);
+    const slug = text(input.slug);
+    if (!slug.trim() || slug.length > 255) throw new TypeError("Invalid product slug");
+    return { slug };
+  },
+  decode(value) {
+    const root = object(value);
+    if (root.product === null) return { product: null };
+    const product = object(root.product);
+    const id = text(product.id);
+    if (!variantId(id)) throw new TypeError("Invalid product identity");
+    const ratingCount = integer(product.ratingCount);
+    const averageRating = nullableFloat(product.averageRating);
+    if (ratingCount < 0 || (averageRating !== null && (averageRating < 1 || averageRating > 5))) {
+      throw new TypeError("Invalid product ratings");
+    }
+    const ids = new Set<string>();
+    return { product: {
+      id, name: text(product.name), slug: text(product.slug),
+      description: product.description === null ? null : text(product.description),
+      averageRating, ratingCount,
+      categories: list(product.categories, (value) => {
+        const category = object(value);
+        return { id: text(category.id), name: text(category.name), slug: text(category.slug) };
+      }),
+      variants: list(product.variants, (value) => {
+        const variant = object(value);
+        const id = text(variant.id);
+        if (!variantId(id) || ids.has(id)) throw new TypeError("Invalid variant identity");
+        ids.add(id);
+        const price = decimal(variant.price);
+        if (comparePrice(price, decimal("0")) < 0) throw new TypeError("Invalid variant price");
+        const weightGrams = variant.weightGrams === null ? null : integer(variant.weightGrams);
+        if (weightGrams !== null && weightGrams < 0) throw new TypeError("Invalid variant weight");
+        return {
+          id, price, weightGrams, sku: text(variant.sku), attributes: json(variant.attributes),
+          isActive: boolean(variant.isActive), barcode: variant.barcode === null ? null : text(variant.barcode),
+        };
+      }),
+    } };
+  },
+};
+
+export const publicOperations = [catalogCategories, catalogListing, catalogSuggestions, homeDiscovery, homeCategoryProducts, productDetail] as const;

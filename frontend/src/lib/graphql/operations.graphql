@@ -84,6 +84,20 @@ query HomeCategoryProducts($categoryId: ID!) {
       ratingCount
       variants { id price isActive }
     }
+
     pageInfo { page size totalItems totalPages }
+  }
+}
+
+query ProductDetail($slug: String!) {
+  product(slug: $slug) {
+    id
+    name
+    slug
+    description
+    categories { id name slug }
+    averageRating
+    ratingCount
+    variants { id sku price attributes isActive barcode weightGrams }
   }
 }

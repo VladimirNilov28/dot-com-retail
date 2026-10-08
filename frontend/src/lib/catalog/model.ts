@@ -216,7 +216,7 @@ function exactPrice(value: Decimal) {
   return { coefficient, scale };
 }
 
-function comparePrice(left: Decimal, right: Decimal) {
+export function comparePrice(left: Decimal, right: Decimal) {
   const a = exactPrice(left);
   const b = exactPrice(right);
   const scale = Math.max(a.scale, b.scale);
