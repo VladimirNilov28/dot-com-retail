@@ -52,19 +52,6 @@ export default async function Home() {
                   <span>{category.name}</span>
                 </Link>
               </h2>
-              {children.length > 0 && <ul className="home-subcategories">
-                {children.slice(0, 2).map((child) => <li key={child.id}>
-                  <Link href={catalogHref(child.slug)} prefetch={false} className="home-category-link">{child.name}</Link>
-                </li>)}
-              </ul>}
-              {children.length > 2 && <details className="home-category-more">
-                <summary aria-label={`More ${category.name} categories`}>More categories</summary>
-                <ul className="home-subcategories">
-                  {children.slice(2).map((child) => <li key={child.id}>
-                    <Link href={catalogHref(child.slug)} prefetch={false} className="home-category-link">{child.name}</Link>
-                  </li>)}
-                </ul>
-              </details>}
             </section>;
           })}
         </nav>
