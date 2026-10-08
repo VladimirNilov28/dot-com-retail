@@ -19,11 +19,8 @@ async function CategoryProducts({ category }: { category: Category }) {
   if (result.data.searchProducts.items.length === 0) return null;
   return <section className={`home-selection home-selection-${result.data.searchProducts.items.length}`} aria-labelledby={`selection-${category.id}`}>
     <div className="home-section-heading">
-      <div className="space-y-1">
-        <h2 id={`selection-${category.id}`} className="text-xl font-semibold tracking-tight">Browse {category.name}</h2>
-        <p className="text-sm text-muted">Directly assigned products, lowest price first.</p>
-      </div>
-      <Link href={catalogHref(category.slug)} prefetch={false} className="store-link">View {category.name}</Link>
+      <h2 id={`selection-${category.id}`} className="text-xl font-semibold tracking-tight">{category.name}</h2>
+      <Link href={catalogHref(category.slug)} prefetch={false} className="store-link">View all</Link>
     </div>
     <ul className="home-products" aria-label={`Products in ${category.name}`}>
       {result.data.searchProducts.items.map((product) => <ProductCard key={product.id} product={product} headingLevel={3} />)}

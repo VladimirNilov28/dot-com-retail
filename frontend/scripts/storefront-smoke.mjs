@@ -114,7 +114,8 @@ async function inspect(page, route, mobile) {
       const parent = element.parentElement.getBoundingClientRect();
       return {
         scope: element.closest(".store-navigation") ? "shell" :
-          element.closest(".store-popover, .store-drawer-dialog") ? "overlay" : "unexpected",
+          element.closest(".store-popover, .store-drawer-dialog") ? "overlay" :
+          element.closest(".home-category") ? "home" : "unexpected",
         hidden: element.getAttribute("aria-hidden"),
         focusable: element.getAttribute("focusable"),
         stroke: element.getAttribute("stroke"),
@@ -130,7 +131,7 @@ async function inspect(page, route, mobile) {
   );
   assert.equal(icons.filter((icon) => icon.scope === "shell").length, isResultsRoute(route.path) ? 6 : 7,
     "Stable shell icons (results routes omit the header's search control)");
-  assert.equal(icons.some((icon) => icon.scope === "unexpected"), false, "Additional icons belong only to mounted overlays");
+  assert.equal(icons.some((icon) => icon.scope === "unexpected"), false, "Additional icons belong to mounted overlays or homepage category links");
   for (const icon of icons) {
     assert.equal(icon.hidden, "true");
     assert.equal(icon.focusable, "false");
@@ -628,6 +629,17 @@ try {
     for (const route of routes) {
       assert.equal((await page.goto(`${baseURL}${route.path}`)).status(), 200);
       await inspect(page, route, true);
+      if (route.path === "/") {
+        for (const summary of await page.locator(".home-category summary").all()) {
+          await summary.focus();
+          await summary.press("Enter");
+          assert.equal(await summary.evaluate((element) => element.parentElement.open), true);
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth ||
+            document.body.scrollWidth > document.documentElement.clientWidth), false, "Expanded categories fit at actual 200% zoom");
+          await summary.press("Space");
+          assert.equal(await summary.evaluate((element) => element.parentElement.open), false);
+        }
+      }
       await checkMobile(page, route);
     }
     // All products (#63 step 2) at 200% zoom: not in the primary nav, so it is

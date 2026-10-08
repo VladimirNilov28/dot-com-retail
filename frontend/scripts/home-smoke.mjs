@@ -63,7 +63,48 @@ async function loaded(page) {
   assert.ok(await page.locator(".home-selection").count() <= 3);
   assert.ok(await page.locator(".home-selection .product-card").count() <= 12);
   for (const section of await page.locator(".home-selection").all()) assert.equal(await section.isVisible(), true);
+  assert.doesNotMatch(await page.locator("main").textContent(), /Directly assigned products|lowest price first/);
+  assert.doesNotMatch(await page.getByRole("contentinfo").textContent(), /Sign-in, cart and checkout/);
+  for (const section of await page.locator(".home-selection").all()) {
+    const link = section.getByRole("link", { name: "View all", exact: true });
+    assert.match(await link.getAttribute("href"), /^\/catalog\/[^/?]+$/);
+    assert.ok((await section.locator("h2").textContent()).trim().length > 0);
+  }
   await fits(page);
+}
+
+async function categoryTiles(page) {
+  const tiles = page.locator(".home-category");
+  const disclosures = tiles.locator("details");
+  if (process.env.HOME_REQUIRE_DISCLOSURE === "1") {
+    assert.ok(await disclosures.count() > 0, "Real taxonomy must exercise remaining-child disclosures");
+  }
+  for (const tile of await tiles.all()) {
+    const root = tile.locator("h2 a");
+    assert.match(await root.getAttribute("href"), /^\/catalog\/[^/?]+$/);
+    assert.equal(await root.locator("svg[aria-hidden=true][focusable=false]").count(), 1);
+    assert.ok(await tile.locator(":scope > ul > li").count() <= 2, "Only two initial direct-child shortcuts");
+    const details = tile.locator("details");
+    if (!await details.count()) continue;
+    assert.equal(await details.getAttribute("open"), null);
+    const summary = details.locator("summary");
+    assert.equal(await summary.getAttribute("aria-label"), `More ${await root.textContent()} categories`);
+    assert.ok(await details.getByRole("link", { includeHidden: true }).count() > 0);
+    assert.equal(await details.getByRole("link").count(), 0, "Closed native disclosure hides remaining links");
+    await summary.focus(); await focused(summary);
+    await summary.press("Enter");
+    assert.notEqual(await details.getAttribute("open"), null);
+    for (const link of await details.getByRole("link").all()) {
+      assert.equal(await link.isVisible(), true);
+      assert.match(await link.getAttribute("href"), /^\/catalog\/[^/?]+$/);
+    }
+    await fits(page);
+    await summary.press("Space");
+    assert.equal(await details.getAttribute("open"), null, "Native disclosure closes with Space");
+  }
+  if (await tiles.count() && await page.evaluate(() => innerWidth) === 390) {
+    assert.equal(await page.locator(".home-categories").evaluate((element) => getComputedStyle(element).columnCount), "2");
+  }
 }
 
 async function focused(locator) {
@@ -200,6 +241,7 @@ try {
       assert.ok(await page.locator(".home-selection .product-card").count() > 0);
       if (state === "sparse") assert.equal(await page.locator(".home-selection .product-card").count(), 1);
     }
+    if (!failures.includes(state)) await categoryTiles(page);
     await capture(page, width, failures.includes(state) || ["empty", "sparse", "no-products"].includes(state) ? state : "default");
     if (failures.includes(state)) { recoveryPages.push(page); continue; }
     if (state === "populated") await navigation(page);
@@ -221,6 +263,21 @@ try {
     assert.equal((await page.goto(base)).status(), 200);
     await loaded(page);
     assert.ok(await page.locator(".home-selection .product-card").count() > 0);
+    await categoryTiles(page);
+    const details = page.locator(".home-category details").first();
+    let categoryLink;
+    if (await details.count()) {
+      await details.locator("summary").press("Enter");
+      categoryLink = details.getByRole("link").first();
+    } else {
+      categoryLink = page.locator(".home-category h2 a").first();
+    }
+    const href = await categoryLink.getAttribute("href");
+    const name = (await categoryLink.textContent()).trim();
+    await categoryLink.press("Enter");
+    await page.waitForURL(new URL(href, base).href);
+    assert.equal((await page.reload()).status(), 200, "Real no-JavaScript category navigation");
+    assert.equal(await page.getByRole("heading", { level: 1 }).textContent(), name);
     await page.close();
   }
   assert.deepEqual(errors, [], "No unexpected home hydration/runtime/console errors");

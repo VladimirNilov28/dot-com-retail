@@ -10,9 +10,14 @@ Account, cart, checkout and product details remain unimplemented.
 
 ## #86 homepage discovery contract
 
-Home leads with real main-category links and up to four child shortcuts per
-group (larger groups link to their category for the rest). Categories have no
-invented descriptions, icons, imagery or counts. A secondary All products link
+Home leads with compact main-category tiles and two direct child shortcuts per
+group; native `details` disclosures expose every remaining direct child without
+JavaScript. CSS columns keep each tile together without grid-row gaps between
+unequal groups: two columns at 390px, four on desktop, one below 352px.
+Root links have decorative Lucide icons mapped by semantic slug aliases
+(English/Estonian), never database IDs; unknown slugs use the neutral Grid2X2
+fallback. Icons are presentation, not backend category metadata. Categories have
+no invented descriptions, imagery or product counts. A secondary All products link
 continues to use `/catalog/all-products`; `/catalog` remains a compatibility
 redirect. The footer owner's catalog-link correction is preserved.
 
@@ -21,7 +26,8 @@ category facets only. Positive-count facet IDs are matched to the real taxonomy,
 ordered by the existing English-locale name/ID comparison, and capped at three.
 Each selected category uses `HomeCategoryProducts`, fixed page 0/size 4,
 `categoryId` and `PRICE_ASC` (backend product-ID tie-break). Sections say
-**Browse <category>** and explain their direct-membership/lowest-price ordering.
+the unchanged taxonomy name with a category-scoped **View all** link. Selection
+details belong in this contract, not technical customer-facing copy.
 This is a deterministic category sample, not curation, popularity,
 personalization or a recommendation. Parent membership never includes children.
 No-price products retain the shared Price unavailable state.

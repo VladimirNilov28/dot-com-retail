@@ -692,7 +692,9 @@ Design only against this. Everything else is forbidden as fabrication.
 flag; popularity, view or sales counts; discounts, campaigns or previous prices;
 personalization or recommendations; a newest-first sort (`createdAt` exists on
 `Product` but there is no `ProductSort` value for it); brand (until #97);
-category descriptions, icons or imagery.
+category descriptions, API-owned icons or imagery. Homepage decorative Lucide
+icons are permitted by the owner's #86 refinement request; they do not represent
+backend metadata.
 
 ### 9.1 Category navigation panel — replaces the narrow dropdown
 
@@ -767,9 +769,15 @@ without a new owner decision:**
 
 1. **Category entry points.** The real top-level categories as the first
    meaningful region, each linking to its category page; children may appear as
-   quiet secondary links. Names only — the API has no category description or
-   image, so **do not invent one** and do not substitute a product placeholder
-   for a category "tile".
+   quiet secondary links. The owner's subsequent #86 refinement replaces loose
+   text groups with compact bordered tiles: modest decorative Lucide icons,
+   linked headings, two initially visible direct children and native disclosures
+   for the rest. Two readable columns at 390px, four on desktop, with intact
+   column-flow groups rather than stretched grid rows. No fixed tile heights.
+   Semantic slug aliases select presentation-only icons; a neutral fallback
+   handles unknown categories without database-ID assumptions. The API has no
+   category description or image: **do not invent one** or substitute a product
+   placeholder. Deeper navigation remains in category pages/mobile megamenu.
 2. **Product discovery sections**, each backed by one real `searchProducts` call
    and **labelled with exactly what that call computed**, reusing `ProductCard`.
 
@@ -787,16 +795,18 @@ literally true):
 *New arrivals*, *Recommended for you*, *Deals*, *Our picks*, *Staff favourites*
 — none of these corresponds to anything the backend computes.
 
-State each section's selection rule in visible copy or an adjacent note (#86
-already requires a documented selection source). Keep the sections few; with a
-small catalogue the quieter answer is the right one. Remove the temporary
+Document each section's selection rule in the frontend README. The owner's #86
+refinement explicitly removes technical selection explanations from the page:
+use the real category heading and a consistent, category-scoped **View all**.
+Keep the sections few; with a small catalogue the quieter answer is the right
+one. Remove the temporary
 "Available now" list as the features it names become real.
 
 Implemented selection contract: one anonymous size-one category-facet probe,
 positive direct-membership IDs matched to the taxonomy and ordered by
 English-locale name/ID, at most three categories with four `PRICE_ASC` products
-each. Visible labels say **Browse <category>** and **Directly assigned products,
-lowest price first**. One deduplicated taxonomy plus probe plus parallel
+each. Visible labels are the taxonomy name and **View all**; this presentation
+change does not alter direct membership or price ordering. One deduplicated taxonomy plus probe plus parallel
 selections caps cold reads at five and cards at twelve. Existing 60-second
 stale-while-revalidate caches validated public success, not failures.
 
@@ -807,6 +817,9 @@ Initial navigation uses native page loading, and Retry retains context with
 disabled pending feedback through HeroUI/React Aria. Sparse desktop sections
 occupy only their actual card-count columns; mobile stacks sections without
 filler. This does not change the approved megamenu or expanded-header search.
+The shared footer retains only the concise brand description, with existing
+links to honest unavailable Account/Cart destinations rather than development
+status prose on every page.
 
 ### 9.3 Catalog root — compatibility route, not a second discovery surface
 
