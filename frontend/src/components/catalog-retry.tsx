@@ -7,7 +7,7 @@ import { useTransition } from "react";
 export function CatalogRetry() {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  return <Button variant="secondary" className="catalog-retry" isDisabled={pending} aria-busy={pending}
+  return <Button variant="secondary" className="catalog-retry" isDisabled={pending} isPending={pending}
     onPress={() => startTransition(() => router.refresh())}>
     {pending ? "Retrying…" : "Retry"}
   </Button>;

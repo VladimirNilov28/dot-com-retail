@@ -151,7 +151,8 @@ try {
       await page.getByRole("button", { name: "Retry", exact: true }).click();
       const pending = page.getByRole("button", { name: /Retrying/ });
       await pending.waitFor();
-      assert.equal(await pending.getAttribute("aria-busy"), "true");
+      assert.equal(await pending.getAttribute("data-pending"), "true");
+      assert.equal(await pending.getAttribute("aria-disabled"), "true");
       assert.equal(await pending.isDisabled(), true);
       await capture(page, width, "loading");
       await page.waitForFunction(() => document.querySelectorAll(".home-selection").length === 3);
