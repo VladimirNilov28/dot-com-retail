@@ -51,7 +51,7 @@ stale-state notes; owner approval is not a freshness or test-success claim.
 |---|---|
 | **Owner-approved baseline** | The owner explicitly approved this appearance and revision. Treat the original scoped assets above as references; current replacement bytes do not inherit approval. Recover original bytes with `git show <revision>:docs/frontend/baseline/<file>`. |
 | **Model-reviewed — awaiting owner approval** | Captured and visually inspected by the implementer; no owner sign-off. Usable as evidence, not as an authority. |
-| **Owner-rejected composition — before-evidence only** | The owner explicitly turned this layout down. The image still matches what `dev` renders, so it is retained as before-evidence for the correction, but it is **never** a consistency standard and must not be cited to argue a new design is inconsistent. |
+| **Owner-rejected composition — before-evidence only** | The owner explicitly turned this layout down. The image records that historical revision, not necessarily current `dev`; it is retained as before-evidence, **never** a consistency standard. |
 | **Stale** | Known not to match current `dev`. The reason is recorded in the entry. Must not be presented as current. |
 
 Passing tests, or the mere existence of a capture, **never** establishes owner
@@ -113,6 +113,75 @@ Names are **stable**. Replace the file in place. No timestamps, no `-v2`, no
 `-final`, no numbered copies.
 
 ## Current set
+
+### #86 compact category tiles and copy refinement, 2026-10-08
+
+**Rendered source: `1c7f4cdfae9cb6f7d4742bb130787b83e4cdeb37`, `dev`.**
+This supersedes the current-image provenance in the earlier coordinated refresh
+below, not its historical verification or original scoped approvals.
+**35 current captures were freshly recaptured in place; two native-disclosure
+captures were added.** All 37 captures were inspected before retention and are
+**Model-reviewed — awaiting owner approval**. The two rejected not-found images
+remain unchanged as deliberate historical before-evidence. Total inventory: 39
+files, with 37 fresh current captures and two historical rejected captures.
+No old image was simply relabelled current. There are no outstanding **Stale**
+current rows: homepage-body/footer invalidations are resolved by fresh captures.
+The two desktop search images were freshly recaptured byte-identical to their
+predecessors; their preserved appearance was not redesigned.
+
+Home now uses compact linked category tiles with decorative, semantic-slug-mapped
+Lucide icons, two initially visible direct children and native disclosures for
+remaining children. Intact column-flow groups avoid unequal grid-row gaps, with
+two columns at 390px and no fixed tile heights. Default live category height
+changed **533.9 → 406.8px at 390px (24% shorter)**; the first product section begins at
+**y=659.0 rather than 818.1px (159px sooner)**. Desktop category height changed
+415.5 → 216.8px. Product sections use taxonomy headings and category-scoped
+**View all** links, not technical selection prose. The shared footer retains
+only its concise brand description; unavailable destinations remain honest.
+
+| Refreshed/new set | Actual source and controls |
+|---|---|
+| Eight #61 home/shell captures, four #64 search captures, six #63 category/card captures, #86 desktop/mobile default and two expanded category disclosures | Anonymous real owner Hive `localhost:4002`; isolated frontend build at `localhost:3220`; 22 real categories/10 roots and 42 products, read-only; dark OS preference, reduced motion, DPR 1 |
+| Seven #63 list/loading/parent-empty/error captures | Separate disposable PostgreSQL + unchanged Spring artifact + real Hive `:4063`, forwarding/control bridge `:4064`, frontend `:3229`; exact nine-category/thirty-product recipe; default light OS preference and motion, DPR 1 |
+| #86 empty desktop/mobile | Fresh isolated database with zero categories/products, new frontend/cache origin `:3221` |
+| #86 sparse mobile | Supported mutations on that isolated empty target: two categories/one product, fresh origin `:3222` |
+| #86 no-products desktop | Another fresh isolated database: two supported categories/zero products, fresh origin `:3223` |
+| #86 taxonomy/probe/section failure and pending Retry | Fresh full fixture database; separate origins `:3225/:3226/:3227/:3228`; bridge-selected real-operation errors/delay, not fabricated data |
+
+All #86 state captures use reduced motion and DPR 1. Browser: Chromium
+156.0.8078.4, external Playwright 1.64.0. Desktop category default is now
+viewport-only to avoid the known sticky-sidebar full-page stitching artifact;
+mobile/full-page empty/error/list captures record the updated shared footer.
+Loading URLs below are the actual freshly generated cold inputs.
+
+Lint, typecheck, generated GraphQL consistency and production builds passed;
+115 existing library/fixture tests passed, zero failed. Production builds used
+`bun run build --webpack` in separate frontend copies with existing dependencies:
+the owner's running `:3000` frontend and its `.next` output were not stopped,
+rebuilt or overwritten. No dependencies changed, so no frozen install was needed.
+
+Full storefront smoke passed 11 scenarios, including **actual Chromium 200%
+browser zoom** at physical 1440/390/320 widths and keyboard opening/closing of
+homepage disclosures at that zoom. Live homepage checks passed real
+category/subcategory/product destinations, header suggestions/submission and
+two-stage Escape, visible focus, two readable columns, native disclosures and
+real category navigation with JavaScript disabled. The full eight-state real
+isolated homepage matrix and full catalog regression passed. Independent
+section failures retain successful selections; disabled pending Retry recovers.
+Fresh cold homepage `:3224` again measured **1 taxonomy + 1 probe + 3 selections**,
+warm reload added zero, and every home operation revalidated after 61 seconds.
+Selection/direct-membership/cache/price/card/search contracts are unchanged.
+Unexpected console/runtime/hydration errors: **zero**. Expected controlled
+GraphQL failures and explicitly scoped missing category/product-detail 404s are
+not claimed as successful destinations. No GraphQL response stubs were used.
+
+The native-disclosure captures show expanded real remaining children and
+visible keyboard focus. Approved desktop megamenu and expanded-header search
+composition/interaction are preserved; their replacement images still do not
+inherit the original `6a30862`/`d7db51a` approvals. Last updated by **#86** applies
+to all 37 fresh captures. Owner visual approval, stock #95, images #81/#96,
+details #65, cart/checkout/authentication and genuinely rated-product ordering
+remain deferred; no next ticket was started.
 
 ### #86 / #63 / #64 verified refresh, 2026-10-08
 
@@ -530,48 +599,51 @@ files in this round. They remain *Model-reviewed — awaiting owner approval*.
 
 ## Retained-file inventory
 
-Rows updated by #86/#63/#64 use rendered source `663de45` and the precise
-real/control provenance above. Other rows retain historical provenance.
+All Model-reviewed rows use rendered source `1c7f4cd` and the precise
+real/control provenance in the compact-category refinement above. The two
+Owner-rejected not-found rows retain their historical bytes/provenance.
 
 | File | Owns | Route | Viewport | State | Covers | Status | Last updated by |
 |---|---|---|---|---|---|---|---|
-| `issue-61-home-desktop-1440-default.png` | #61 | `/` | 1440×900, full page | Default | Live shell with real #86 discovery | Model-reviewed — awaiting owner approval | #86, #63, #64 |
-| `issue-61-home-mobile-390-default.png` | #61 | `/` | 390×844, full page | Default | Live mobile shell and compact discovery | Model-reviewed — awaiting owner approval | #86, #63, #64 |
-| `issue-61-home-desktop-1440-catalog-popover-open.png` | #61 | `/` | 1440×900, viewport only | Catalog popover open | Preserved menu composition, settled opaque panel over new home; original approval at `6a30862` | Model-reviewed — awaiting owner approval | #86, #63, #64 |
-| `issue-61-home-desktop-1440-account-popover-open.png` | #61 | `/` | 1440×900, viewport only | Account popover open | Existing nonmodal account overlay over new home | Model-reviewed — awaiting owner approval | #86, #63, #64 |
-| `issue-61-home-mobile-390-drawer-open.png` | #61 | `/` | 390×844, viewport only | Drawer open | Modal grouped navigation, separate expand controls, All products | Model-reviewed — awaiting owner approval | #86, #63, #64 |
-| `issue-61-home-narrow-320-default.png` | #61 | `/` | 320×640, full page | Default | Narrow shell, wrapping hierarchy and single-card discovery | Model-reviewed — awaiting owner approval | #86, #63, #64 |
-| `issue-63-category-desktop-1440-default.png` | #63 | `/catalog/sulearvutid` | 1440×900, full page | Grid | Refreshed (search-interaction correction): visible page search field above the toolbar, compacted category-navigation spacing, attribute facets as collapsible disclosures (closed by default, open only when they carry an active filter), price group labelled "Price (EUR)" with accessible min/max labels, aligned grid-card title/price baselines regardless of name length | Model-reviewed — awaiting owner approval | #63, #64 |
-| `issue-63-category-mobile-390-default.png` | #63 | `/catalog/sulearvutid` | 390×844, full page | Grid | Refreshed: visible page search field, mobile toolbar wrapping, "Categories & filters" drawer trigger, aligned card title/price baselines | Model-reviewed — awaiting owner approval | #63, #64 |
-| `issue-63-category-mobile-390-filters-open.png` | #63 | `/catalog/sulearvutid` | 390×844 | Filters drawer open | Refreshed: collapsible attribute-facet disclosures (closed by default) replacing the always-expanded list, compacted category-navigation spacing, labelled price group | Model-reviewed — awaiting owner approval | #63, #64 |
-| `issue-63-category-desktop-1440-list.png` | #63 | `/catalog/laptops?page=2&view=list` | 1440×900, full page | List | Real isolated 21–23 of 23, exact prices, sidebar and pagination | Model-reviewed — awaiting owner approval | #86, #63, #64 |
-| `issue-63-category-mobile-390-list.png` | #63 | `/catalog/laptops?page=2&view=list` | 390×844, full page | List | Same three real items, wrapping, mobile toolbar | Model-reviewed — awaiting owner approval | #86, #63, #64 |
-| `issue-63-category-desktop-1440-loading.png` | #63 | `/catalog/laptops?page=2&minPrice=0.05&maxPrice=552429109.33` | 1440×900, viewport only | Loading grid | Fresh valid bounds retain all 23 fixture products; real listing delayed by bridge; retained sidebar | Model-reviewed — awaiting owner approval | #86, #63, #64 |
-| `issue-63-catalog-desktop-1440-list-loading.png` | #63 | `/catalog/all-products?page=2&view=list&minPrice=0.18&maxPrice=386220400.96` | 1440×900, viewport only | Loading list | Cold real price-filtered listing; sidebar-aware skeleton, not a cached response | Model-reviewed — awaiting owner approval | #86, #63, #64 |
-| `issue-63-catalog-desktop-1440-card-alignment.png` | #63 | `/catalog/all-products` | 1440×900, viewport only (not full page — full-page capture stitches the sticky sidebar twice, a known Chromium/Playwright artifact, not a product defect) | Default grid | Grid-card title/price baselines aligned consistently across one- and two-line product names; full 32-key attribute facet list collapsed by default | Model-reviewed — awaiting owner approval | #63, #64 |
-| `issue-64-search-desktop-1440-default.png` | #64 | `/search?q=Dell` | 1440×900, viewport only | Query results | Two live Dell products, real facets and accepted results composition | Model-reviewed — awaiting owner approval | #86, #63, #64 |
-| `issue-64-search-desktop-1440-suggestions-open.png` | #64 | `/search?q=Dell` | 1440×900, viewport only | Suggestions open | Live suggestions and visible focus; original approval at `d7db51a` | Model-reviewed — awaiting owner approval | #86, #63, #64 |
-| `issue-64-search-mobile-390-default.png` | #64 | `/search?q=Dell` | 390×844, full page | Query results | Mobile shared results and real filter-drawer trigger | Model-reviewed — awaiting owner approval | #86, #63, #64 |
-| `issue-64-search-mobile-390-suggestions-open.png` | #64 | `/search?q=Dell` | 390×844, viewport only | Suggestions open | Readable live mobile popup and visible focus | Model-reviewed — awaiting owner approval | #86, #63, #64 |
-| `issue-61-home-desktop-1440-search-expanded.png` | #61 | `/` | 1440×900, viewport only | Header search expanded | Preserved full-width interaction over new home; original scoped approval at `d7db51a` | Model-reviewed — awaiting owner approval | #86, #63, #64 |
-| `issue-61-home-desktop-1440-search-suggestions-open.png` | #61 | `/` | 1440×900, viewport only | Header search, suggestions open | Live Dell suggestions over new home, accepted placement preserved | Model-reviewed — awaiting owner approval | #86, #63, #64 |
-| `issue-63-category-desktop-1440-empty.png` | #63 | `/catalog/tarkvara` | 1440×900, full page | Empty | Zero result count, honest "No products yet" copy, all-products recovery, sidebar with the empty category highlighted | Model-reviewed — awaiting owner approval | #63, #64 |
-| `issue-63-category-mobile-390-empty.png` | #63 | `/catalog/tarkvara` | 390×844, full page | Empty | Mobile empty state and wrapping, "Categories & filters" drawer trigger | Model-reviewed — awaiting owner approval | #63, #64 |
-| `issue-63-category-desktop-1440-parent-empty.png` | #63 | `/catalog/gaming` | 1440×900, full page | Parent empty | Genuine zero direct members; child Components has real €49.95 product; child/back navigation verified | Model-reviewed — awaiting owner approval | #86, #63, #64 |
-| `issue-63-category-mobile-390-parent-empty.png` | #63 | `/catalog/gaming` | 390×844, full page | Parent empty | Honest scope, zero count and category/filter drawer; child navigation verified | Model-reviewed — awaiting owner approval | #86, #63, #64 |
-| `issue-63-category-desktop-1440-error.png` | #63 | `/catalog/laptops?page=781091910` | 1440×900, full page | Controlled error | Cold bridge-selected GraphQL failure, safe message; real Retry recovers to valid page 2 | Model-reviewed — awaiting owner approval | #86, #63, #64 |
+| `issue-61-home-desktop-1440-default.png` | #61 | `/` | 1440×900, full page | Default | Live shell, compact category tiles and unchanged real discovery | Model-reviewed — awaiting owner approval | #86 |
+| `issue-61-home-mobile-390-default.png` | #61 | `/` | 390×844, full page | Default | Two-column tiles and earlier products, concise footer | Model-reviewed — awaiting owner approval | #86 |
+| `issue-61-home-desktop-1440-catalog-popover-open.png` | #61 | `/` | 1440×900, viewport only | Catalog popover open | Preserved settled menu over refined home; original approval at `6a30862` | Model-reviewed — awaiting owner approval | #86 |
+| `issue-61-home-desktop-1440-account-popover-open.png` | #61 | `/` | 1440×900, viewport only | Account popover open | Existing nonmodal overlay and honest unavailable action over refined home | Model-reviewed — awaiting owner approval | #86 |
+| `issue-61-home-mobile-390-drawer-open.png` | #61 | `/` | 390×844, viewport only | Drawer open | Modal grouped navigation, separate expand controls, All products | Model-reviewed — awaiting owner approval | #86 |
+| `issue-61-home-narrow-320-default.png` | #61 | `/` | 320×640, full page | Default | Narrow shell, one-column tiles, wrapping and single-card discovery | Model-reviewed — awaiting owner approval | #86 |
+| `issue-63-category-desktop-1440-default.png` | #63 | `/catalog/sulearvutid` | 1440×900, viewport only | Grid | Unchanged real category/sidebar/search/facets/card alignment; viewport avoids sticky-sidebar stitching | Model-reviewed — awaiting owner approval | #86 |
+| `issue-63-category-mobile-390-default.png` | #63 | `/catalog/sulearvutid` | 390×844, full page | Grid | Real category cards, toolbar wrapping and concise shared footer | Model-reviewed — awaiting owner approval | #86 |
+| `issue-63-category-mobile-390-filters-open.png` | #63 | `/catalog/sulearvutid` | 390×844, viewport only | Filters drawer open | Existing collapsible facets, labelled price group and category navigation | Model-reviewed — awaiting owner approval | #86 |
+| `issue-63-category-desktop-1440-list.png` | #63 | `/catalog/laptops?page=2&view=list` | 1440×900, full page | List | Real isolated 21–23 of 23, exact prices, sidebar/pagination and concise footer | Model-reviewed — awaiting owner approval | #86 |
+| `issue-63-category-mobile-390-list.png` | #63 | `/catalog/laptops?page=2&view=list` | 390×844, full page | List | Same three real items, wrapping, mobile toolbar and concise footer | Model-reviewed — awaiting owner approval | #86 |
+| `issue-63-category-desktop-1440-loading.png` | #63 | `/catalog/laptops?page=2&minPrice=0.89&maxPrice=25654705.29` | 1440×900, viewport only | Loading grid | Fresh valid bounds retain all 23 fixture products; real listing delayed by bridge; retained sidebar | Model-reviewed — awaiting owner approval | #86 |
+| `issue-63-catalog-desktop-1440-list-loading.png` | #63 | `/catalog/all-products?page=2&view=list&minPrice=0.89&maxPrice=146384188.05` | 1440×900, viewport only | Loading list | Cold real price-filtered listing; sidebar-aware skeleton, not a cached response | Model-reviewed — awaiting owner approval | #86 |
+| `issue-63-catalog-desktop-1440-card-alignment.png` | #63 | `/catalog/all-products` | 1440×900, viewport only | Default grid | Unchanged real card title/price baselines; viewport avoids sticky-sidebar stitching | Model-reviewed — awaiting owner approval | #86 |
+| `issue-64-search-desktop-1440-default.png` | #64 | `/search?q=Dell` | 1440×900, viewport only | Query results | Two live Dell products, real facets and preserved accepted results composition | Model-reviewed — awaiting owner approval | #86 |
+| `issue-64-search-desktop-1440-suggestions-open.png` | #64 | `/search?q=Dell` | 1440×900, viewport only | Suggestions open | Live suggestions and visible focus; original approval at `d7db51a` | Model-reviewed — awaiting owner approval | #86 |
+| `issue-64-search-mobile-390-default.png` | #64 | `/search?q=Dell` | 390×844, full page | Query results | Mobile shared results, real filter-drawer trigger and concise footer | Model-reviewed — awaiting owner approval | #86 |
+| `issue-64-search-mobile-390-suggestions-open.png` | #64 | `/search?q=Dell` | 390×844, viewport only | Suggestions open | Readable live mobile popup, visible focus and concise footer | Model-reviewed — awaiting owner approval | #86 |
+| `issue-61-home-desktop-1440-search-expanded.png` | #61 | `/` | 1440×900, viewport only | Header search expanded | Preserved full-width interaction over refined home; original scoped approval at `d7db51a` | Model-reviewed — awaiting owner approval | #86 |
+| `issue-61-home-desktop-1440-search-suggestions-open.png` | #61 | `/` | 1440×900, viewport only | Header search, suggestions open | Live Dell suggestions over compact tiles; accepted placement preserved | Model-reviewed — awaiting owner approval | #86 |
+| `issue-63-category-desktop-1440-empty.png` | #63 | `/catalog/tarkvara` | 1440×900, full page | Empty | Real zero products, honest recovery, category highlight and concise footer | Model-reviewed — awaiting owner approval | #86 |
+| `issue-63-category-mobile-390-empty.png` | #63 | `/catalog/tarkvara` | 390×844, full page | Empty | Real empty state, wrapping, filter-drawer trigger and concise footer | Model-reviewed — awaiting owner approval | #86 |
+| `issue-63-category-desktop-1440-parent-empty.png` | #63 | `/catalog/gaming` | 1440×900, full page | Parent empty | Genuine zero direct members; Components has real €49.95 product; child/back navigation and concise footer | Model-reviewed — awaiting owner approval | #86 |
+| `issue-63-category-mobile-390-parent-empty.png` | #63 | `/catalog/gaming` | 390×844, full page | Parent empty | Honest scope, zero count, child navigation, drawer and concise footer | Model-reviewed — awaiting owner approval | #86 |
+| `issue-63-category-desktop-1440-error.png` | #63 | `/catalog/laptops?page=397910426` | 1440×900, full page | Controlled error | Cold bridge-selected failure, safe message, real Retry/valid-page recovery and concise footer | Model-reviewed — awaiting owner approval | #86 |
 | `issue-63-category-desktop-1440-not-found.png` | #63 | `/catalog/missing-category` | 1440×900, full page | HTTP 404 | Category-specific dark not-found, catalog recovery/noindex | Owner-rejected composition — before-evidence only | #63 |
 | `issue-63-category-mobile-390-not-found.png` | #63 | `/catalog/missing-category` | 390×844, full page | HTTP 404 | Mobile missing-category recovery/footer | Owner-rejected composition — before-evidence only | #63 |
-| `issue-86-home-desktop-1440-default.png` | #86 | `/` | 1440×900, full page | Default | Live main/child category entry points, eight real cards in three explicitly labelled category selections | Model-reviewed — awaiting owner approval | #86, #63, #64 |
-| `issue-86-home-mobile-390-default.png` | #86 | `/` | 390×844, full page | Default | Live two-column category shortcuts/cards, stacked sections and footer | Model-reviewed — awaiting owner approval | #86, #63, #64 |
-| `issue-86-home-mobile-390-sparse.png` | #86 | `/` | 390×844, full page | Sparse | Two real fixture categories, one directly assigned €499 product, no padding/backfill | Model-reviewed — awaiting owner approval | #86, #63, #64 |
-| `issue-86-home-desktop-1440-empty.png` | #86 | `/` | 1440×900, full page | Empty taxonomy | Genuine zero-category/product database, honest navigation recovery | Model-reviewed — awaiting owner approval | #86, #63, #64 |
-| `issue-86-home-mobile-390-empty.png` | #86 | `/` | 390×844, full page | Empty taxonomy | Real empty state, wrapping and mobile shell | Model-reviewed — awaiting owner approval | #86, #63, #64 |
-| `issue-86-home-desktop-1440-no-products.png` | #86 | `/` | 1440×900, full page | No assigned products | Real two-category/zero-product database, useful hierarchy without fake discovery | Model-reviewed — awaiting owner approval | #86, #63, #64 |
-| `issue-86-home-mobile-390-categories-error.png` | #86 | `/` | 390×844, full page | Controlled taxonomy failure | Isolated bridge fails taxonomy; explicit Retry, never a success-shaped empty state | Model-reviewed — awaiting owner approval | #86, #63, #64 |
-| `issue-86-home-desktop-1440-probe-error.png` | #86 | `/` | 1440×900, full page | Controlled probe failure | Real category navigation survives failed discovery probe; explicit Retry | Model-reviewed — awaiting owner approval | #86, #63, #64 |
-| `issue-86-home-desktop-1440-section-error.png` | #86 | `/` | 1440×900, full page | Controlled section failure | Only Accessories fails; two real successful selections and unavailable-price rules survive | Model-reviewed — awaiting owner approval | #86, #63, #64 |
-| `issue-86-home-desktop-1440-loading.png` | #86 | `/` | 1440×900, full page | Controlled Retry loading | Real delayed recovery, disabled Retrying feedback and supported accessible pending state | Model-reviewed — awaiting owner approval | #86, #63, #64 |
+| `issue-86-home-desktop-1440-default.png` | #86 | `/` | 1440×900, full page | Default | Compact real category tiles, eight unchanged real cards, concise headings/View all/footer | Model-reviewed — awaiting owner approval | #86 |
+| `issue-86-home-mobile-390-default.png` | #86 | `/` | 390×844, full page | Default | Readable two-column tiles, products 159px sooner, stacked sections and concise footer | Model-reviewed — awaiting owner approval | #86 |
+| `issue-86-home-desktop-1440-categories-expanded.png` | #86 | `/` | 1440×900, full page | Category disclosure expanded | All real remaining Components children, intact tiles and visible native-summary keyboard focus | Model-reviewed — awaiting owner approval | #86 |
+| `issue-86-home-mobile-390-categories-expanded.png` | #86 | `/` | 390×844, full page | Category disclosure expanded | Two columns with expanded real children, no clipping/fixed heights and visible keyboard focus | Model-reviewed — awaiting owner approval | #86 |
+| `issue-86-home-mobile-390-sparse.png` | #86 | `/` | 390×844, full page | Sparse | Real two-category/one-€499-product fixture, compact tile, no padding/backfill and concise footer | Model-reviewed — awaiting owner approval | #86 |
+| `issue-86-home-desktop-1440-empty.png` | #86 | `/` | 1440×900, full page | Empty taxonomy | Genuine zero-category/product database, honest navigation recovery and concise footer | Model-reviewed — awaiting owner approval | #86 |
+| `issue-86-home-mobile-390-empty.png` | #86 | `/` | 390×844, full page | Empty taxonomy | Real empty state, wrapping, mobile shell and concise footer | Model-reviewed — awaiting owner approval | #86 |
+| `issue-86-home-desktop-1440-no-products.png` | #86 | `/` | 1440×900, full page | No assigned products | Real two-category/zero-product database, compact useful hierarchy, no fake discovery and concise footer | Model-reviewed — awaiting owner approval | #86 |
+| `issue-86-home-mobile-390-categories-error.png` | #86 | `/` | 390×844, full page | Controlled taxonomy failure | Explicit Retry, never a success-shaped empty state; concise footer | Model-reviewed — awaiting owner approval | #86 |
+| `issue-86-home-desktop-1440-probe-error.png` | #86 | `/` | 1440×900, full page | Controlled probe failure | Real compact category navigation survives failed discovery probe; explicit Retry | Model-reviewed — awaiting owner approval | #86 |
+| `issue-86-home-desktop-1440-section-error.png` | #86 | `/` | 1440×900, full page | Controlled section failure | Only Accessories fails; successful selections, View all and unavailable-price rules survive | Model-reviewed — awaiting owner approval | #86 |
+| `issue-86-home-desktop-1440-loading.png` | #86 | `/` | 1440×900, full page | Controlled Retry loading | Compact real taxonomy, disabled Retrying feedback, supported accessible pending state and recovery | Model-reviewed — awaiting owner approval | #86 |
 
 No unexpected console, runtime or hydration errors occurred. Controlled
 HTTP-200 GraphQL failures and the deliberate missing-category HTTP 404 are expected.
