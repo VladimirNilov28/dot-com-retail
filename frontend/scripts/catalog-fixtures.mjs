@@ -90,7 +90,7 @@ async function handle(request, response) {
   if (url.pathname === "/control") {
     const next = url.searchParams.get("mode");
     if (next) {
-      if (!["normal", "delay", "error", "categories-error", "home-error", "home-delay", "home-section-error"].includes(next)) {
+      if (!["normal", "delay", "error", "categories-error", "home-error", "home-delay", "home-section-error", "product-error", "product-delay"].includes(next)) {
         response.writeHead(400); response.end("Unknown verification mode"); return;
       }
       mode = next;
@@ -118,9 +118,11 @@ async function handle(request, response) {
   const current = mode;
   const listing = name === "CatalogListing";
   const home = name === "HomeDiscovery" || name === "HomeCategoryProducts";
-  if ((current === "delay" && listing) || (current === "home-delay" && home)) await sleep(2500);
+  if ((current === "delay" && listing) || (current === "home-delay" && home) ||
+      (current === "product-delay" && name === "ProductDetail")) await sleep(2500);
   if ((current === "error" && listing) || (current === "categories-error" && name === "CatalogCategories") ||
       (current === "home-error" && name === "HomeDiscovery") ||
+      (current === "product-error" && name === "ProductDetail") ||
       (current === "home-section-error" && name === "HomeCategoryProducts" &&
         (!failureCategoryId || payload.variables?.categoryId === failureCategoryId))) {
     response.setHeader("Content-Type", "application/json");

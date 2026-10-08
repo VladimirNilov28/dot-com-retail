@@ -14,7 +14,6 @@ const artifacts = process.env.BROWSER_ARTIFACTS;
 if (artifacts) await mkdir(artifacts, { recursive: true });
 const browser = await chromium.launch();
 const errors = [];
-const expectedMissingProducts = new Set();
 const recoveryPages = [];
 const failures = ["categories-error", "probe-error", "section-error"];
 const homeOperations = ["CatalogCategories", "HomeDiscovery", "HomeCategoryProducts"];
@@ -36,10 +35,7 @@ function captureErrors(page) {
   page.on("pageerror", (error) => errors.push(`${page.url()}: ${error.message}`));
   page.on("console", (message) => {
     const text = message.text();
-    const source = message.location().url;
-    const expected = source && /Failed to load resource.*404/.test(text) &&
-      expectedMissingProducts.has(new URL(source).pathname);
-    if ((message.type() === "error" && !expected) || /hydration|did not match/i.test(text)) errors.push(`${page.url()}: ${text}`);
+    if (message.type() === "error" || /hydration|did not match/i.test(text)) errors.push(`${page.url()}: ${text}`);
   });
 }
 
@@ -75,32 +71,11 @@ async function loaded(page) {
 
 async function categoryTiles(page) {
   const tiles = page.locator(".home-category");
-  const disclosures = tiles.locator("details");
-  if (process.env.HOME_REQUIRE_DISCLOSURE === "1") {
-    assert.ok(await disclosures.count() > 0, "Real taxonomy must exercise remaining-child disclosures");
-  }
   for (const tile of await tiles.all()) {
     const root = tile.locator("h2 a");
     assert.match(await root.getAttribute("href"), /^\/catalog\/[^/?]+$/);
     assert.equal(await root.locator("svg[aria-hidden=true][focusable=false]").count(), 1);
-    assert.ok(await tile.locator(":scope > ul > li").count() <= 2, "Only two initial direct-child shortcuts");
-    const details = tile.locator("details");
-    if (!await details.count()) continue;
-    assert.equal(await details.getAttribute("open"), null);
-    const summary = details.locator("summary");
-    assert.equal(await summary.getAttribute("aria-label"), `More ${await root.textContent()} categories`);
-    assert.ok(await details.getByRole("link", { includeHidden: true }).count() > 0);
-    assert.equal(await details.getByRole("link").count(), 0, "Closed native disclosure hides remaining links");
-    await summary.focus(); await focused(summary);
-    await summary.press("Enter");
-    assert.notEqual(await details.getAttribute("open"), null);
-    for (const link of await details.getByRole("link").all()) {
-      assert.equal(await link.isVisible(), true);
-      assert.match(await link.getAttribute("href"), /^\/catalog\/[^/?]+$/);
-    }
-    await fits(page);
-    await summary.press("Space");
-    assert.equal(await details.getAttribute("open"), null, "Native disclosure closes with Space");
+    assert.equal(await tile.locator("ul, details").count(), 0, "Owner's root-only homepage is preserved");
   }
   if (await tiles.count() && await page.evaluate(() => innerWidth) === 390) {
     assert.equal(await page.locator(".home-categories").evaluate((element) => getComputedStyle(element).columnCount), "2");
@@ -124,7 +99,7 @@ async function focused(locator) {
 async function navigation(page) {
   const roots = page.getByRole("navigation", { name: "Shop by category" });
   assert.ok(await roots.getByRole("link").count() > 0);
-  for (const selector of [".home-category h2 a", ".home-subcategories a"]) {
+  for (const selector of [".home-category h2 a"]) {
     const link = page.locator(selector).first();
     assert.ok(await link.count(), `Real category hierarchy supplies ${selector}`);
     const href = await link.getAttribute("href");
@@ -138,12 +113,13 @@ async function navigation(page) {
   }
   const product = page.locator(".home-selection .product-name").first();
   const href = await product.getAttribute("href");
-  const query = (await product.textContent()).trim().slice(0, 100);
+  const name = (await product.textContent()).trim();
+  const query = name.slice(0, 100);
   assert.match(href, /^\/products\/[^/?]+$/);
-  expectedMissingProducts.add(new URL(href, base).pathname);
   await product.focus(); await focused(product); await product.press("Enter");
   await page.waitForURL(new URL(href, base).href);
-  assert.equal((await page.reload()).status(), 404, "Actual product slug destination; details remain deferred to #65");
+  assert.equal((await page.reload()).status(), 200, "Actual product slug resolves to public product details");
+  assert.equal(await page.locator(".product-page h1").textContent(), name);
   await page.goto(base); await loaded(page);
 
   const trigger = page.locator(".store-search-slot").getByRole("link", { name: "Search", exact: true });
@@ -178,6 +154,7 @@ async function navigation(page) {
   assert.ok(await page.locator("ul.catalog-products .product-card").count() > 0);
   await page.goto(base); await loaded(page);
 }
+
 
 try {
   const cold = process.env.HOME_VERIFY_COLD === "1";
@@ -281,7 +258,7 @@ try {
     await page.close();
   }
   assert.deepEqual(errors, [], "No unexpected home hydration/runtime/console errors");
-  console.log(`PASS real production home ${state}: 1440/390px, metadata, bounded visible selections, overflow, reduced motion${state === "populated" ? ", category/subcategory/product destinations, header suggestions/submission/two-stage Escape, no-JavaScript rendering" : ""}${recoveryPages.length ? ", localized retry/recovery" : ""}${cold ? ", measured cold/warm request budget" : ""}${process.env.HOME_VERIFY_REVALIDATION === "1" ? ", real 60-second revalidation" : ""}; unexpected errors: 0`);
+  console.log(`PASS real production home ${state}: 1440/390px, metadata, bounded visible selections, overflow, reduced motion${state === "populated" ? ", root-category/product destinations, header suggestions/submission/two-stage Escape, no-JavaScript rendering" : ""}${recoveryPages.length ? ", localized retry/recovery" : ""}${cold ? ", measured cold/warm request budget" : ""}${process.env.HOME_VERIFY_REVALIDATION === "1" ? ", real 60-second revalidation" : ""}; unexpected errors: 0`);
 } finally {
   await browser.close();
 }
