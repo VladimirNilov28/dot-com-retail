@@ -5,18 +5,6 @@ import { ProductCard } from "./product-card";
 import { catalogHref, homeCategories, type Category } from "@/lib/catalog/model";
 import { getHomeDiscovery, getHomeProducts } from "@/lib/catalog/server";
 
-export function HomeDiscoveryLoading() {
-  return <div className="home-loading" role="status" aria-label="Loading product selections">
-    <div className="catalog-skeleton h-6 w-48" />
-    <ul className="home-products" aria-hidden="true">
-      {Array.from({ length: 4 }, (_, index) => <li key={index} className="product-card">
-        <div className="catalog-image catalog-skeleton" />
-        <div className="catalog-skeleton h-12" /><div className="catalog-skeleton h-6 w-24" />
-      </li>)}
-    </ul>
-  </div>;
-}
-
 export function HomeReadError({ title, message }: { title: string; message: string }) {
   return <section className="space-y-3" aria-label={title}>
     <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
@@ -43,7 +31,7 @@ async function CategoryProducts({ category }: { category: Category }) {
   </section>;
 }
 
-export async function HomeDiscovery({ categories }: { categories: Category[] }) {
+export async function homeDiscoveryContent(categories: Category[]) {
   const result = await getHomeDiscovery();
   if (result.status !== "success") return <HomeReadError title="Product selections unavailable" message={result.error.message} />;
   const selected = homeCategories(categories, result.data.searchProducts.facets.categories);

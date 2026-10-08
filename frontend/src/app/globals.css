@@ -416,7 +416,7 @@
   .home-category-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; }
   .home-subcategories { display: grid; gap: 0.25rem; margin-block-start: 0.5rem; color: var(--muted); font-size: 0.875rem; }
   .home-products { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem 1rem; }
-  .home-selection, .home-loading { display: grid; gap: 1.5rem; }
+  .home-selection { display: grid; gap: 1.5rem; }
   .home-discovery { display: grid; gap: 2.5rem; }
   @media (min-width: 48rem) {
     .home-categories { grid-template-columns: repeat(4, minmax(0, 1fr)); }

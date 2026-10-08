@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Suspense } from "react";
-import { HomeDiscovery, HomeDiscoveryLoading, HomeReadError } from "@/components/home-discovery";
+import { homeDiscoveryContent, HomeReadError } from "@/components/home-discovery";
 import { categoryIndex, catalogHref } from "@/lib/catalog/model";
 import { getCategories } from "@/lib/catalog/server";
 
@@ -15,6 +14,8 @@ export default async function Home() {
   const categories = result.status === "success" ? result.data.categories : [];
   const index = categoryIndex(categories);
   const roots = index.children();
+  const discovery = result.status === "success" && roots.length
+    ? await homeDiscoveryContent(categories) : null;
   return <div className="home-page">
     <header className="home-heading">
       <div className="space-y-2">
@@ -43,7 +44,7 @@ export default async function Home() {
             </section>;
           })}
         </nav>
-        <Suspense fallback={<HomeDiscoveryLoading />}><HomeDiscovery categories={categories} /></Suspense>
+        {discovery}
       </> : <section className="space-y-2">
         <h2 className="text-xl font-semibold tracking-tight">No categories yet</h2>
         <p className="text-sm text-muted">You can still browse all available products or search the catalog.</p>

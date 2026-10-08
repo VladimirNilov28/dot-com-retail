@@ -144,11 +144,18 @@ try {
   for (const width of [1440, 390]) {
     const page = await browser.newPage({ viewport: { width, height: width === 1440 ? 900 : 844 }, reducedMotion: "reduce" });
     captureErrors(page);
-    await page.goto(base, { waitUntil: state === "loading" && width === 1440 ? "commit" : "load" });
+    await page.goto(base);
     if (state === "loading" && width === 1440) {
-      await page.getByRole("status", { name: "Loading product selections" }).waitFor();
-      assert.equal(await page.locator(".catalog-skeleton").first().evaluate((element) => getComputedStyle(element).animationName), "none");
+      await page.getByRole("heading", { name: "Product selections unavailable", exact: true }).waitFor();
+      await controls({ mode: "home-delay" });
+      await page.getByRole("button", { name: "Retry", exact: true }).click();
+      const pending = page.getByRole("button", { name: /Retrying/ });
+      await pending.waitFor();
+      assert.equal(await pending.getAttribute("aria-busy"), "true");
+      assert.equal(await pending.isDisabled(), true);
       await capture(page, width, "loading");
+      await page.waitForFunction(() => document.querySelectorAll(".home-selection").length === 3);
+      await controls({ mode: "normal" });
     }
     await loaded(page);
     if (cold && width === 1440) {
