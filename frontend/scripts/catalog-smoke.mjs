@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { verifyFixture } from "./catalog-fixture-data.mjs";
 
+const control = process.env.CATALOG_TEST_CONTROL;
+if (!control) throw new Error("Full catalog verification requires the isolated CATALOG_TEST_CONTROL bridge; never run fixture assertions on the owner stack.");
+await verifyFixture(new URL("/graphql", control));
 if (!process.env.PLAYWRIGHT_MODULE) throw new Error("Set PLAYWRIGHT_MODULE to an external Playwright installation.");
 const { chromium } = await import(pathToFileURL(resolve(process.env.PLAYWRIGHT_MODULE)).href);
 const base = process.env.FRONTEND_URL ?? "http://localhost:3000";
-const control = process.env.CATALOG_TEST_CONTROL;
 const shots = process.env.BROWSER_ARTIFACTS;
 if (shots) await mkdir(shots, { recursive: true });
 const browser = await chromium.launch();
@@ -45,6 +48,58 @@ async function sidebarScope(page, width) {
     await dialog.waitFor({ state: "visible" });
   }
   return dialog;
+}
+
+async function searchAndFacets(page, width) {
+  await page.goto(`${base}/catalog/laptops?page=2&view=list`); await loaded(page);
+  await page.getByRole("combobox", { name: "Sort", exact: true }).selectOption("PRICE_DESC");
+  await page.waitForURL((url) => url.searchParams.get("sort") === "PRICE_DESC" && !url.searchParams.has("page"));
+  await loaded(page);
+  assert.equal(await page.locator("ul.catalog-products .product-card").first().getByRole("link").getAttribute("href"), "/products/laptop-23");
+  await page.getByRole("combobox", { name: "Sort", exact: true }).selectOption("RATING_DESC");
+  await page.waitForURL((url) => url.searchParams.get("sort") === "RATING_DESC"); await loaded(page);
+  assert.equal(await page.locator("ul.catalog-products .product-card").first().getByRole("link").getAttribute("href"), "/products/laptop-1",
+    "Unrated fixture products use the documented ID tie-break, not fabricated ratings");
+  await page.goto(`${base}/catalog/laptops?page=2&view=list`); await loaded(page);
+  let scope = await sidebarScope(page, width);
+  await scope.getByRole("spinbutton", { name: "Minimum price in EUR" }).fill("500");
+  await scope.getByRole("spinbutton", { name: "Maximum price in EUR" }).fill("600");
+  await scope.getByRole("button", { name: "Apply", exact: true }).click();
+  await page.waitForURL((url) => url.searchParams.get("minPrice") === "500" && !url.searchParams.has("page"));
+  await loaded(page);
+  assert.match(await page.locator(".catalog-toolbar").textContent(), /1–2 of 2 products/);
+  assert.equal(new URL(page.url()).searchParams.get("view"), "list");
+  scope = await sidebarScope(page, width);
+  await scope.getByRole("button", { name: "Memory (RAM)", exact: true }).click();
+  const ram = scope.getByRole("link", { name: "16GB (1)", exact: true });
+  await ram.click();
+  await page.waitForURL((url) => url.searchParams.get("attr.ram") === "16GB"); await loaded(page);
+  assert.match(await page.locator(".catalog-toolbar").textContent(), /1–1 of 1 products/);
+  assert.match(await page.locator("ul.catalog-products .product-card").textContent(), /Pulse 13 Everyday Laptop.*€569.00/);
+  await page.reload(); await loaded(page);
+  assert.equal(new URL(page.url()).searchParams.get("attr.ram"), "16GB");
+  scope = await sidebarScope(page, width);
+  await scope.getByRole("link", { name: "Clear all", exact: true }).click();
+  await page.waitForURL((url) => !url.searchParams.has("attr.ram") && !url.searchParams.has("minPrice"));
+  await loaded(page);
+  assert.match(await page.locator(".catalog-toolbar").textContent(), /1–20 of 23 products/);
+  await page.goBack(); await loaded(page);
+  assert.equal(new URL(page.url()).searchParams.get("attr.ram"), "16GB");
+  await page.goForward(); await loaded(page);
+  const query = page.getByRole("combobox", { name: "Search products", exact: true });
+  await query.fill("NovaBook");
+  await query.press("Enter");
+  await page.waitForURL((url) => url.pathname === "/catalog/laptops" && url.searchParams.get("q") === "NovaBook" && !url.searchParams.has("page"));
+  await loaded(page);
+  assert.match(await page.locator(".catalog-toolbar").textContent(), /1–4 of 4 products/);
+  await page.goto(`${base}/search?q=NovaBook`); await loaded(page);
+  assert.match(await page.locator(".catalog-toolbar").textContent(), /1–4 of 4 products/);
+  await page.getByRole("combobox", { name: "Search products", exact: true }).fill("Nova");
+  await page.getByRole("combobox", { name: "Search products", exact: true }).fill("NovaBook");
+  await page.getByRole("listbox", { name: "Search suggestions" }).waitFor();
+  assert.equal(await page.getByRole("option").count(), 4);
+  await page.getByRole("combobox", { name: "Search products", exact: true }).press("Escape");
+  await page.getByRole("listbox", { name: "Search suggestions" }).waitFor({ state: "hidden" });
 }
 try {
   if (control) await mode("normal");
@@ -136,6 +191,10 @@ try {
     const gamingSidebar = await sidebarScope(page, width);
     assert.equal(await gamingSidebar.getByRole("navigation", { name: "Category navigation" })
       .getByRole("link", { name: "Components", exact: true }).count(), 1);
+    if (width !== 1440) {
+      await page.keyboard.press("Escape");
+      await gamingSidebar.waitFor({ state: "hidden" });
+    }
     await capture(page, "category", viewport, "parent-empty");
     await page.goto(`${base}/catalog/monitors`); await loaded(page);
     assert.match(await page.locator("main").textContent(), /0 products.*No products yet/);
@@ -152,8 +211,9 @@ try {
     await page.getByRole("heading", { name: "Invalid catalog URL" }).waitFor();
     await page.getByRole("link", { name: "Go to first page" }).click();
     await page.waitForURL(`${base}/catalog/all-products`); await loaded(page);
+    await searchAndFacets(page, width);
     await page.close();
-    results.push(`PASS ${width}px: real bounded prices, direct categories, pagination/reload/history, keyboard view controls, empty/not-found and overflow`);
+    results.push(`PASS ${width}px: real bounded prices, direct categories, pagination/reload/history, keyboard view controls, empty/not-found, search/facets/sorts and overflow`);
   }
   const noJs = await browser.newPage({ javaScriptEnabled: false });
   await noJs.goto(`${base}/catalog/laptops`);

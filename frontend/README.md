@@ -4,8 +4,107 @@ Responsive ByteCore storefront shell for [#61](https://github.com/VladimirNilov2
 typed Hive access for [#62](https://github.com/VladimirNilov28/dot-com-retail/issues/62),
 and public catalog browsing for [#63](https://github.com/VladimirNilov28/dot-com-retail/issues/63),
 built on the [#60](https://github.com/VladimirNilov28/dot-com-retail/issues/60) foundation.
-The HeroUI v3 Card/Button demonstration lives at `/dev/foundation`. Shopping
-actions, search, account and checkout are not implemented or simulated.
+The HeroUI v3 Card/Button demonstration lives at `/dev/foundation`. Catalog,
+search and category-based homepage discovery use real anonymous Hive data.
+Account, cart, checkout and product details remain unimplemented.
+
+## #86 homepage discovery contract
+
+Home leads with real main-category links and up to four child shortcuts per
+group (larger groups link to their category for the rest). Categories have no
+invented descriptions, icons, imagery or counts. A secondary All products link
+continues to use `/catalog/all-products`; `/catalog` remains a compatibility
+redirect. The footer owner's catalog-link correction is preserved.
+
+`HomeDiscovery` calls anonymous `searchProducts` at page 0/size 1 for direct
+category facets only. Positive-count facet IDs are matched to the real taxonomy,
+ordered by the existing English-locale name/ID comparison, and capped at three.
+Each selected category uses `HomeCategoryProducts`, fixed page 0/size 4,
+`categoryId` and `PRICE_ASC` (backend product-ID tie-break). Sections say
+**Browse <category>** and explain their direct-membership/lowest-price ordering.
+This is a deterministic category sample, not curation, popularity,
+personalization or a recommendation. Parent membership never includes children.
+No-price products retain the shared Price unavailable state.
+
+The cold-render budget is **five logical Hive operations maximum**: one
+request-deduplicated taxonomy shared with the header, one probe and up to three
+parallel selections, with at most twelve product cards. There is no per-category
+probe loop, unbounded products query or fallback all-products feed. Empty
+selections are omitted; safe probe/category/section errors have explicit Retry
+and do not masquerade as successful empty data. Local server Suspense fallbacks
+reuse the final grid geometry; no client-only catalog fetching or production
+fixtures are introduced.
+
+Validated public successes reuse endpoint/origin/input-keyed caching with
+**60-second stale-while-revalidate**, not a hard maximum age guarantee. Failures
+are logged safely and are not cached as successes or permanent error prerenders.
+Raw/private transport stays no-store. Metadata and categories/products are
+server-rendered. Existing expanded-header Search is unchanged on home; listing
+pages keep their default-visible input. Product links use actual slugs at
+`/products/[slug]`; successful product detail rendering remains deferred to #65.
+
+### Reproducible isolated catalog verification
+
+Never point the English-slug fixture suite at the owner's Estonian live catalog.
+`scripts/catalog-fixtures.mjs` starts independently named disposable Postgres,
+the current Spring bootJar and real Hive on loopback ports 5463/8063/4063, plus
+a verification-only forwarding/control bridge on 4064. It mounts no owner
+database volumes and does not start/reconfigure the main Compose project.
+The Hive container uses host networking only to reach the separate loopback
+Spring process; its HTTP listener is loopback-bound. Kafka listeners/admin
+auto-creation are disabled only in this isolated runner's environment.
+Normal bridge requests reach real Hive; selected delays/errors never enter
+application production behavior.
+
+```bash
+# Build current Spring first, from backend:
+./gradlew bootJar
+# From frontend, with an already-issued real setup token supplied privately:
+CATALOG_SETUP_TOKEN=<private-environment-value> node scripts/catalog-fixtures.mjs
+# Alternatively supply CATALOG_SETUP_EMAIL/CATALOG_SETUP_PASSWORD privately;
+# the runner uses the supported loopback dev-token flow, not forged authentication.
+# --empty starts an isolated empty database without requiring setup credentials.
+```
+
+Do not put tokens in source, browser storage, command history or screenshots.
+Use environment injection from a private credential source, not the literal
+placeholder above. TOTP/AAL2 accounts need a valid already-issued token.
+The runner refuses nonempty seed targets and restricts mutations to its isolated
+Hive endpoint. It creates the manifest's nine-category/thirty-product recipe
+through supported mutations, adding deterministic laptop `ram`/`color`
+attributes without changing product counts or prices. On termination it cleans
+only its owned child process, exact container IDs/anonymous volumes and unique
+temporary configuration directory.
+
+Build/serve frontend with a matching origin and a fresh cache identity for
+controlled scenarios:
+
+```bash
+HIVE_GRAPHQL_URL=http://127.0.0.1:4064/graphql \
+  STOREFRONT_ORIGIN=http://localhost:3164 bun run build
+HIVE_GRAPHQL_URL=http://127.0.0.1:4064/graphql \
+  STOREFRONT_ORIGIN=http://localhost:3164 bun start --hostname 127.0.0.1 --port 3164
+PLAYWRIGHT_MODULE=<authorized-external-playwright-index.mjs> \
+  FRONTEND_URL=http://localhost:3164 \
+  CATALOG_TEST_CONTROL=http://127.0.0.1:4064/control \
+  BROWSER_ARTIFACTS=<temporary-capture-directory> node scripts/catalog-smoke.mjs
+```
+
+Catalog smoke now preflights the exact fixture taxonomy/count and requires its
+isolated controls before opening a browser. English `laptops` is the intended
+fixture slug, not an obsolete application route. Missing fixtures cause an
+explicit setup failure; changing the test to a live slug would invalidate its
+23-product price/pagination coverage. Full smoke additionally covers supported
+search, price/attribute facets, sorts and URL restoration. Unrated rating-sort
+fixtures check ID tie-break only, not rated ordering.
+
+**Current delivery limitations:** browser tooling installation and privileged
+fixture-seeding execution were denied by the execution approval checks with
+the owner unavailable. The empty isolated real stack was verified responsive,
+but populated fixtures, the two Playwright smoke suites and fresh screenshots
+have not yet been verified in this pass. No screenshot is newly promoted.
+Read the latest issue report and manifest rather than treating earlier
+successful runs or the checks below as this pass's full acceptance evidence.
 
 **Before changing storefront UI, read [`docs/frontend/DESIGN.md`](../docs/frontend/DESIGN.md)**
 — the approved design, its reasoning and extension guidance — and look at the
@@ -20,10 +119,11 @@ retains the single skip link and deterministic dark theme.
 
 | Route | Current behavior |
 |---|---|
-| `/` | Compact holding composition: intro, catalog action, honest availability list |
-| `/catalog` | Server-rendered bounded public product listing, category navigation and grid/list views |
+| `/` | Real main/child category entry points and up to three deterministic direct-category product selections |
+| `/catalog` | Compatibility redirect to home, or legacy listing query forwarded to `/catalog/all-products` |
+| `/catalog/all-products` | Bounded shared results, grid/list, supported facets/sorts and URL-backed state |
 | `/catalog/[slug]` | Direct category members, ancestors/child links, real metadata and missing-category 404 |
-| `/search` | Honest unavailable page; no search form or quick-search overlay |
+| `/search` | Default-visible search input and shared URL-backed catalog results/facets/sorts/suggestions |
 | `/account` | Honest unavailable page; no fake sign-in |
 | `/cart` | Honest unavailable page; no counts, cart contents, preview or checkout |
 | `/dev/foundation` | `noindex, nofollow` component playground; not linked from shell navigation |
@@ -40,19 +140,22 @@ Breakpoint changes close overlays and move focus out of controls becoming hidden
 At very narrow CSS widths (including 200% zoom on mobile), branding and the
 trigger stack and long text wraps instead of being clipped.
 
-`StoreHeader` accepts optional `quickSearch` and `cartPreview` React nodes as
-composition points for #64 and #73. Both are absent today; Search and Cart remain
-ordinary links. Do not add placeholder interactive overlays to those slots.
+`StoreHeader` accepts the optional `cartPreview` composition point for #73.
+Search is implemented by StoreNavigation: listing routes hide the header action
+in favor of their own visible SearchForm; other routes expand the accepted
+full-width header search, with a `/search` link fallback without JavaScript.
+Cart remains an ordinary link; do not simulate a preview.
 
-> **Planned correction.** The owner rejected the catalog composition on
-> 2026-10-06. `/catalog` becomes category discovery, category and search results
-> share one implementation behind a desktop sidebar and a mobile drawer, the
-> narrow catalog dropdown becomes grouped navigation, and the `quickSearch` slot
-> receives a real search input rather than remaining a link. The requirements and
-> the step order are in [`docs/frontend/DESIGN.md`](../docs/frontend/DESIGN.md)
-> §9; the table above describes behaviour **today**, not the target.
+> **Current correction.** Category discovery uses the grouped header megamenu
+> and the #86 homepage entry points; `/catalog` does not have a standalone
+> discovery page. Category/search results share the desktop sidebar and mobile
+> drawer, and search follows the route-aware placement contract above.
+> [`docs/frontend/DESIGN.md`](../docs/frontend/DESIGN.md) §9 records the decisions.
 
 ## #61 design follow-up
+
+Historical implementation account below; current route/search/home behavior is
+recorded above and in DESIGN.md §9. Do not restore the old holding composition.
 
 The shell borrows electronics-store hierarchy, not branding or content, from
 Arvutitark, 1a and C&C: a clear ByteCore identity, a single catalog entry,
