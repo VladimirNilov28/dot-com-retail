@@ -63,6 +63,9 @@ async function inspect(page, route, mobile) {
     assert.ok(await page.locator(".home-selection").count() <= 3);
     assert.ok(await page.locator(".home-selection .product-card").count() <= 12);
     assert.equal(await page.locator(".home-selection .product-card h2").count(), 0, "Product headings sit below section h2s");
+    for (const section of await page.locator(".home-selection").all()) {
+      assert.equal(await section.isVisible(), true, "Every SSR selection is visible, including without JavaScript");
+    }
   }
   if (route.path !== "/" && route.path !== "/catalog/all-products" && route.path !== "/search") {
     assert.match(await page.locator("main").textContent(), /not available yet/i);
@@ -343,9 +346,10 @@ async function checkCategoryNavigation(page, mobile) {
   // expansion control that is separate from its link.
   // "All products" (§9.1): a single, explicit secondary entry above the
   // grouped categories, not one of the grouped category links itself.
-  assert.equal(await page.getByRole("link", { name: "All products", exact: true }).count(), 1,
+  const dialog = page.getByRole("dialog", { name: mobile ? "ByteCore navigation" : "Category navigation" });
+  assert.equal(await dialog.getByRole("link", { name: "All products", exact: true }).count(), 1,
     "All products is an explicit secondary entry above the grouped categories");
-  const nav = page.getByRole("navigation", { name: "Catalog categories" });
+  const nav = dialog.getByRole("navigation", { name: "Catalog categories" });
   if (await nav.count() === 0) return "grouped category navigation absent (no category data)";
   const shape = await nav.evaluate((root) => {
     const groups = [...root.querySelectorAll(":scope > ul > li")];

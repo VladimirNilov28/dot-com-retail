@@ -6,7 +6,7 @@ import { categoryIndex, catalogHref } from "@/lib/catalog/model";
 import { getCategories } from "@/lib/catalog/server";
 
 export const metadata: Metadata = {
-  title: "Browse electronics | ByteCore",
+  title: "Browse electronics",
   description: "Explore electronics by category and browse real products, with clear prices and useful category shortcuts.",
 };
 
