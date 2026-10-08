@@ -16,6 +16,37 @@ owner's.
 
 ## Status vocabulary
 
+### Owner approval -- desktop search compositions, 2026-10-08
+
+The owner approved the visible compositions of these original assets:
+
+| Asset | Original asset revision | Approval scope |
+|---|---|---|
+| `issue-64-search-desktop-1440-suggestions-open.png` | `d7db51a65dd84f388d2f5a262c7c16f56ec3c9a9` | Desktop search page with suggestions open |
+| `issue-61-home-desktop-1440-search-expanded.png` | `d7db51a65dd84f388d2f5a262c7c16f56ec3c9a9` | Expanded desktop header search replacing sibling header contents |
+| `issue-61-home-desktop-1440-search-suggestions-open.png` | `d7db51a65dd84f388d2f5a262c7c16f56ec3c9a9` | Expanded desktop header search with suggestions open |
+
+All three repository images were opened and matched to the described states.
+Original external attachments were not supplied in this request, so no
+pixel comparison against those attachments is claimed. The owner explicitly
+confirmed recording approval against these inspected repository compositions.
+The asset revision identifies the original image bytes, not a newly established
+rendered-source/capture timestamp.
+
+This approval does **not** cover mobile, animation, functional verification or
+the temporary homepage body. The homepage images now show historical body
+content and are not current whole-page evidence for #86. Preserve this original
+approval record when refreshing them; replacement images start
+**Model-reviewed -- awaiting owner approval**, never inherit approval.
+The expanded full-width interaction remains intentional: no inline-header
+redesign is authorized. The 2026-10-07 desktop megamenu approval and original
+asset at `6a30862e20bffa68140d516511f2fb4291617c38` remain unchanged.
+
+Earlier statements below that no capture is approved, or that only the
+megamenu is approved, are historical and superseded by this scoped record.
+Current retained images must still be read together with their revision and
+stale-state notes; owner approval is not a freshness or test-success claim.
+
 | Status | Meaning |
 |---|---|
 | **Owner-approved baseline** | The owner explicitly approved this appearance. Treat as the reference. Never overwrite it with an uninspected or known-broken capture. **One file holds this status** — see "Owner approval — desktop megamenu, 2026-10-07" below; every other file is Model-reviewed or Owner-rejected. |
@@ -82,6 +113,36 @@ Names are **stable**. Replace the file in place. No timestamps, no `-v2`, no
 `-final`, no numbered copies.
 
 ## Current set
+
+### #86 current revision -- recapture blocked, 2026-10-08
+
+The homepage body is now category/product discovery, not the holding
+composition shown in every retained `issue-61-home-*` image. All of those
+images are therefore **Stale as current whole-page evidence**: desktop/mobile/
+narrow defaults, account popover, mobile drawer, expanded search/suggestions
+and the homepage behind the desktop megamenu. The original scoped owner
+approvals remain attached to their original bytes/revisions, not to the new
+homepage. No menu or search redesign was made.
+
+No replacement image or #86 desktop/mobile capture is promoted in this pass:
+the external Playwright installation is missing, its installation was denied
+by the execution approval checks, and the owner was unavailable to authorize
+it. Original assets are deliberately retained, not relabelled current.
+The six previously Stale catalog files below also remain Stale; the new
+isolated empty Postgres/Spring/Hive stack was verified responsive, but fixture
+seeding with the supported private dev credential was denied before execution.
+There is no fresh populated fixture or browser evidence for those assertions.
+
+Still required: inspect and promote #86 desktop/mobile and relevant data states;
+refresh every invalidated #61 home state (new files start Model-reviewed);
+recapture both category lists, grid loading, both parent-empty states and the
+controlled error; verify whether any shared-card/search capture also needs
+refreshing. Last updated by **#86, #63, #64** applies to this limitation record,
+not a claim that the image bytes were updated.
+
+The historical source-revision/status descriptions below describe retained
+original evidence. This subsection and the scoped 2026-10-08 approval record
+override contradictory currentness or approval-count claims in those records.
 
 Source revision for every entry below: **`5ffceb0b6d21437a778491422cf4eeeec665325f`**
 on `dev` (#63 listing and refreshed #61 shell), **except** the three captures
@@ -442,9 +503,9 @@ files in this round. They remain *Model-reviewed — awaiting owner approval*.
 | `issue-63-catalog-desktop-1440-list-loading.png` | #63 | `/catalog/all-products?view=list` → page 2 | 1440×900 | Loading list | "All products" listing at its stable route, sidebar-aware list skeleton matching the new layout | Model-reviewed — awaiting owner approval | #61, #63, #64 |
 | `issue-63-catalog-desktop-1440-card-alignment.png` | #63 | `/catalog/all-products` | 1440×900, viewport only (not full page — full-page capture stitches the sticky sidebar twice, a known Chromium/Playwright artifact, not a product defect) | Default grid | Grid-card title/price baselines aligned consistently across one- and two-line product names; full 32-key attribute facet list collapsed by default | Model-reviewed — awaiting owner approval | #63, #64 |
 | `issue-64-search-desktop-1440-default.png` | #64 | `/search?q=Dell` | 1440×900, full page | Query results | Refreshed: same sidebar/grid/toolbar components as category pages with collapsible facets, result count, sort; removed technical stock-disclaimer copy | Model-reviewed — awaiting owner approval | #64 |
-| `issue-64-search-desktop-1440-suggestions-open.png` | #64 | `/search` | 1440×900, viewport only (avoids the same sticky-sidebar stitching artifact) | Suggestions open | Debounced name/slug-only suggestion popup, now flush-aligned beneath the query input with tightened item density | Model-reviewed — awaiting owner approval | #64 |
-| `issue-61-home-desktop-1440-search-expanded.png` | #61 | `/` | 1440×900 | Header search expanded | Clicking the header Search action on a non-listing page smoothly expands it into a full-width overlay field with focus, a submit control and an accessible close control; sibling header controls (brand, catalog, account, cart) are hidden (not just visually offset) while expanded | Model-reviewed — awaiting owner approval | #61 |
-| `issue-61-home-desktop-1440-search-suggestions-open.png` | #61 | `/` | 1440×900 | Header search, suggestions open | Same expanded header control showing live suggestions reusing the shared suggestion styling; submitting navigates globally to `/search`, not scoped to any category | Model-reviewed — awaiting owner approval | #61 |
+| `issue-64-search-desktop-1440-suggestions-open.png` | #64 | `/search` | 1440×900, viewport only (avoids the same sticky-sidebar stitching artifact) | Suggestions open | Original `d7db51a` desktop composition: debounced name/slug-only suggestion popup, flush-aligned beneath the query input | Owner-approved baseline — 2026-10-08, visible desktop composition only; original revision, not renewed functional verification | #86 (approval record only) |
+| `issue-61-home-desktop-1440-search-expanded.png` | #61 | `/` | 1440×900 | Header search expanded | Original `d7db51a` expanded full-width header composition; homepage body is historical and excluded from approval | Owner-approved baseline — 2026-10-08, header composition only. Stale whole-page evidence after #86 body replacement; fresh capture blocked | #86 (approval/stale record only) |
+| `issue-61-home-desktop-1440-search-suggestions-open.png` | #61 | `/` | 1440×900 | Header search, suggestions open | Original `d7db51a` expanded header with real suggestions; homepage body is historical and excluded from approval | Owner-approved baseline — 2026-10-08, header composition only. Stale whole-page evidence after #86 body replacement; fresh capture blocked | #86 (approval/stale record only) |
 | `issue-63-category-desktop-1440-empty.png` | #63 | `/catalog/tarkvara` | 1440×900, full page | Empty | Zero result count, honest "No products yet" copy, all-products recovery, sidebar with the empty category highlighted | Model-reviewed — awaiting owner approval | #63, #64 |
 | `issue-63-category-mobile-390-empty.png` | #63 | `/catalog/tarkvara` | 390×844, full page | Empty | Mobile empty state and wrapping, "Categories & filters" drawer trigger | Model-reviewed — awaiting owner approval | #63, #64 |
 | `issue-63-category-desktop-1440-parent-empty.png` | #63 | `/catalog/gaming` | 1440×900, full page | Parent empty | Honest direct-membership scope and child destination | Stale — the sidebar now wraps this state too; not re-shown. No live category currently has children while itself having zero direct products, so this needs the isolated fixture stack to recapture honestly | #63 |

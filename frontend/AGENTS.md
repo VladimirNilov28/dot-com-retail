@@ -29,7 +29,7 @@ backend work, GraphQL transport, tooling and config.
    invalidate — a ticket ID marks ownership, not exclusive coverage, so a shared
    header, token or component affects several tickets' screenshots, and its
    *Planned invalidation* table already maps each correction step to the captures
-   it supersedes. Mind the status column: **no capture is owner-approved today**,
+   it supersedes. Mind the status column and the manifest's **scoped owner approvals**,
    and captures marked **Owner-rejected composition** show a layout the owner
    turned down — they are before-evidence, never a target. Then open
    the closest already-implemented page and reuse its components, shared classes

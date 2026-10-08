@@ -24,7 +24,8 @@ Paste or reference this in a storefront UI ticket prompt.
 > *Planned invalidation* table already maps each correction step to the captures
 > it supersedes. Note the status column: captures marked **Owner-rejected
 > composition** show a layout the owner turned down; they are before-evidence,
-> never a standard to match, and **no capture is owner-approved today**. If this
+> never a standard to match. Consult the manifest's **scoped owner approvals
+> and stale-state records**; replacement images never inherit approval. If this
 > is a
 > new kind of page with no ByteCore precedent, also study the third-party store
 > references in `docs/references/` — its README indexes every capture by page,
@@ -130,8 +131,8 @@ routine edit.
 > the owner's 2026-10-06 navigation and discovery correction and overrides
 > anything earlier that conflicts with it**), `docs/frontend/baseline/`
 > (screenshots) and `docs/frontend/baseline/README.md`
-> (the manifest: what each image covers and its status). **No capture is
-> owner-approved today.** Judge consistency against the **conventions** in
+> (the manifest: what each image covers and its status, scoped approvals and
+> original revisions). Judge consistency against the **conventions** in
 > `DESIGN.md`, not against an image. A capture marked "Model-reviewed —
 > awaiting owner approval" is work under review, not a standard. A capture
 > marked **"Owner-rejected composition"** is a layout the owner turned down:

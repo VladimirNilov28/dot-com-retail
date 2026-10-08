@@ -626,10 +626,10 @@ Two distinct states, both recorded in the manifest:
 
 **Passing lint, typecheck, the build or the smoke script does not establish
 owner approval. Neither does taking a screenshot.** Only the owner's explicit
-approval promotes a capture to baseline. **No capture in `baseline/` is
-owner-approved today**: the original `issue-61-*` set was approved at `aef4673`,
-but every file was replaced when the shell and catalog changed, and approval is
-not inherited by a replacement. A third status now also applies —
+approval promotes a capture to baseline. Consult the manifest's scoped
+2026-10-07 desktop megamenu and 2026-10-08 desktop search approvals at their
+original revisions; neither approves future homepage bodies or replacement
+images. Approval is not inherited by a replacement. A third status also applies —
 **Owner-rejected composition** — for captures whose layout the owner has
 explicitly turned down. See the manifest.
 
@@ -1026,13 +1026,14 @@ Small and sequential; each step is independently reviewable.
 | 4 | Real header search input and plain submission (§9.6) | #61 → #64 | 3 (results route must exist) | **Done** — listing routes show the page's own search field by default (header trigger hidden there); other routes get an expandable header overlay reusing the same suggestion hook and canonical `/search` route — awaiting owner visual review |
 | 5 | Query results and real facets in the shared sidebar/drawer (§9.0, §9.4) | #64 | 3, 4 | **Done** at `/search`, ahead of step 4 (the owner authorized #63+#64 together; the search page itself carries its own input) — awaiting owner visual review |
 | 6 | Debounced suggestions with keyboard selection (§9.6) | #64 | 5 | **Done** at `/search` — awaiting owner visual review |
-| 7 | Home category entry points and labelled discovery sections (§9.2) | #86 | 3 (shared card), 1 | Not started |
+| 7 | Home category entry points and labelled discovery sections (§9.2) | #86 | 3 (shared card), 1 | Implemented locally; real HTTP/SSR checks pass, browser verification and fresh screenshots blocked -- see manifest |
 
 Steps 5 and 6 landed on the `/search` results page ahead of step 4 because the
 owner authorized #63 and #64 together for one coherent results interface; the
-*header's* input (step 4) is still a separate, not-yet-built control — today's
-header "Search" remains a plain link to `/search`, per #64's explicit
-instruction to leave header search to #61.
+header's input subsequently landed with the final placement contract in §9.6.
+The owner approved the three shown desktop search compositions on 2026-10-08;
+consult the manifest for original revisions and approval limits. This is not
+fresh mobile/functional verification or approval of the replacement homepage.
 
 Each step recaptures the screenshots it invalidates and updates the manifest in
 the same commit (§8). The manifest's *Planned invalidation* table already records
