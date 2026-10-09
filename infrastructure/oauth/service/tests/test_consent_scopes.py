@@ -56,6 +56,22 @@ class ConsentScopeTest(unittest.TestCase):
         self.request["requested_scope"] = ["user:read", "user:read", "product:write"]
         self.assertEqual(self.grant(), ["user:read"])
 
+    def test_public_bff_consent_dispatches_but_private_bound_consent_applies_the_actual_policy(self):
+        self.request["client"] = {"client_id": "bytecore-storefront",
+                                  "scope": "openid offline_access user:read"}
+        self.request["requested_scope"] = ["openid", "offline_access", "user:read", "user:write"]
+        self.request["request_url"] = "http://hydra:4444/oauth2/auth?state=bound-state"
+        self.assertEqual(
+            handle_consent(self.config, self.hydra, "challenge"),
+            "http://127.0.0.1:3000/auth/consent?consent_challenge=challenge",
+        )
+        self.hydra.accept_consent_request.assert_not_called()
+        self.assertEqual(handle_consent(
+            self.config, self.hydra, "challenge", "bytecore-storefront", "bound-state",
+        ), "http://hydra/next")
+        self.assertEqual(set(self.hydra.accept_consent_request.call_args.kwargs["grant_scope"]),
+                         {"openid", "offline_access", "user:read"})
+
     def test_hydra_client_allow_list_is_also_respected(self):
         self.request["client"]["scope"] = "user:read"
         self.assertEqual(self.grant(), ["user:read"])

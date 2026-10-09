@@ -1,31 +1,21 @@
 package ee.bytecore.backend.controller;
 
+import java.util.Map;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import ee.bytecore.backend.services.UserService;
-
-/**
- * The one public, unauthenticated entry point for normal end-user
- * registration (see SecurityConfig, which permits only this path
- * unauthenticated). Every other REST/GraphQL operation remains protected.
- */
 @RestController
 @RequestMapping("/auth")
 public class RegistrationController {
 
-    private final UserService userService;
-
-    public RegistrationController(UserService userService) {
-        this.userService = userService;
-    }
-
     @PostMapping("/register")
-    public CanonicalUserResponse register(@RequestBody RegisterUserRequest request) {
-        var user = userService.registerCustomer(
-                request.username(), request.email(), request.password(), request.dateOfBirth());
-        return CanonicalUserResponse.from(user);
+    public ResponseEntity<Map<String, String>> register() {
+        return ResponseEntity.status(HttpStatus.GONE)
+                .header("Cache-Control", "no-store")
+                .body(Map.of("error", "registration_retired", "message", "Use storefront registration."));
     }
 }

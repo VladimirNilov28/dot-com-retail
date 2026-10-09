@@ -1,7 +1,8 @@
 """Opt-in real-server specification: run this file directly, not mocked discovery.
 
 Requires the local Spring/Hive/Hydra/Kratos/oauth-service stack, PyOTP, and
-PyJWT[crypto]. Creates unique USER accounts through /auth/register; revokes
+PyJWT[crypto] and ALTCHA. Creates unique verified USER accounts through the
+isolated BFF/Kratos browser flow and real Mailpit delivery; revokes
 test sessions and refresh grants through public APIs. Domain accounts remain
 available for inspection; no shared identities or database state are edited.
 """
@@ -21,13 +22,9 @@ import jwt
 import pyotp
 import requests
 
-
-KRATOS = "http://127.0.0.1:4433"
-HYDRA = "http://127.0.0.1:4444"
-TOKEN = "http://127.0.0.1:4447/internal/token"
-BRIDGE = "http://127.0.0.1:4446"
-SPRING = "http://127.0.0.1:8080"
-HIVE = "http://127.0.0.1:4002/graphql"
+from native_registration import (
+    BRIDGE, HIVE, HYDRA, HYDRA_ADMIN, KRATOS, TOKEN, register_customer,
+)
 
 
 class RealTotpFlowTest(unittest.TestCase):
@@ -67,18 +64,8 @@ class RealTotpFlowTest(unittest.TestCase):
         return [message["context"]["secret"] for message in messages]
 
     def register(self):
-        suffix = secrets.token_hex(6)
-        email = f"totp-{suffix}@example.com"
-        password = secrets.token_urlsafe(32)
+        user, password = register_customer("totp")
         self.sensitive_values.add(password)
-        response = self.http("POST", SPRING + "/auth/register", json={
-            "username": f"totp-{suffix}",
-            "email": email,
-            "password": password,
-            "dateOfBirth": "2000-01-01",
-        })
-        self.require_status(response, 200)
-        user = response.json()
         self.assertEqual(user["role"], "USER")
         return user, password
 
@@ -167,7 +154,7 @@ class RealTotpFlowTest(unittest.TestCase):
         metadata = self.http("GET", HYDRA + "/.well-known/openid-configuration")
         self.require_status(metadata, 200)
         jwks_url = metadata.json()["jwks_uri"]
-        self.assertEqual(urlparse(jwks_url).netloc, "127.0.0.1:4444")
+        self.assertEqual(urlparse(jwks_url).netloc, urlparse(HYDRA).netloc)
         key = jwt.PyJWKClient(jwks_url).get_signing_key_from_jwt(token["access_token"])
         claims = jwt.decode(
             token["access_token"], key.key, algorithms=["RS256"],
@@ -302,6 +289,20 @@ class RealTotpFlowTest(unittest.TestCase):
         other, other_password = self.register()
         owner_token = self.password_login(owner["email"], owner_password)
         other_token = self.password_login(other["email"], other_password)
+        for user, password, foreign in ((owner, owner_password, other), (other, other_password, owner)):
+            grant = self.oauth_token({"email": user["email"], "password": password})
+            self.verify_jwt_and_api(grant, user)
+            response = self.http("POST", HIVE, headers={"Authorization": f"Bearer {grant['access_token']}"},
+                                 json={"query": 'query($id:ID!){user(id:$id){id}}',
+                                       "variables": {"id": str(foreign["id"])}})
+            self.require_status(response, 200)
+            self.assertTrue(response.json().get("errors"), "An ordinary user must not read another account")
+            self.assertEqual(response.json()["errors"][0]["extensions"]["errorType"], "PERMISSION_DENIED")
+            response = self.http(
+                "POST", "http://127.0.0.1:28080/auth/internal/registration/reserve",
+                headers={"Authorization": f"Bearer {grant['access_token']}"}, json={},
+            )
+            self.require_status(response, 403)
         flow = self.settings(owner_token)
         response = self.http("GET", KRATOS + "/self-service/settings/api")
         self.require_status(response, 401)
@@ -341,7 +342,7 @@ class RealTotpFlowTest(unittest.TestCase):
         login_url, verifier = self.start_browser_oauth(browser)
         challenge = parse_qs(urlparse(login_url).query)["login_challenge"][0]
         remembered = self.http(
-            "GET", "http://127.0.0.1:4445/admin/oauth2/auth/requests/login",
+            "GET", HYDRA_ADMIN + "/admin/oauth2/auth/requests/login",
             params={"login_challenge": challenge},
         )
         self.require_status(remembered, 200)
@@ -370,7 +371,7 @@ class RealTotpFlowTest(unittest.TestCase):
     def start_browser_oauth(self, browser):
         verifier = secrets.token_urlsafe(64)
         challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
-        response = self.http("GET", "http://127.0.0.1:4445/admin/clients/bytecore-web")
+        response = self.http("GET", HYDRA_ADMIN + "/admin/clients/bytecore-web")
         self.require_status(response, 200)
         response = self.http("GET", HYDRA + "/oauth2/auth", browser=browser, params={
             "client_id": "bytecore-web", "response_type": "code",
@@ -391,7 +392,7 @@ class RealTotpFlowTest(unittest.TestCase):
             if parsed.netloc == "localhost:4200":
                 code = parse_qs(parsed.query)["code"][0]
                 break
-            self.assertIn(parsed.netloc, ("127.0.0.1:4444", "127.0.0.1:4446"))
+            self.assertIn(parsed.netloc, (urlparse(HYDRA).netloc, urlparse(BRIDGE).netloc))
             response = self.http("GET", url, browser=browser)
             self.assertIn(response.status_code, (302, 303), "Expected OAuth redirect")
             url = response.headers["Location"]
@@ -411,7 +412,7 @@ class RealTotpFlowTest(unittest.TestCase):
     def assert_safe_logs(self):
         for container in ("kratos", "oauth-service", "hydra"):
             result = subprocess.run(
-                ["docker", "logs", "--since", self.started_at, container],
+                ["docker", "logs", "--since", self.started_at, f"bytecore-auth-eb7151-{container}-1"],
                 capture_output=True, text=True, check=True, timeout=15,
             )
             logs = result.stdout + result.stderr

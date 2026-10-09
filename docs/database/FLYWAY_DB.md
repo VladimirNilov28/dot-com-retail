@@ -29,12 +29,23 @@ schema changes must be new `V{n}__...sql` files instead.
 | `V13__checkout_orders.sql` | checkout requests, guest orders and immutable snapshots | `V4`, `V12` |
 | `V14__order_cancellation_refunds.sql` | financial/release markers, cancellation receipts, order refunds | `V4`, `V9`, `V11`, `V13` |
 | `V15__product_ratings.sql` | `product_ratings` | `V0`, `V1` (users), `V2` (products) |
+| `V16__native_registration_linkage.sql` | nullable unique canonical Kratos UUID, durable username/email registration reservations | `V1` (users) |
 
 Every foreign key either points to a table created in an earlier migration
 file, or to a table created earlier within the same file. There are no
 forward references.
 
 ## Entity Relationship Diagram
+
+V16 introduces create-only native registration, not historical UUID backfill.
+`user_registration_reservations` owns unique flow/username/email claims, required
+date of birth, expiry and eventual provider UUID. Canonical writers use ordered
+PostgreSQL identifier locks plus uniqueness; verified finalization commits USER
+and reverse UUID linkage atomically. Unverified persisted identities retain
+claims. `deletion_identity_id` remains a separate deletion coordinate. The
+dedicated encrypted BFF/CAPTCHA database is **not** part of Spring Flyway;
+its migration and bounded reconciliation are documented in
+[`../auth/browser-contract.md`](../auth/browser-contract.md).
 
 ```mermaid
 erDiagram

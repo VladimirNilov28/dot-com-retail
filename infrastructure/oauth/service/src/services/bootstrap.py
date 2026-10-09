@@ -23,7 +23,7 @@ ADMIN_WILDCARD = "*"
 # whether to issue a refresh token for the authorization_code grant; it's
 # opted into per-client via `clients[].additional_scopes`, not the shared
 # `scopes:` catalogue.
-RESERVED_SCOPES = frozenset({"offline_access"})
+RESERVED_SCOPES = frozenset({"offline_access", "openid"})
 
 # Fields the bootstrap owns and reconciles on the Hydra client. Any other
 # field Hydra returns (timestamps, internal metadata, etc.) is ignored so
@@ -241,6 +241,8 @@ def _is_client_in_sync(existing: dict, desired: dict) -> bool:
 def reconcile_hydra_clients(hydra_client: HydraClient, spec: AccessControlSpec, config: Config) -> None:
     for client in spec.clients:
         desired = _build_desired_client_payload(client, spec)
+        if client.client_id == config.bff_client_id:
+            desired["redirect_uris"] = [config.bff_redirect_uri]
         existing = hydra_client.get_client(client.client_id)
 
         if existing is None:
@@ -251,6 +253,10 @@ def reconcile_hydra_clients(hydra_client: HydraClient, spec: AccessControlSpec, 
             # resending on every reconcile run would rotate it unexpectedly).
             if client.client_id == config.oauth_service_client_id:
                 create_payload["client_secret"] = config.oauth_service_client_secret
+            elif client.client_id == config.bff_client_id:
+                if not config.bff_client_secret:
+                    raise AccessControlSpecError("BFF_CLIENT_SECRET is required to create the confidential client")
+                create_payload["client_secret"] = config.bff_client_secret
             hydra_client.create_client(create_payload)
             logger.info("created Hydra client %s", client.client_id)
             continue

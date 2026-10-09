@@ -11,14 +11,14 @@ urls:
 
   login: http://127.0.0.1:4446/login
   consent: http://127.0.0.1:4446/consent
-  logout: http://127.0.0.1:3000/logout
+  logout: http://127.0.0.1:3000/account
 
 log:
-  level: debug
+  level: info
   format: text
 
 oauth2:
-  expose_internal_errors: true
+  expose_internal_errors: false
   # Custom claims set via the consent session's access_token data are nested
   # under the "ext" claim unless explicitly whitelisted here — this promotes
   # "role" to a genuine top-level JWT claim so Spring's JWT authority

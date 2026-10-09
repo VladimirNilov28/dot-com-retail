@@ -1,6 +1,7 @@
 package ee.bytecore.backend.repositories.user;
 
 import java.util.Optional;
+import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -18,6 +19,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findById(@Param("id") Long id);
 
     Optional<User> findByUsername(String username);
+
+    Optional<User> findByKratosIdentityId(UUID kratosIdentityId);
 
     boolean existsByUsername(String username);
 

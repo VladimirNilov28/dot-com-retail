@@ -1,8 +1,9 @@
 """Opt-in local-source consent check against live Hydra/Kratos/Spring.
 
-Creates a disposable USER through Spring registration. The test invokes the
+Creates a disposable verified USER through real isolated Kratos browser
+registration, CAPTCHA, Mailpit and BFF OAuth. The test invokes the
 modified consent handler directly without restarting the deployed bridge. It
-uses the role returned by Spring registration, not a mocked canonical user;
+uses the role returned by authenticated Hive me, not a mocked canonical user;
 the protected machine-only canonical lookup is not exercised here.
 """
 
@@ -21,30 +22,26 @@ from clients.hydra import HydraClient, parse_query_param  # noqa: E402
 from clients.kratos import KratosClient  # noqa: E402
 from services.dev_token import _generate_pkce_pair  # noqa: E402
 from services.login_consent import handle_consent  # noqa: E402
+from native_registration import (  # noqa: E402
+    HYDRA, HYDRA_ADMIN, KRATOS, KRATOS_ADMIN, register_customer,
+)
 
 
 class RealScopeGrantTest(unittest.TestCase):
     def setUp(self):
-        self.hydra = HydraClient("http://127.0.0.1:4445", "http://127.0.0.1:4444")
-        self.kratos = KratosClient("http://127.0.0.1:4434", "http://127.0.0.1:4433")
+        self.hydra = HydraClient(HYDRA_ADMIN, HYDRA)
+        self.kratos = KratosClient(KRATOS_ADMIN, KRATOS)
         self.sessions = set()
         self.refresh = set()
         self.consent_skips = []
         self.addCleanup(self.revoke)
-        suffix = secrets.token_hex(6)
-        self.password = secrets.token_urlsafe(32)
-        response = requests.post("http://127.0.0.1:8080/auth/register", json={
-            "username": f"scope-{suffix}", "email": f"scope-{suffix}@example.com",
-            "password": self.password, "dateOfBirth": "2000-01-01",
-        }, timeout=15)
-        self.assertEqual(response.status_code, 200, "Registration failed; body suppressed")
-        self.user = response.json()
+        self.user, self.password = register_customer("scope")
         self.assertEqual(self.user["role"], "USER")
         login = self.kratos.authenticate_with_password(self.user["email"], self.password)
         self.sessions.add(login["session_token"])
         session = self.kratos.whoami(None, session_token=login["session_token"])
         identity = self.kratos.get_identity(session["identity"]["id"])
-        self.assertEqual(identity["metadata_admin"]["spring_user_id"], self.user["id"])
+        self.assertEqual(str(identity["metadata_admin"]["spring_user_id"]), str(self.user["id"]))
         self.browser = self.hydra.new_authorization_session()
         self.addCleanup(self.browser.close)
         self.client = self.hydra.get_client("bytecore-web")
@@ -71,6 +68,7 @@ class RealScopeGrantTest(unittest.TestCase):
 
         class Config:
             access_control_file = str(Path(__file__).resolve().parents[3] / "access-control.yml")
+            bff_client_id = "bytecore-storefront"
 
         url = handle_consent(Config(), self.hydra, challenge)
         url = self.hydra.follow_redirect(self.browser, url)
@@ -84,9 +82,9 @@ class RealScopeGrantTest(unittest.TestCase):
         return token
 
     def verify(self, token, expected):
-        key = jwt.PyJWKClient("http://127.0.0.1:4444/.well-known/jwks.json").get_signing_key_from_jwt(token["access_token"])
+        key = jwt.PyJWKClient(HYDRA + "/.well-known/jwks.json").get_signing_key_from_jwt(token["access_token"])
         claims = jwt.decode(token["access_token"], key.key, algorithms=["RS256"],
-                            issuer="http://127.0.0.1:4444", options={"verify_aud": False})
+                            issuer=HYDRA, options={"verify_aud": False})
         self.assertEqual(claims["sub"], str(self.user["id"]))
         self.assertEqual(claims["role"], "USER")
         self.assertEqual(set(token["scope"].split()), expected)
@@ -103,7 +101,7 @@ class RealScopeGrantTest(unittest.TestCase):
         remembered = self.token("user:read offline_access")
         self.verify(remembered, {"user:read", "offline_access"})
         self.assertEqual(self.consent_skips, [False, True])
-        response = requests.post("http://127.0.0.1:4444/oauth2/token", data={
+        response = requests.post(HYDRA + "/oauth2/token", data={
             "grant_type": "refresh_token", "client_id": "bytecore-web",
             "refresh_token": remembered["refresh_token"],
         }, timeout=15)

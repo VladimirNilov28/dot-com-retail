@@ -98,6 +98,16 @@ class HandleLoginTest(unittest.TestCase):
         )
         self.assertEqual(redirect, "http://hydra/next")
 
+    def test_bff_login_dispatches_to_fixed_storefront_without_using_browser_provider_credentials(self):
+        self.hydra_client.get_login_request.return_value = {"client": {"client_id": "bytecore-storefront"}}
+        target = handle_login(
+            self.config, self.hydra_client, self.kratos_client, self.spring_auth_client,
+            "bounded-challenge", "untrusted-browser-cookie",
+        )
+        self.assertEqual(target, "http://127.0.0.1:3000/auth/challenge?login_challenge=bounded-challenge")
+        self.kratos_client.whoami.assert_not_called()
+        self.hydra_client.accept_login_request.assert_not_called()
+
     def test_fails_explicitly_for_unprovisioned_identity(self):
         self.hydra_client.get_login_request.return_value = {"skip": False}
         self.kratos_client.whoami.return_value = active_session()

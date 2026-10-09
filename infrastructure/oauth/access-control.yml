@@ -191,6 +191,22 @@ clients:
     additional_scopes:
       - offline_access
 
+  - client_id: bytecore-storefront
+    client_name: Bytecore Storefront (confidential BFF)
+    grant_types:
+      - authorization_code
+      - refresh_token
+    response_types:
+      - code
+    token_endpoint_auth_method: client_secret_basic
+    redirect_uris:
+      - http://127.0.0.1:3000/auth/callback
+    scopes:
+      - user:read
+    additional_scopes:
+      - openid
+      - offline_access
+
   - client_id: oauth-service-internal
     client_name: oauth-service (machine, client_credentials)
     grant_types:

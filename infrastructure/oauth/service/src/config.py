@@ -1,5 +1,6 @@
 import os
 from dataclasses import dataclass
+from urllib.parse import urlparse
 
 
 class ConfigError(ValueError):
@@ -28,6 +29,13 @@ class Config:
     oauth_service_client_secret: str
     retry_attempts: int
     retry_delay_seconds: float
+    bff_client_id: str = "bytecore-storefront"
+    bff_client_secret: str = ""
+    bff_redirect_uri: str = "http://127.0.0.1:3000/auth/callback"
+    bridge_browser_url: str = "http://127.0.0.1:4446"
+    auth_bridge_secret: str = ""
+    auth_database_url: str = ""
+    captcha_secret: str = ""
 
 
 def load_config() -> Config:
@@ -58,6 +66,20 @@ def load_config() -> Config:
         raise ConfigError("KRATOS_PUBLIC_URL is required")
     if not spring_internal_base_url:
         raise ConfigError("SPRING_INTERNAL_BASE_URL is required")
+    for name in ("BFF_CLIENT_SECRET", "AUTH_BRIDGE_SECRET", "CAPTCHA_SECRET"):
+        value = os.environ.get(name, "").strip()
+        if len(value) < 32 or value.startswith("replace-with"):
+            raise ConfigError(f"{name} must be a configured private secret of at least 32 characters")
+    if not os.environ.get("AUTH_DATABASE_URL", "").strip():
+        raise ConfigError("AUTH_DATABASE_URL is required")
+    bff_redirect_uri = os.environ.get("BFF_REDIRECT_URI", "http://127.0.0.1:3000/auth/callback")
+    callback = urlparse(bff_redirect_uri)
+    if (callback.username or callback.password or callback.query or callback.fragment
+            or callback.path != "/auth/callback" or not callback.hostname
+            or (callback.scheme != "https" and not (
+                callback.scheme == "http" and callback.hostname in ("127.0.0.1", "localhost", "::1")
+            ))):
+        raise ConfigError("BFF_REDIRECT_URI must be an exact HTTPS callback or loopback development callback")
 
     return Config(
         hydra_admin_url=hydra_admin_url.rstrip("/"),
@@ -87,4 +109,11 @@ def load_config() -> Config:
         oauth_service_client_secret=oauth_service_client_secret,
         retry_attempts=int(os.environ.get("BOOTSTRAP_RETRY_ATTEMPTS", "10")),
         retry_delay_seconds=float(os.environ.get("BOOTSTRAP_RETRY_DELAY_SECONDS", "2")),
+        bff_client_id=os.environ.get("BFF_CLIENT_ID", "bytecore-storefront"),
+        bff_client_secret=os.environ.get("BFF_CLIENT_SECRET", "").strip(),
+        bff_redirect_uri=bff_redirect_uri,
+        bridge_browser_url=os.environ.get("OAUTH_BRIDGE_BROWSER_URL", "http://127.0.0.1:4446").rstrip("/"),
+        auth_bridge_secret=os.environ.get("AUTH_BRIDGE_SECRET", "").strip(),
+        auth_database_url=os.environ.get("AUTH_DATABASE_URL", "").strip(),
+        captcha_secret=os.environ.get("CAPTCHA_SECRET", "").strip(),
     )

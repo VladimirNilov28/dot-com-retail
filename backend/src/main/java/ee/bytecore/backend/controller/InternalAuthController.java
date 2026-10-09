@@ -1,5 +1,9 @@
 package ee.bytecore.backend.controller;
 
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.UUID;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -52,6 +56,44 @@ public class InternalAuthController {
     public CanonicalUserResponse bootstrapAdmin(@RequestBody BootstrapAdminRequest request) {
         return CanonicalUserResponse.from(
                 userService.provisionBootstrapAdmin(request.username(), request.email(), request.dateOfBirth()));
+    }
+
+    public record RegistrationReservationRequest(
+            UUID flowId, String username, String email, LocalDate dateOfBirth, Instant expiresAt) {}
+
+    public record RegistrationIdentityRequest(UUID identityId) {}
+
+    public record RegistrationReservationResponse(UUID id, UUID flowId, UUID identityId) {}
+
+    @PostMapping("/registration-reservations")
+    @PreAuthorize(
+            "hasAuthority('SCOPE_internal:provision-user') and @internalAuthController.isMachineCaller(authentication)")
+    public RegistrationReservationResponse reserveRegistration(@RequestBody RegistrationReservationRequest request) {
+        var claim = userService.reserveRegistration(
+                request.flowId(), request.username(), request.email(), request.dateOfBirth(), request.expiresAt());
+        return new RegistrationReservationResponse(claim.getId(), claim.getFlowId(), claim.getKratosIdentityId());
+    }
+
+    @PostMapping("/registration-bind")
+    @PreAuthorize(
+            "hasAuthority('SCOPE_internal:provision-user') and @internalAuthController.isMachineCaller(authentication)")
+    public RegistrationReservationResponse bindRegistration(@RequestBody RegistrationIdentityRequest request) {
+        var claim = userService.bindRegistration(request.identityId());
+        return new RegistrationReservationResponse(claim.getId(), claim.getFlowId(), claim.getKratosIdentityId());
+    }
+
+    @PostMapping("/registration-finalize")
+    @PreAuthorize(
+            "hasAuthority('SCOPE_internal:provision-user') and @internalAuthController.isMachineCaller(authentication)")
+    public CanonicalUserResponse finalizeRegistration(@RequestBody RegistrationIdentityRequest request) {
+        return CanonicalUserResponse.from(userService.finalizeRegistration(request.identityId()));
+    }
+
+    @PostMapping("/registration-maintenance")
+    @PreAuthorize(
+            "hasAuthority('SCOPE_internal:provision-user') and @internalAuthController.isMachineCaller(authentication)")
+    public java.util.Map<String, Integer> registrationMaintenance() {
+        return java.util.Map.of("released", userService.reconcileAbandonedRegistrations());
     }
 
     public boolean isMachineCaller(Authentication authentication) {

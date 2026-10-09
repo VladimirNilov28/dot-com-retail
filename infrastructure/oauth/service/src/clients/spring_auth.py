@@ -75,3 +75,26 @@ class SpringAuthClient:
         )
         response.raise_for_status()
         return response.json()
+
+    def reserve_registration(self, flow_id: str, traits: dict, expires_at: str) -> dict:
+        return self._registration_request("registration-reservations", {
+            "flowId": flow_id, "username": traits["username"], "email": traits["email"],
+            "dateOfBirth": traits["dateOfBirth"], "expiresAt": expires_at,
+        })
+
+    def bind_registration(self, identity_id: str) -> dict:
+        return self._registration_request("registration-bind", {"identityId": identity_id})
+
+    def finalize_registration(self, identity_id: str) -> dict:
+        return self._registration_request("registration-finalize", {"identityId": identity_id})
+
+    def maintain_registration(self) -> dict:
+        return self._registration_request("registration-maintenance", {})
+
+    def _registration_request(self, path: str, body: dict) -> dict:
+        response = requests.post(
+            f"{self._base_url}/internal/users/{path}", json=body,
+            headers={"Authorization": f"Bearer {self._token_provider()}"}, timeout=10,
+        )
+        response.raise_for_status()
+        return response.json()

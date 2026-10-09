@@ -193,6 +193,13 @@ class KratosClient:
         )
         response.raise_for_status()
 
+    def revoke_browser_session(self, session_id: str) -> None:
+        from uuid import UUID
+        session_id = str(UUID(session_id))
+        response = requests.delete(f"{self._admin_url}/admin/sessions/{session_id}", timeout=10)
+        if response.status_code != 404:
+            response.raise_for_status()
+
     @staticmethod
     def _origin(url: str) -> str:
         parsed = urllib.parse.urlparse(url)

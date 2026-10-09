@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
 import ee.bytecore.backend.exceptions.IdentitySyncException;
@@ -26,6 +27,63 @@ import org.junit.jupiter.api.Test;
 class KratosClientTest {
 
     private HttpServer server;
+
+    @Test
+    void shouldRequireVerifiedMatchingNativeIdentityAndPrivateProofTest() throws IOException {
+        UUID identity = UUID.randomUUID();
+        UUID reservation = UUID.randomUUID();
+        String body =
+                """
+                {"id":"%s","schema_id":"customer-v1","state":"active",
+                 "traits":{"email":"customer@example.com","username":"customer","dateOfBirth":"1990-06-01"},
+                 "verifiable_addresses":[{"via":"email","verified":true,"value":"customer@example.com"}],
+                 "metadata_admin":{"bytecore_registration":{"reservation_id":"%s"}}}
+                """
+                        .formatted(identity, reservation);
+        var response = new AtomicReference<>(body);
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/admin/identities", exchange -> respond(exchange, 200, response.get()));
+        server.start();
+        var kratos = new KratosClient(baseUrl());
+        assertThat(kratos.getNativeRegistrationIdentity(identity, true).reservationId())
+                .isEqualTo(reservation);
+        response.set(body.replace("\"verified\":true", "\"verified\":false"));
+        assertThatThrownBy(() -> kratos.getNativeRegistrationIdentity(identity, true))
+                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+        response.set(body.replace(reservation.toString(), "not-a-private-proof"));
+        assertThatThrownBy(() -> kratos.getNativeRegistrationIdentity(identity, true))
+                .isInstanceOf(IdentitySyncException.class);
+        response.set(body.replace(identity.toString(), UUID.randomUUID().toString()));
+        assertThatThrownBy(() -> kratos.getNativeRegistrationIdentity(identity, true))
+                .isInstanceOf(IdentitySyncException.class);
+    }
+
+    @Test
+    void shouldDiscoverRegistrationProofAfterEmailChangedAndFailClosedOnOutageTest() throws IOException {
+        UUID identity = UUID.randomUUID();
+        UUID reservation = UUID.randomUUID();
+        var capturedQuery = new AtomicReference<String>();
+        var failed = new java.util.concurrent.atomic.AtomicBoolean(false);
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/admin/identities", exchange -> {
+            capturedQuery.set(exchange.getRequestURI().getQuery());
+            respond(
+                    exchange,
+                    failed.get() ? 503 : 200,
+                    """
+                    [{"id":"%s","traits":{"email":"changed@example.com"},
+                      "metadata_admin":{"bytecore_registration":{"reservation_id":"%s"}}}]
+                    """
+                            .formatted(identity, reservation));
+        });
+        server.start();
+        var kratos = new KratosClient(baseUrl());
+        assertThat(kratos.findRegistrationIdentity(reservation)).isEqualTo(identity);
+        assertThat(capturedQuery.get()).doesNotContain("credentials_identifier");
+        failed.set(true);
+        assertThatThrownBy(() -> kratos.findRegistrationIdentity(reservation))
+                .isInstanceOf(IdentitySyncException.class);
+    }
 
     @AfterEach
     void tearDown() {

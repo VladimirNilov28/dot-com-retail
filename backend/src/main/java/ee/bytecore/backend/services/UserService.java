@@ -1,9 +1,13 @@
 package ee.bytecore.backend.services;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -13,12 +17,14 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import ee.bytecore.backend.entities.user.User;
+import ee.bytecore.backend.entities.user.UserRegistrationReservation;
 import ee.bytecore.backend.enums.UserRole;
 import ee.bytecore.backend.exceptions.IdentitySyncException;
 import ee.bytecore.backend.exceptions.UserAlreadyExistsException;
 import ee.bytecore.backend.exceptions.UserNotFoundException;
 import ee.bytecore.backend.integration.HydraClient;
 import ee.bytecore.backend.integration.KratosClient;
+import ee.bytecore.backend.repositories.user.UserRegistrationReservationRepository;
 import ee.bytecore.backend.repositories.user.UserRepository;
 
 @Service
@@ -29,16 +35,19 @@ public class UserService {
     private static final int MAX_EMAIL_LENGTH = 255;
 
     private final UserRepository userRepository;
+    private final UserRegistrationReservationRepository registrationRepository;
     private final KratosClient kratosClient;
     private final HydraClient hydraClient;
     private final TransactionTemplate deletionTransaction;
 
     public UserService(
             UserRepository userRepository,
+            UserRegistrationReservationRepository registrationRepository,
             KratosClient kratosClient,
             HydraClient hydraClient,
             PlatformTransactionManager transactionManager) {
         this.userRepository = userRepository;
+        this.registrationRepository = registrationRepository;
         this.kratosClient = kratosClient;
         this.hydraClient = hydraClient;
         this.deletionTransaction = new TransactionTemplate(transactionManager);
@@ -49,7 +58,31 @@ public class UserService {
         return userRepository.findById(id).filter(user -> !user.isDeleted() && user.getDeletionIdentityId() == null);
     }
 
+    @Transactional
     public User create(String username, String email, LocalDate dateOfBirth) {
+        return create(username, email, dateOfBirth, null, null);
+    }
+
+    private User create(String username, String email, LocalDate dateOfBirth, UUID reservationId, UUID identityId) {
+        validateRegistrationFields(username, email);
+        lockRegistrationClaims(username, email);
+        requireUnreserved(username, email, reservationId);
+        if (userRepository.existsByUsername(username)) {
+            throw new UserAlreadyExistsException(String.format("User with username %s already exists", username));
+        }
+        if (userRepository.existsByEmail(email)) {
+            throw new UserAlreadyExistsException(String.format("User with email %s already exists", email));
+        }
+        User user = User.create(username, email, dateOfBirth);
+        user.setKratosIdentityId(identityId);
+        try {
+            return userRepository.save(user);
+        } catch (DataIntegrityViolationException e) {
+            throw new UserAlreadyExistsException("Account identifiers are already in use.");
+        }
+    }
+
+    private void validateRegistrationFields(String username, String email) {
         if (username == null || username.isBlank()) {
             throw new IllegalArgumentException("Username must not be blank");
         }
@@ -66,55 +99,138 @@ public class UserService {
         if (!EMAIL_PATTERN.matcher(email).matches()) {
             throw new IllegalArgumentException(String.format("Email is not valid: %s", email));
         }
-        if (userRepository.existsByUsername(username)) {
-            throw new UserAlreadyExistsException(String.format("User with username %s already exists", username));
-        }
-        if (userRepository.existsByEmail(email)) {
-            throw new UserAlreadyExistsException(String.format("User with email %s already exists", email));
-        }
-        User user = User.create(username, email, dateOfBirth);
-        try {
-            return userRepository.save(user);
-        } catch (DataIntegrityViolationException e) {
-            // Two racing registrations/creations can both pass the
-            // exists-by checks above; the DB UNIQUE constraint is the final
-            // arbiter, so translate its failure into the same clean
-            // conflict the pre-check would have produced.
-            throw new UserAlreadyExistsException(
-                    String.format("User with username %s or email %s already exists", username, email));
+    }
+
+    @Deprecated
+    public User registerCustomer(String username, String email, String password, LocalDate dateOfBirth) {
+        throw new UnsupportedOperationException("Use Kratos browser registration.");
+    }
+
+    private void lockRegistrationClaims(String username, String email) {
+        Stream.of("email:" + email, "username:" + username).sorted().forEach(registrationRepository::lockClaim);
+    }
+
+    private void requireUnreserved(String username, String email, UUID allowedReservation) {
+        var usernameClaim = registrationRepository.findByUsername(username);
+        var emailClaim = registrationRepository.findByEmail(email);
+        if (Stream.of(usernameClaim, emailClaim)
+                .flatMap(Optional::stream)
+                .anyMatch(claim -> !Objects.equals(claim.getId(), allowedReservation))) {
+            throw new UserAlreadyExistsException("Account identifiers are reserved by a registration.");
         }
     }
 
-    /**
-     * Public self-registration entry point. Unlike {@link #provision}, this
-     * always creates a brand-new customer (never upserts) and always forces
-     * role USER — the caller has no way to influence the role. Registers a
-     * matching Kratos identity, linked back via
-     * metadata_admin.spring_user_id; if that fails, the just-created Spring
-     * user is deleted so no broken/unusable canonical account is left
-     * behind.
-     */
     @Transactional
-    public User registerCustomer(String username, String email, String password, LocalDate dateOfBirth) {
-        if (password == null || password.isBlank()) {
-            throw new IllegalArgumentException("Password must not be blank");
+    public UserRegistrationReservation reserveRegistration(
+            UUID flowId, String username, String email, LocalDate dateOfBirth, Instant expiresAt) {
+        validateRegistrationFields(username, email);
+        if (flowId == null
+                || dateOfBirth == null
+                || expiresAt == null
+                || !expiresAt.isAfter(Instant.now())
+                || expiresAt.isAfter(Instant.now().plus(Duration.ofHours(24)))) {
+            throw new IllegalArgumentException("A valid registration flow and date of birth are required.");
         }
-        if (dateOfBirth == null) {
-            throw new IllegalArgumentException("Date of birth is required");
+        registrationRepository.lockClaim("flow:" + flowId);
+        lockRegistrationClaims(username, email);
+        var existing = registrationRepository.findByFlowId(flowId);
+        if (existing.isPresent()) {
+            var claim = existing.get();
+            if (!claim.getUsername().equals(username)
+                    || !claim.getEmail().equals(email)
+                    || !claim.getDateOfBirth().equals(dateOfBirth)) {
+                throw new UserAlreadyExistsException("Restart registration to change reserved account details.");
+            }
+            return claim;
         }
-
-        User created = create(username, email, dateOfBirth);
-
-        try {
-            kratosClient.createIdentity(email, password, created.getId());
-        } catch (IdentitySyncException e) {
-            // Compensate: an unusable canonical user (no way to
-            // authenticate) is worse than no user at all.
-            userRepository.deleteById(created.getId());
-            throw e;
+        requireUnreserved(username, email, null);
+        if (userRepository.existsByUsername(username) || userRepository.existsByEmail(email)) {
+            throw new UserAlreadyExistsException("Account identifiers cannot be registered.");
         }
+        return registrationRepository.saveAndFlush(
+                UserRegistrationReservation.create(flowId, username, email, dateOfBirth, expiresAt));
+    }
 
-        return created;
+    @Transactional
+    public UserRegistrationReservation bindRegistration(UUID identityId) {
+        var identity = kratosClient.getNativeRegistrationIdentity(identityId, false);
+        var reservation = registrationRepository
+                .findLockedById(identity.reservationId())
+                .orElseThrow(() -> new IdentitySyncException("Registration reservation was not found."));
+        requireMatchingRegistration(reservation, identity);
+        if (reservation.getKratosIdentityId() != null
+                && !reservation.getKratosIdentityId().equals(identityId)) {
+            throw new IdentitySyncException("Registration is already bound to a different identity.");
+        }
+        reservation.setKratosIdentityId(identityId);
+        return reservation;
+    }
+
+    @Transactional
+    public User finalizeRegistration(UUID identityId) {
+        var identity = kratosClient.getNativeRegistrationIdentity(identityId, true);
+        lockRegistrationClaims(identity.username(), identity.email());
+        var existing = userRepository.findByKratosIdentityId(identityId);
+        if (existing.isPresent()) {
+            requireActive(existing.get());
+            if (identity.springUserId() != null
+                    && !Objects.equals(identity.springUserId(), existing.get().getId())) {
+                throw new IdentitySyncException("Canonical identity link does not match.");
+            }
+            return existing.get();
+        }
+        if (identity.springUserId() != null) {
+            throw new IdentitySyncException("Native identity has an inconsistent canonical link.");
+        }
+        var reservation = registrationRepository
+                .findLockedById(identity.reservationId())
+                .orElseThrow(() -> new IdentitySyncException("Registration reservation was not found."));
+        requireMatchingRegistration(reservation, identity);
+        if (reservation.getKratosIdentityId() != null
+                && !reservation.getKratosIdentityId().equals(identityId)) {
+            throw new IdentitySyncException("Registration identity does not match its reservation.");
+        }
+        var user = create(
+                reservation.getUsername(),
+                reservation.getEmail(),
+                reservation.getDateOfBirth(),
+                reservation.getId(),
+                identityId);
+        userRepository.flush();
+        registrationRepository.delete(reservation);
+        return user;
+    }
+
+    @Transactional
+    public int reconcileAbandonedRegistrations() {
+        int released = 0;
+        for (var candidate : registrationRepository.findTop50ByKratosIdentityIdIsNullAndExpiresAtBeforeOrderByExpiresAt(
+                Instant.now().minus(Duration.ofHours(1)))) {
+            lockRegistrationClaims(candidate.getUsername(), candidate.getEmail());
+            var current = registrationRepository.findLockedById(candidate.getId());
+            if (current.isEmpty() || current.get().getKratosIdentityId() != null) {
+                continue;
+            }
+            var reservation = current.get();
+            var identityId = kratosClient.findRegistrationIdentity(reservation.getId());
+            if (identityId == null) {
+                registrationRepository.delete(reservation);
+                released++;
+            } else {
+                requireMatchingRegistration(reservation, kratosClient.getNativeRegistrationIdentity(identityId, false));
+                reservation.setKratosIdentityId(identityId);
+            }
+        }
+        return released;
+    }
+
+    private void requireMatchingRegistration(
+            UserRegistrationReservation reservation, KratosClient.NativeRegistrationIdentity identity) {
+        if (!reservation.getUsername().equals(identity.username())
+                || !reservation.getEmail().equals(identity.email())
+                || !reservation.getDateOfBirth().equals(identity.dateOfBirth())) {
+            throw new IdentitySyncException("Identity traits do not match their registration reservation.");
+        }
     }
 
     @Transactional
@@ -157,6 +273,8 @@ public class UserService {
                 .orElseThrow(() -> new UserNotFoundException(String.format("User with id %s not found", id)));
         requireActive(user);
 
+        lockRegistrationClaims(username, email);
+        requireUnreserved(username, email, null);
         if (!user.getEmail().equals(email)) {
             // Fail-fast, before touching Spring's own state: if Kratos can't
             // be synced, the operation must not leave the two systems

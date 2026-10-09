@@ -43,6 +43,9 @@ public class User {
     @Column(name = "deletion_identity_id")
     private UUID deletionIdentityId;
 
+    @Column(name = "kratos_identity_id", unique = true)
+    private UUID kratosIdentityId;
+
     @Column(nullable = false)
     private boolean deleted;
 

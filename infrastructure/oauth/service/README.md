@@ -14,7 +14,7 @@ token endpoint. No framework, stdlib `http.server` only.
   Consent intersects requested scopes with the YAML role mapping, the YAML
   client maximum and Hydra's current client allow-list. ADMIN `*` excludes
   `internal:provision-user`; unknown/missing roles or human clients fail closed.
-  `offline_access` is granted only when requested and client-allowed. Remembered
+  `openid` and `offline_access` are granted only when requested and client-allowed. Remembered
   consent is filtered again; the dev token endpoint uses this same handler.
   This does not replace Spring's role/scope and ownership checks. Previously
   issued JWTs/refresh grants are not retroactively narrowed: revoke old grants
@@ -92,8 +92,10 @@ which likewise requires explicit operator reconciliation, not automatic adoption
 
 Kratos `v26.2.0` owns RFC 6238 secrets, QR/setup data, enrollment, challenges,
 lookup/backup codes and assurance. Spring owns canonical user IDs and roles.
-Hydra owns OAuth scopes and JWT issuance. No authenticator vendor, Spring TOTP
-storage, custom token issuer, frontend UI or CAPTCHA is introduced.
+Hydra owns OAuth scopes and JWT issuance. There is no authenticator vendor,
+Spring TOTP secret storage or custom token issuer. The separate #40/#66/#67
+browser package now provides login/existing-factor UI and self-hosted signup
+CAPTCHA; customer factor enrollment/settings UI remains deferred to #69.
 
 `highest_available` on Kratos whoami and settings preserves password-only
 login for unenrolled users, while enrolled users must complete AAL2. Both the
@@ -142,12 +144,62 @@ cd backend && ./gradlew build
 ```
 
 The real suite and independent smoke use PyOTP **only as a client authenticator**.
-Kratos performs every verification. They create unique normal USER accounts via
-Spring registration, never modify databases, verify Hydra's signature/issuer/
+Kratos performs every verification. The affected suites create unique normal
+USER accounts through real BFF/Kratos registration and genuine Mailpit
+verification on the isolated ports below, verify Hydra's signature/issuer/
 expiry using JWKS, and call protected `me` through Hive. Coverage includes native
 enrollment, invalid/malformed codes, provisional-session blocking, remembered
 browser login step-up, cross-user settings rejection, single-use recovery codes,
 regeneration/re-reveal, secure disable, stable role/scopes, and secret-free logs.
+
+## Browser package and isolated verification
+
+Read [the browser/security contract](../../../docs/auth/browser-contract.md)
+before deployment. `/internal/login`, `/internal/consent`, `/internal/session`,
+`/internal/logout`, CAPTCHA and registration webhooks are server-only,
+shared-secret authenticated and bounded. Ordinary public browser challenges
+dispatch only the actual BFF client to its fixed storefront origin; legacy
+dev/native clients keep the previous strict provider-session bridge.
+Native/legacy public registration bypasses are rejected. Spring REST signup is
+retired, not a fallback for test setup.
+
+Use `tests/real/auth_stack.py <fresh-private-directory>` to generate disposable
+Compose/configuration files without reading the owner's `.env`. Generation
+refuses a nonempty destination rather than rotating secrets underneath existing
+databases. Current destructive test controls intentionally require project
+`bytecore-auth-eb7151` and their fixed isolated ports:
+Postgres25432, Kratos24433/24434, Hydra24444/24445, bridge24446/24447,
+Spring28080, Hive24002, Mailpit28025, frontend3300. Ensure these ports are free;
+never redirect these writes/fault controls to the owner's stack.
+
+Build the current Spring bootJar first, then start using **both** generated
+file arguments and the exact project:
+
+```bash
+docker compose --project-name bytecore-auth-eb7151 \
+  --env-file <private-directory>/compose.env \
+  -f <private-directory>/compose.yml up -d --build
+```
+
+Build/start a separate production frontend copy with the generated
+`frontend.env.json` injected into its process environment. Do not overwrite a
+running owner's `.next`. Do not regenerate secrets to restart a fixture.
+The root frontend runbook lists contract and browser verification commands.
+`native_registration.py` obtains ordinary users through the supported genuine
+signup/verification/OAuth route, not admin verification or role provisioning.
+
+Run registration reconciliation with the configured service environment:
+
+```bash
+docker compose -f infrastructure/compose.yml exec -T oauth-service \
+  python /app/src/maintenance.py
+```
+
+The image entrypoint is `/app/src/main.py`; `python -m maintenance` from `/app`
+does not locate the module. Cleanup is bounded and failures exit nonzero.
+Schedule/monitor it alongside BFF revocation maintenance. When testing finishes,
+stop owned frontend processes, explicitly take down only the named disposable
+project with its generated files/volumes, and remove its private runtime files.
 Tokens, passwords, codes and QR/setup data remain in memory and are not printed.
 Test sessions and refresh grants are revoked; disposable domain accounts remain
 for inspection. Discovery intentionally excludes the opt-in `tests/real` files.

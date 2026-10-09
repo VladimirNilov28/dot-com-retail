@@ -232,8 +232,8 @@ query GuestTotals {
 
 ### 6. Merge after authentication
 
-Registration (`POST /auth/register`) does not issue an access token. Complete
-the existing Hydra/Kratos login first, then send the JWT's Bearer header,
+Registration is Kratos browser self-service; `POST /auth/register` returns 410.
+For this backend API, obtain an appropriately scoped Hydra token first, then send the JWT's Bearer header,
 guest cookie and guest-request header together:
 
 ```graphql
@@ -259,7 +259,7 @@ On BLOCKED, display every conflict, edit/remove affected guest items and retry.
 On MERGED/REPLAYED, render the returned owned cart; its guest credential is gone.
 Check GraphQL errors even when HTTP status is 200.
 
-Browser request shape (documentation only; no frontend is implemented):
+Anonymous browser request shape (documentation only; cart UI is not implemented):
 
 ```javascript
 const response = await fetch("http://localhost:4002/graphql", {
@@ -268,18 +268,17 @@ const response = await fetch("http://localhost:4002/graphql", {
   headers: {
     "Content-Type": "application/json",
     "X-Guest-Cart-Request": "1",
-    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
   },
   body: JSON.stringify({ query, variables }),
 });
 const result = await response.json();
 ```
 
-Obtain accessToken through the existing authentication flow; do not implement
-a second login system or log token-bearing request objects. The scaffold has
-no login/callback/cart page today, and the existing web-client redirect still
-names localhost:4200. Align the eventual Next.js callback when that integration
-is implemented; it was not changed or tested here.
+Authenticated storefront tokens remain in the server-only BFF; never add them
+to this browser snippet. The current BFF grant is `user:read`, not cart scopes,
+so this authentication package does not implement browser merge/cart mutations.
+See [the browser contract](../auth/browser-contract.md) for the implemented
+login/registration/callback and retained legacy dev-client boundary.
 
 ## Verification boundaries
 

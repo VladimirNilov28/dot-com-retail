@@ -7,6 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Optional;
 import java.util.UUID;
@@ -15,12 +16,14 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.SimpleTransactionStatus;
 
 import ee.bytecore.backend.entities.user.User;
+import ee.bytecore.backend.entities.user.UserRegistrationReservation;
 import ee.bytecore.backend.enums.UserRole;
 import ee.bytecore.backend.exceptions.IdentitySyncException;
 import ee.bytecore.backend.exceptions.UserAlreadyExistsException;
 import ee.bytecore.backend.exceptions.UserNotFoundException;
 import ee.bytecore.backend.integration.HydraClient;
 import ee.bytecore.backend.integration.KratosClient;
+import ee.bytecore.backend.repositories.user.UserRegistrationReservationRepository;
 import ee.bytecore.backend.repositories.user.UserRepository;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -35,6 +38,9 @@ class UserServiceTest {
 
     @Mock
     UserRepository userRepository;
+
+    @Mock
+    UserRegistrationReservationRepository registrationRepository;
 
     @Mock
     KratosClient kratosClient;
@@ -326,107 +332,117 @@ class UserServiceTest {
     }
 
     @Test
-    void shouldRegisterCustomerWithUserRoleTest() {
-        when(userRepository.existsByUsername("new-customer")).thenReturn(false);
-        when(userRepository.existsByEmail("new-customer@example.com")).thenReturn(false);
+    void shouldFinalizeVerifiedNativeCustomerWithUserRoleTest() {
+        var claim = UserRegistrationReservation.create(
+                UUID.randomUUID(),
+                "new-customer",
+                "new-customer@example.com",
+                LocalDate.of(1998, 3, 20),
+                Instant.now().plusSeconds(600));
+        var identityId = UUID.randomUUID();
+        when(kratosClient.getNativeRegistrationIdentity(identityId, true))
+                .thenReturn(new KratosClient.NativeRegistrationIdentity(
+                        identityId,
+                        claim.getId(),
+                        claim.getUsername(),
+                        claim.getEmail(),
+                        claim.getDateOfBirth(),
+                        null));
+        when(registrationRepository.findLockedById(claim.getId())).thenReturn(Optional.of(claim));
+        when(registrationRepository.findByUsername(claim.getUsername())).thenReturn(Optional.of(claim));
+        when(registrationRepository.findByEmail(claim.getEmail())).thenReturn(Optional.of(claim));
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
             User saved = invocation.getArgument(0);
             saved.setId(7L);
             return saved;
         });
-
-        User registered = userService.registerCustomer(
-                "new-customer", "new-customer@example.com", "s3cret-test-pw", LocalDate.of(1998, 3, 20));
-
+        User registered = userService.finalizeRegistration(identityId);
         assertThat(registered.getRole()).isEqualTo(UserRole.USER);
         assertThat(registered.getUsername()).isEqualTo("new-customer");
-        verify(kratosClient).createIdentity("new-customer@example.com", "s3cret-test-pw", 7L);
+        assertThat(registered.getKratosIdentityId()).isEqualTo(identityId);
+        verify(registrationRepository).delete(claim);
+        verify(kratosClient, never()).createIdentity(any(), any(), any());
     }
 
     @Test
-    void shouldThrowConflictWhenRegisteringDuplicateUsernameTest() {
+    void shouldRejectReservationForExistingCanonicalUsernameTest() {
         when(userRepository.existsByUsername("new-customer")).thenReturn(true);
-
-        assertThatThrownBy(() -> userService.registerCustomer(
-                        "new-customer", "new-customer@example.com", "s3cret-test-pw", LocalDate.of(1998, 3, 20)))
+        assertThatThrownBy(() -> userService.reserveRegistration(
+                        UUID.randomUUID(),
+                        "new-customer",
+                        "new-customer@example.com",
+                        LocalDate.of(1998, 3, 20),
+                        Instant.now().plusSeconds(600)))
                 .isInstanceOf(UserAlreadyExistsException.class);
-
         verify(userRepository, never()).save(any());
-        verify(kratosClient, never()).createIdentity(any(), any(), any());
+        verify(registrationRepository, never()).saveAndFlush(any());
     }
 
     @Test
-    void shouldThrowConflictWhenRegisteringDuplicateEmailTest() {
-        when(userRepository.existsByUsername("new-customer")).thenReturn(false);
+    void shouldRejectReservationForExistingCanonicalEmailTest() {
         when(userRepository.existsByEmail("new-customer@example.com")).thenReturn(true);
-
-        assertThatThrownBy(() -> userService.registerCustomer(
-                        "new-customer", "new-customer@example.com", "s3cret-test-pw", LocalDate.of(1998, 3, 20)))
+        assertThatThrownBy(() -> userService.reserveRegistration(
+                        UUID.randomUUID(),
+                        "new-customer",
+                        "new-customer@example.com",
+                        LocalDate.of(1998, 3, 20),
+                        Instant.now().plusSeconds(600)))
                 .isInstanceOf(UserAlreadyExistsException.class);
-
         verify(userRepository, never()).save(any());
-        verify(kratosClient, never()).createIdentity(any(), any(), any());
+        verify(registrationRepository, never()).saveAndFlush(any());
     }
 
     @Test
-    void shouldThrowWhenRegisteringWithBlankPasswordTest() {
+    void shouldRejectRetiredDirectRegistrationWithoutProcessingCredentialsTest() {
         assertThatThrownBy(() -> userService.registerCustomer(
                         "new-customer", "new-customer@example.com", "   ", LocalDate.of(1998, 3, 20)))
-                .isInstanceOf(IllegalArgumentException.class);
-
-        verify(userRepository, never()).save(any());
-        verify(kratosClient, never()).createIdentity(any(), any(), any());
+                .isInstanceOf(UnsupportedOperationException.class);
+        org.mockito.Mockito.verifyNoInteractions(userRepository, registrationRepository, kratosClient);
     }
 
     @Test
-    void shouldThrowWhenRegisteringWithNullDateOfBirthTest() {
-        assertThatThrownBy(() -> userService.registerCustomer(
-                        "new-customer", "new-customer@example.com", "s3cret-test-pw", null))
+    void shouldRejectNativeRegistrationWithMissingDateOfBirthTest() {
+        assertThatThrownBy(() -> userService.reserveRegistration(
+                        UUID.randomUUID(),
+                        "new-customer",
+                        "new-customer@example.com",
+                        null,
+                        Instant.now().plusSeconds(600)))
                 .isInstanceOf(IllegalArgumentException.class);
+        verify(userRepository, never()).save(any());
+        verify(registrationRepository, never()).saveAndFlush(any());
+    }
 
+    @Test
+    void shouldRejectNativeRegistrationWithOverlongUsernameTest() {
+        assertThatThrownBy(() -> userService.reserveRegistration(
+                        UUID.randomUUID(),
+                        "a".repeat(256),
+                        "new-customer@example.com",
+                        LocalDate.of(1998, 3, 20),
+                        Instant.now().plusSeconds(600)))
+                .isInstanceOf(IllegalArgumentException.class);
         verify(userRepository, never()).save(any());
     }
 
     @Test
-    void shouldThrowWhenRegisteringWithOverlongUsernameTest() {
-        String tooLong = "a".repeat(256);
-
-        assertThatThrownBy(() -> userService.registerCustomer(
-                        tooLong, "new-customer@example.com", "s3cret-test-pw", LocalDate.of(1998, 3, 20)))
-                .isInstanceOf(IllegalArgumentException.class);
-
-        verify(userRepository, never()).save(any());
-    }
-
-    @Test
-    void shouldCompensateByDeletingSpringUserWhenKratosIdentityCreationFailsTest() {
-        when(userRepository.existsByUsername("new-customer")).thenReturn(false);
-        when(userRepository.existsByEmail("new-customer@example.com")).thenReturn(false);
-        when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
-            User saved = invocation.getArgument(0);
-            saved.setId(7L);
-            return saved;
-        });
-        org.mockito.Mockito.doThrow(new IdentitySyncException("Kratos unreachable"))
-                .when(kratosClient)
-                .createIdentity("new-customer@example.com", "s3cret-test-pw", 7L);
-
-        assertThatThrownBy(() -> userService.registerCustomer(
-                        "new-customer", "new-customer@example.com", "s3cret-test-pw", LocalDate.of(1998, 3, 20)))
+    void shouldNotCreateCanonicalAccountWhenIdentityValidationFailsTest() {
+        var identityId = UUID.randomUUID();
+        when(kratosClient.getNativeRegistrationIdentity(identityId, true))
+                .thenThrow(new IdentitySyncException("Identity unavailable"));
+        assertThatThrownBy(() -> userService.finalizeRegistration(identityId))
                 .isInstanceOf(IdentitySyncException.class);
-
-        verify(userRepository).deleteById(7L);
+        org.mockito.Mockito.verifyNoInteractions(userRepository, registrationRepository);
     }
 
     @Test
-    void shouldTranslateRaceConditionDuringRegistrationToConflictTest() {
+    void shouldTranslateCanonicalCreateConstraintConflictTest() {
         when(userRepository.existsByUsername("new-customer")).thenReturn(false);
         when(userRepository.existsByEmail("new-customer@example.com")).thenReturn(false);
         when(userRepository.save(any(User.class)))
                 .thenThrow(new org.springframework.dao.DataIntegrityViolationException("duplicate key"));
-
-        assertThatThrownBy(() -> userService.registerCustomer(
-                        "new-customer", "new-customer@example.com", "s3cret-test-pw", LocalDate.of(1998, 3, 20)))
+        assertThatThrownBy(
+                        () -> userService.create("new-customer", "new-customer@example.com", LocalDate.of(1998, 3, 20)))
                 .isInstanceOf(UserAlreadyExistsException.class)
                 .satisfies(error -> assertThat(error.getMessage())
                         .as("must not leak the raw SQL/constraint exception to the client")
@@ -434,5 +450,37 @@ class UserServiceTest {
                         .doesNotContain("duplicate key"));
 
         verify(kratosClient, never()).createIdentity(any(), any(), any());
+    }
+
+    @Test
+    void shouldPreventInternalWriterFromTakingReservedIdentifiersTest() {
+        var claim = UserRegistrationReservation.create(
+                UUID.randomUUID(),
+                user.getUsername(),
+                user.getEmail(),
+                user.getDateOfBirth(),
+                Instant.now().plusSeconds(600));
+        when(registrationRepository.findByUsername(user.getUsername())).thenReturn(Optional.of(claim));
+        assertThatThrownBy(() -> userService.create(user.getUsername(), user.getEmail(), user.getDateOfBirth()))
+                .isInstanceOf(UserAlreadyExistsException.class);
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldRecoverAlreadyCommittedNativeRegistrationIdempotentlyTest() {
+        var identityId = UUID.randomUUID();
+        user.setKratosIdentityId(identityId);
+        when(kratosClient.getNativeRegistrationIdentity(identityId, true))
+                .thenReturn(new KratosClient.NativeRegistrationIdentity(
+                        identityId,
+                        UUID.randomUUID(),
+                        user.getUsername(),
+                        user.getEmail(),
+                        user.getDateOfBirth(),
+                        user.getId()));
+        when(userRepository.findByKratosIdentityId(identityId)).thenReturn(Optional.of(user));
+        assertThat(userService.finalizeRegistration(identityId)).isSameAs(user);
+        verify(userRepository, never()).save(any());
+        verify(registrationRepository, never()).delete(any());
     }
 }

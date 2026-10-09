@@ -149,10 +149,24 @@ class AccountDeletionIntegrationTest {
         assertThat(jdbc.queryForObject(
                         "SELECT count(*) FROM wishlist_items WHERE product_variant_id=?", Integer.class, variantId))
                 .isZero();
-        User replacement = userService.registerCustomer(
-                user.getUsername(), user.getEmail(), "disposable-test-value", user.getDateOfBirth());
+        var claim = userService.reserveRegistration(
+                UUID.randomUUID(),
+                user.getUsername(),
+                user.getEmail(),
+                user.getDateOfBirth(),
+                java.time.Instant.now().plusSeconds(600));
+        var replacementIdentityId = UUID.randomUUID();
+        org.mockito.Mockito.when(kratos.getNativeRegistrationIdentity(replacementIdentityId, true))
+                .thenReturn(new KratosClient.NativeRegistrationIdentity(
+                        replacementIdentityId,
+                        claim.getId(),
+                        user.getUsername(),
+                        user.getEmail(),
+                        user.getDateOfBirth(),
+                        null));
+        User replacement = userService.finalizeRegistration(replacementIdentityId);
         assertThat(replacement.getId()).isNotEqualTo(user.getId());
-        verify(kratos).createIdentity(user.getEmail(), "disposable-test-value", replacement.getId());
+        assertThat(replacement.getKratosIdentityId()).isEqualTo(replacementIdentityId);
         assertThat(userService.findById(replacement.getId())).isPresent();
     }
 
@@ -199,8 +213,12 @@ class AccountDeletionIntegrationTest {
         assertThat(jdbc.queryForObject("SELECT email FROM users WHERE id=?", String.class, user.getId()))
                 .isEqualTo(user.getEmail());
         assertThat(users.findById(user.getId())).isEmpty();
-        assertThatThrownBy(() -> userService.registerCustomer(
-                        user.getUsername(), user.getEmail(), "disposable-test-value", user.getDateOfBirth()))
+        assertThatThrownBy(() -> userService.reserveRegistration(
+                        UUID.randomUUID(),
+                        user.getUsername(),
+                        user.getEmail(),
+                        user.getDateOfBirth(),
+                        java.time.Instant.now().plusSeconds(600)))
                 .isInstanceOf(UserAlreadyExistsException.class);
         assertThatThrownBy(() -> userService.updateProfile(user.getId(), "new-name", "new@example.com"))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -247,13 +265,18 @@ class AccountDeletionIntegrationTest {
     }
 
     @Test
-    void shouldRollBackCanonicalRegistrationOnAuthenticationConflictTest() {
-        org.mockito.Mockito.doThrow(new UserAlreadyExistsException("Use account recovery or contact support."))
-                .when(kratos)
-                .createIdentity(org.mockito.ArgumentMatchers.eq("orphan@example.com"), any(), any());
-        assertThatThrownBy(() -> userService.registerCustomer(
-                        "orphan", "orphan@example.com", "disposable-test-value", LocalDate.of(1990, 2, 3)))
-                .isInstanceOf(UserAlreadyExistsException.class);
+    void shouldWithholdCanonicalCreationWhenNativeIdentityIsNotVerifiedTest() {
+        userService.reserveRegistration(
+                UUID.randomUUID(),
+                "orphan",
+                "orphan@example.com",
+                LocalDate.of(1990, 2, 3),
+                java.time.Instant.now().plusSeconds(600));
+        var identityId = UUID.randomUUID();
+        org.mockito.Mockito.when(kratos.getNativeRegistrationIdentity(identityId, true))
+                .thenThrow(new org.springframework.security.access.AccessDeniedException("Verify email"));
+        assertThatThrownBy(() -> userService.finalizeRegistration(identityId))
+                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
         assertThat(users.existsByEmail("orphan@example.com")).isFalse();
         assertThat(users.existsByUsername("orphan")).isFalse();
     }

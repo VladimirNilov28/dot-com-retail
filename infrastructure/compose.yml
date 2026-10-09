@@ -20,6 +20,13 @@ services:
       PAYMENT_DB_USER: ${PAYMENT_DB_USER:?PAYMENT_DB_USER is required}
       PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:?PAYMENT_DB_PASSWORD is required}
 
+      AUTH_MIGRATION_USER: ${AUTH_MIGRATION_USER:?AUTH_MIGRATION_USER is required}
+      AUTH_MIGRATION_PASSWORD: ${AUTH_MIGRATION_PASSWORD:?AUTH_MIGRATION_PASSWORD is required}
+      AUTH_DB_USER: ${AUTH_DB_USER:?AUTH_DB_USER is required}
+      AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD:?AUTH_DB_PASSWORD is required}
+      CAPTCHA_DB_USER: ${CAPTCHA_DB_USER:?CAPTCHA_DB_USER is required}
+      CAPTCHA_DB_PASSWORD: ${CAPTCHA_DB_PASSWORD:?CAPTCHA_DB_PASSWORD is required}
+
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d retail"]
       interval: 5s
@@ -29,6 +36,7 @@ services:
     volumes:
       - postgres_volume:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
+      - ./oauth/auth-store:/auth-store:ro
 
     restart: unless-stopped
 
@@ -65,7 +73,6 @@ services:
         condition: service_completed_successfully
 
     ports:
-      - "4444:4444"
       - "127.0.0.1:4445:4445"
 
     environment:
@@ -79,6 +86,24 @@ services:
       retries: 10
       start_period: 10s
 
+    restart: unless-stopped
+
+  # Hydra's hardcoded form_post page needs a native submit control without JS.
+  hydra-public:
+    image: nginx:stable-alpine@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94
+    depends_on:
+      hydra:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:4444:4444"
+    volumes:
+      - ./oauth/hydra/public-proxy.conf:/etc/nginx/nginx.conf:ro
+    user: "101:101"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
     restart: unless-stopped
 
   # Kratos database migrations
@@ -122,6 +147,7 @@ services:
       DSN: ${KRATOS_DSN:?KRATOS_DSN is required}
       SECRETS_COOKIE: ${KRATOS_SECRETS_COOKIE:?KRATOS_SECRETS_COOKIE is required}
       SECRETS_CIPHER: ${KRATOS_SECRETS_CIPHER:?KRATOS_SECRETS_CIPHER is required}
+      AUTH_BRIDGE_SECRET: ${AUTH_BRIDGE_SECRET:?AUTH_BRIDGE_SECRET is required}
 
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4434/health/ready"]
@@ -188,6 +214,13 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
       OAUTH_SERVICE_CLIENT_ID: ${OAUTH_SERVICE_CLIENT_ID:?OAUTH_SERVICE_CLIENT_ID is required}
       OAUTH_SERVICE_CLIENT_SECRET: ${OAUTH_SERVICE_CLIENT_SECRET:?OAUTH_SERVICE_CLIENT_SECRET is required}
+      BFF_CLIENT_ID: ${BFF_CLIENT_ID:?BFF_CLIENT_ID is required}
+      BFF_CLIENT_SECRET: ${BFF_CLIENT_SECRET:?BFF_CLIENT_SECRET is required}
+      BFF_REDIRECT_URI: ${BFF_REDIRECT_URI:?BFF_REDIRECT_URI is required}
+      AUTH_BRIDGE_SECRET: ${AUTH_BRIDGE_SECRET:?AUTH_BRIDGE_SECRET is required}
+      AUTH_DATABASE_URL: ${CAPTCHA_DATABASE_URL:?CAPTCHA_DATABASE_URL is required}
+      CAPTCHA_SECRET: ${CAPTCHA_SECRET:?CAPTCHA_SECRET is required}
+      OAUTH_BRIDGE_BROWSER_URL: ${OAUTH_BRIDGE_BROWSER_URL:?OAUTH_BRIDGE_BROWSER_URL is required}
       BOOTSTRAP_RETRY_ATTEMPTS: "30"
       BOOTSTRAP_RETRY_DELAY_SECONDS: "3"
 

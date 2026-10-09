@@ -16,6 +16,10 @@ selfservice:
   methods:
     password:
       enabled: true
+    code:
+      enabled: true
+      passwordless_enabled: false
+      mfa_enabled: false
     totp:
       enabled: true
       config:
@@ -25,7 +29,48 @@ selfservice:
   flows:
     registration:
       enabled: true
-    login: {}
+      style: unified
+      ui_url: http://127.0.0.1:3000/register
+      lifespan: 20m
+      after:
+        password:
+          hooks:
+            - hook: web_hook
+              config:
+                url: http://oauth-service:4446/internal/registration/pre-persist
+                method: POST
+                body: file:///etc/kratos/registration-hook.jsonnet
+                can_interrupt: true
+                response:
+                  parse: true
+                auth:
+                  type: api_key
+                  config:
+                    name: Authorization
+                    value: ""
+                    in: header
+            - hook: web_hook
+              config:
+                url: http://oauth-service:4446/internal/registration/bind
+                method: POST
+                body: file:///etc/kratos/registration-bind.jsonnet
+                auth:
+                  type: api_key
+                  config:
+                    name: Authorization
+                    value: ""
+                    in: header
+            - hook: show_verification_ui
+    login:
+      style: unified
+      ui_url: http://127.0.0.1:3000/login
+      lifespan: 10m
+    verification:
+      enabled: true
+      use: code
+      ui_url: http://127.0.0.1:3000/verify
+      lifespan: 15m
+      notify_unknown_recipients: true
     settings:
       required_aal: highest_available
       privileged_session_max_age: 15m
@@ -45,10 +90,12 @@ selfservice:
       notify_unknown_recipients: true
 
 identity:
-  default_schema_id: default
+  default_schema_id: customer-v1
   schemas:
     - id: default
       url: file:///etc/kratos/identity.schema.json
+    - id: customer-v1
+      url: file:///etc/kratos/customer.schema.json
 
 session:
   whoami:

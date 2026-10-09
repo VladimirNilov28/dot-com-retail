@@ -5,6 +5,8 @@ import java.net.URLDecoder;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -20,6 +22,8 @@ import org.springframework.web.client.RestClientException;
 
 import ee.bytecore.backend.exceptions.IdentitySyncException;
 import ee.bytecore.backend.exceptions.UserAlreadyExistsException;
+
+import tools.jackson.databind.JsonNode;
 
 /**
  * Thin client for Kratos's Admin API. Registration links identities through
@@ -68,6 +72,109 @@ public class KratosClient {
         } catch (RestClientException e) {
             throw new IdentitySyncException(
                     "Registration could not contact the identity provider. Retry registration.");
+        }
+    }
+
+    public record NativeRegistrationIdentity(
+            UUID id, UUID reservationId, String username, String email, LocalDate dateOfBirth, Long springUserId) {}
+
+    public NativeRegistrationIdentity getNativeRegistrationIdentity(UUID identityId, boolean requireVerified) {
+        if (identityId == null) {
+            throw new IllegalArgumentException("An identity id is required.");
+        }
+        try {
+            var identity = restClient
+                    .get()
+                    .uri("/admin/identities/{id}", identityId)
+                    .retrieve()
+                    .body(JsonNode.class);
+            if (identity == null
+                    || !identityId.toString().equals(identity.path("id").asText())
+                    || !"customer-v1".equals(identity.path("schema_id").asText())
+                    || !"active".equals(identity.path("state").asText())) {
+                throw new IdentitySyncException("Identity is not an active native customer.");
+            }
+            var traits = identity.path("traits");
+            String email = traits.path("email").asText();
+            if (requireVerified) {
+                boolean verified = false;
+                for (var address : identity.path("verifiable_addresses")) {
+                    if ("email".equals(address.path("via").asText())
+                            && address.path("verified").asBoolean()
+                            && email.equalsIgnoreCase(address.path("value").asText())) {
+                        verified = true;
+                    }
+                }
+                if (!verified) {
+                    throw new org.springframework.security.access.AccessDeniedException(
+                            "Email verification is required.");
+                }
+            }
+            var metadata = identity.path("metadata_admin");
+            var reservationId = UUID.fromString(metadata.path("bytecore_registration")
+                    .path("reservation_id")
+                    .asText());
+            Long linkedUserId = null;
+            if (!metadata.path("spring_user_id").isMissingNode()
+                    && !metadata.path("spring_user_id").isNull()) {
+                linkedUserId = Long.valueOf(metadata.path("spring_user_id").asText());
+                if (linkedUserId <= 0) {
+                    throw new IdentitySyncException("Invalid canonical identity metadata.");
+                }
+            }
+            return new NativeRegistrationIdentity(
+                    identityId,
+                    reservationId,
+                    traits.path("username").asText(),
+                    email,
+                    LocalDate.parse(traits.path("dateOfBirth").asText()),
+                    linkedUserId);
+        } catch (RestClientException | IllegalArgumentException | DateTimeParseException e) {
+            throw new IdentitySyncException("Native registration identity could not be validated. Retry sign-in.");
+        }
+    }
+
+    public UUID findRegistrationIdentity(UUID reservationId) {
+        try {
+            UUID match = null;
+            String cursor = null;
+            var seen = new HashSet<String>();
+            for (int page = 0; page < 100; page++) {
+                String current = cursor;
+                var response = restClient
+                        .get()
+                        .uri(builder -> builder.path("/admin/identities")
+                                .queryParam("page_size", 250)
+                                .queryParamIfPresent("page_token", java.util.Optional.ofNullable(current))
+                                .build())
+                        .retrieve()
+                        .toEntity(JsonNode.class);
+                var identities = response.getBody();
+                if (identities == null || !identities.isArray()) {
+                    throw new IdentitySyncException("Registration reconciliation returned an invalid response.");
+                }
+                for (var identity : identities) {
+                    if (reservationId
+                            .toString()
+                            .equals(identity.path("metadata_admin")
+                                    .path("bytecore_registration")
+                                    .path("reservation_id")
+                                    .asText())) {
+                        if (match != null) {
+                            throw new IdentitySyncException("Registration has multiple identity proofs.");
+                        }
+                        match = UUID.fromString(identity.path("id").asText());
+                    }
+                }
+                cursor = nextPageToken(response.getHeaders().get("Link"));
+                if (cursor == null && identities.size() < 250) return match;
+                if (cursor == null || !seen.add(cursor)) {
+                    throw new IdentitySyncException("Registration identity pagination could not be completed.");
+                }
+            }
+            throw new IdentitySyncException("Registration reconciliation exceeded its bounded identity scan.");
+        } catch (RestClientException | IllegalArgumentException e) {
+            throw new IdentitySyncException("Registration reconciliation is unavailable. Claims were retained.");
         }
     }
 

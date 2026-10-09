@@ -153,9 +153,24 @@ Use `credentials: "include"` and `X-Guest-Cart-Request: 1` from the allowed
 Next.js dev origin (`http://localhost:3000`). Stock remains checkout-only;
 no inventory is reserved by adding or merging cart items.
 
-Registration still uses Spring's existing REST endpoint and Hydra/Kratos
-authentication. Invoke merge only after acquiring the user's JWT. No frontend
-cart/login page or second authentication system is included.
+Registration now uses Kratos browser self-service with genuine email verification;
+Spring `POST /auth/register` returns 410. The Next.js BFF holds OAuth tokens
+server-side and its current `user:read` grant does not implement cart merge.
+Manual backend merge still uses an appropriately scoped Hydra token. No
+storefront cart mutations or second authentication system are included.
+
+### Storefront authentication (#40, #66, #67)
+
+The browser contract, production constraints, dedicated database migration,
+secret/key rotation and maintenance runbooks are in
+[`docs/auth/browser-contract.md`](docs/auth/browser-contract.md).
+Configure root and frontend examples privately before deliberate rollout:
+existing PostgreSQL volumes do **not** automatically create the new auth store.
+Use canonical `http://127.0.0.1:3000` for local browser authentication and exact
+matching provider callback/origin configuration. Login, verification, existing
+MFA and logout support native forms; new signup requires the real self-hosted
+ALTCHA JavaScript check. Registration does not automatically issue OAuth tokens.
+The `/account` page is status/logout only, not an account dashboard.
 
 ### Common failure modes
 
