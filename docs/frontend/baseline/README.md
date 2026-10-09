@@ -599,6 +599,57 @@ files in this round. They remain *Model-reviewed — awaiting owner approval*.
 
 ## Retained-file inventory
 
+### #40/#66/#67 coordinated authentication package — 2026-10-09
+
+**16 new auth captures** and the refreshed anonymous homepage account popover
+are **Model-reviewed — awaiting owner approval**. Every retained image was
+opened individually. Opening-animation popover and wrong-width MFA attempts
+were rejected and recaptured before promotion. Diagnostic and clipped browser-
+zoom artifacts were not retained. Existing scoped approvals remain unchanged;
+replacement account content does not inherit them.
+
+Forms/account evidence uses production `127.0.0.1:3300` and independently named
+real Kratos/Hydra/bridge/Spring/Hive/PostgreSQL/Mailpit resources. Registration
+used real official ALTCHA, required fields and genuine courier verification;
+no identity was marked verified manually. Validation/MFA/service/expiry images
+show actual provider responses, not frontend data mocks. Non-sensitive task
+labels are intentional; passwords, OTP/recovery codes and tokens are absent.
+The homepage popover uses a separate final production build against **read-only
+normal Hive4002**, preserving 22 categories/42 products and root-only composition.
+
+Final nonvisual provider-header hardening was subsequently verified with the
+complete real production browser suite: Kratos's custom-header logging was
+replaced by standard Authorization redaction and the fixture secret rotated.
+Forms' visible layout did not change. The final report records actual checks,
+contracts, production rollout and cleanup; registration's no-JS security-check
+limitation and Spring JWT residual validity are not hidden.
+
+All rows below are full-page captures from viewport **1440×1000** or
+**390×1000**, except the homepage popover (**1440×900, viewport**).
+Actual Chromium 200% zoom was separately verified at both widths, including
+195 CSS pixels at390, without overflow. Emulated-width PoW timings are not
+physical-phone performance claims.
+Current retained inventory: **70 PNG files**.
+
+| File | Issue | Route/state | Status | Last updated by |
+| --- | --- | --- | --- | --- |
+| `issue-66-login-desktop-1440-default.png` | #66 | `/login`, empty real password flow | Model-reviewed — awaiting owner approval | #66 |
+| `issue-66-login-mobile-390-default.png` | #66 | `/login`, mobile password flow | Model-reviewed — awaiting owner approval | #66 |
+| `issue-66-login-desktop-1440-invalid.png` | #66 | Provider credential error, focused summary, blank password | Model-reviewed — awaiting owner approval | #66 |
+| `issue-66-login-mobile-390-invalid.png` | #66 | Mobile credential error and usable recovery | Model-reviewed — awaiting owner approval | #66 |
+| `issue-66-login-desktop-1440-second-factor.png` | #66 | Actual enrolled TOTP/recovery-factor forms | Model-reviewed — awaiting owner approval | #66 |
+| `issue-66-login-mobile-390-second-factor.png` | #66 | Stacked factor forms, primary authenticator hierarchy | Model-reviewed — awaiting owner approval | #66 |
+| `issue-66-login-mobile-390-expired.png` | #66 | Actual provider expiration and preserved-route restart | Model-reviewed — awaiting owner approval | #66 |
+| `issue-67-register-desktop-1440-default.png` | #67 | `/register`, schema-required fields and real ALTCHA | Model-reviewed — awaiting owner approval | #67 |
+| `issue-67-register-mobile-390-default.png` | #67 | Mobile native date/security check and clear field hierarchy | Model-reviewed — awaiting owner approval | #67 |
+| `issue-67-register-desktop-1440-validation.png` | #67 | Actual weak-password policy error, summary/field wiring | Model-reviewed — awaiting owner approval | #67 |
+| `issue-67-register-mobile-390-duplicate.png` | #67 | Actual duplicate rejection, no authentication/role grant | Model-reviewed — awaiting owner approval | #67 |
+| `issue-67-verify-desktop-1440-default.png` | #67 | `/verify`, genuine courier code and resend navigation | Model-reviewed — awaiting owner approval | #67 |
+| `issue-67-verify-mobile-390-default.png` | #67 | Mobile native verification and resend | Model-reviewed — awaiting owner approval | #67 |
+| `issue-67-register-mobile-390-unavailable.png` | #67 | Real isolated Kratos outage, working Retry | Model-reviewed — awaiting owner approval | #67 |
+| `issue-40-account-desktop-1440-authenticated.png` | #40 | `/account`, actual caller-owned identity/status/logout only | Model-reviewed — awaiting owner approval | #40/#66 |
+| `issue-66-account-popover-desktop-1440-authenticated.png` | #66 | Settled nonmodal authenticated account/logout | Model-reviewed — awaiting owner approval | #66 |
+
 ### #65 coordinated product/variant pass — 2026-10-08
 
 Rendered production code matches local implementation revision
@@ -655,7 +706,7 @@ original source/provenance; this pass did not alter their compositions.
 Original scoped approvals at `6a30862` and `d7db51a` remain immutable and are
 **not inherited by replacements**.
 
-Except for #65-updated or explicitly Stale rows below, Model-reviewed rows retain
+Except for #65/#66-updated or explicitly Stale rows below, Model-reviewed rows retain
 source `1c7f4cd` and the real/control provenance above. The two Owner-rejected
 category not-found rows retain their historical bytes/provenance.
 
@@ -664,7 +715,7 @@ category not-found rows retain their historical bytes/provenance.
 | `issue-61-home-desktop-1440-default.png` | #61 | `/` | 1440×900, full page | Default | Owner root-only tiles, unchanged real discovery | Model-reviewed — awaiting owner approval | #65 |
 | `issue-61-home-mobile-390-default.png` | #61 | `/` | 390×844, full page | Default | Owner root-only two-column tiles and real cards | Model-reviewed — awaiting owner approval | #65 |
 | `issue-61-home-desktop-1440-catalog-popover-open.png` | #61 | `/` | 1440×900, viewport only | Catalog popover open | Settled preserved menu over root-only home; original approval at `6a30862` | Model-reviewed — awaiting owner approval | #65 |
-| `issue-61-home-desktop-1440-account-popover-open.png` | #61 | `/` | 1440×900, viewport only | Account popover open | Preserved nonmodal overlay over root-only home | Model-reviewed — awaiting owner approval | #65 |
+| `issue-61-home-desktop-1440-account-popover-open.png` | #61 | `/` | 1440×900, viewport only | Anonymous account popover open | Preserved nonmodal overlay/root-only live home, real sign-in/registration destinations | Model-reviewed — awaiting owner approval | #66 |
 | `issue-61-home-mobile-390-drawer-open.png` | #61 | `/` | 390×844, viewport only | Drawer open | Preserved grouped modal drawer over root-only home | Model-reviewed — awaiting owner approval | #65 |
 | `issue-61-home-narrow-320-default.png` | #61 | `/` | 320×640, full page | Default | Narrow root-only tiles, wrapping and single-card discovery | Model-reviewed — awaiting owner approval | #65 |
 | `issue-63-category-desktop-1440-default.png` | #63 | `/catalog/sulearvutid` | 1440×900, viewport only | Grid | Unchanged real category/sidebar/search/facets/card alignment; viewport avoids sticky-sidebar stitching | Model-reviewed — awaiting owner approval | #86 |

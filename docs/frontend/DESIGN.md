@@ -498,6 +498,33 @@ honest but far shorter.*
 - Disable submit only while a request is in flight, and say why.
 - Respect `--control-height` so fields line up with shell controls.
 
+**Implemented #40/#66/#67 contract:** narrow single-column, server-rendered
+login/registration/verification forms reuse PageContainer, dark tokens, Lucide
+and HeroUI actions. Native provider-driven controls preserve hidden nodes,
+CSRF, password-manager/date semantics and meaningful no-JS submissions with
+explicit label/error wiring; this is the necessary provider-form exception to
+the general HeroUI input convention, not a new form framework.
+Credential values are never echoed. Errors are associated with fields and a
+focused announced summary; verification-email notices are status, not errors.
+Pending state disables duplicate submissions before native navigation.
+
+Registration collects the configured email/password/username/date-of-birth and
+an honest self-hosted security check. Genuine email verification precedes login/
+OAuth. The CAPTCHA requires JavaScript, with an explicit native explanation and
+working sign-in/store links. Existing authenticator and recovery-factor methods
+are separate forms: the authenticator action leads, recovery is quieter; neither
+requires completing the other. There are no dead recovery/social/settings links.
+
+Invalid/expired flows preserve the safe route/kind for restart; service failure
+has Retry. Account is status/logout only, not a dashboard. Header geometry,
+nonmodal account popover and mobile drawer composition remain established;
+their account content reflects real anonymous/authenticated/expired/unavailable
+state. Authentication controls use no-store state, not public home caches.
+At actual 200% zoom/390px (195 CSS pixels), auth grids and date controls shrink
+without horizontal overflow. New compositions remain **Model-reviewed —
+awaiting owner approval**; the architecture and limits are in
+[`../auth/browser-contract.md`](../auth/browser-contract.md).
+
 ### Cart and checkout (#73, #74)
 
 *References, for the **cart page (#73)**: `arvutitark_shopping_cart_page` ranks

@@ -724,3 +724,43 @@ bun scripts/hive-browser-smoke.mjs
 It reads shipping options and the null credential-free cart through the Next.js
 boundary, without creating guest state or simulating an authenticated journey.
 Exact executed results and limitations are reported separately on #62.
+## Browser authentication (#40, #66, #67)
+
+The implemented [browser/security contract](../docs/auth/browser-contract.md)
+uses Kratos identity/browser flows, Hydra OAuth/OIDC and a durable encrypted
+PostgreSQL BFF store. `/login`, `/register`, `/verify` and status-only `/account`
+are real server-rendered routes. There is no cart mutation, dashboard, social
+login, profile editor, password-recovery or factor-management UI in this package.
+
+Copy `.env.example` privately and provision/migrate the dedicated store before
+auth use. Keep its tokens, provider cookie jar, client/bridge secrets and sealing
+keys server-only; never add `NEXT_PUBLIC_`, browser storage or bearer forwarding.
+Canonical local auth origin is `http://127.0.0.1:3000`. See the contract for
+production HTTPS/same-site/TLS constraints and existing-volume rollout.
+Anonymous catalog browsing does not require auth database/configuration.
+
+```bash
+bun run test:auth
+bun run auth:maintenance
+# Real isolated fixture only; private environment and Python paths are arguments:
+bun --conditions=react-server scripts/verify-auth-contract.ts \
+  <private-frontend.env.json> <authorized-test-venv-python>
+PLAYWRIGHT_MODULE=<authorized-external-playwright-index.mjs> \
+  STOREFRONT_BASE_URL=http://127.0.0.1:3300 \
+  STOREFRONT_ARTIFACTS=<temporary-capture-directory> \
+  AUTH_FIXTURE_PYTHON=<authorized-test-venv-python> node scripts/auth-smoke.mjs
+```
+
+The real runners are intentionally restricted to the separately named
+`bytecore-auth-eb7151` stack; they can expire task flows/pause task providers.
+Setup is documented in `infrastructure/oauth/service/README.md`. Never point
+fault controls or test registration at owner resources. Do not regenerate
+existing fixture credentials. Login, verification, existing MFA, OAuth's native
+continuation, account and logout work without JavaScript. Registration explicitly
+requires the genuine ALTCHA widget; there is no no-JS security bypass.
+
+Catalog regressions may use that task provider's genuine private setup token:
+`CATALOG_AUTH_ISSUER=http://127.0.0.1:24444` and
+`CATALOG_TOKEN_URL=http://127.0.0.1:24447/internal/token`, with private task admin
+credentials. The existing fixture runner validates loopback endpoints and still
+mutates only isolated Hive4063; owner taxonomy/data are never seeded.

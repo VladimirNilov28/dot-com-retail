@@ -8,6 +8,29 @@ Companion to [`DESIGN.md`](DESIGN.md). Two reusable pieces:
 Neither is an approval gate. A routine change that follows the established
 design needs the checklist, not a review round.
 
+## Authentication package review (#40, #66, #67)
+
+Check actual Kratos nodes/CSRF, provider-safe field errors, focused summary,
+blank credential fields, native submission/pending duplicate protection, and
+separate authenticator/recovery-factor forms. Verify genuine signup/security
+check/courier code/resend, no automatic OAuth after signup, expired-flow restart
+with the original safe destination, service failure/Retry and actual logout.
+Account is only status/logout; do not turn it into a dashboard or add dead
+social/recovery/settings actions.
+
+Inspect settled popovers, not opening-animation frames; screenshot filenames
+must match the actual viewport. Use only non-sensitive task identities. Check
+390px and actual 200% browser zoom (195 CSS pixels), including the native date
+field's minimum width. No-JS login, factor, verification, OAuth continuation and
+logout must work; no-JS signup must honestly explain its required security check.
+
+Keep OAuth/provider credentials out of browser assets, storage, HTML, URLs,
+screenshots and logs. Public protocol flow/challenge/state and CSRF values are
+intentional and distinct. Run real provider/security and unchanged storefront
+regressions, not just successful mocks. The authentication report and manifest
+record executed evidence; all new images are **Model-reviewed — awaiting owner
+approval**, without extending the owner's older scoped approvals.
+
 ---
 
 ## 1. Implementation reminder

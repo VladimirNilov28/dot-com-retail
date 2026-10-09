@@ -271,7 +271,7 @@ operator attention; never discard unresolved revocations to make a report green.
 
 ## Verification and remaining scope
 
-The local delivery report records real isolated Kratos/Hydra/bridge/Spring/Hive,
+The [local delivery report](implementation-report.md) records real isolated Kratos/Hydra/bridge/Spring/Hive,
 genuine Mailpit verification/resend, native CAPTCHA rejection/retry/outage,
 MFA, callback rejection, cross-process refresh and provider-revocation evidence.
 New captures are **Model-reviewed — awaiting owner approval**.
