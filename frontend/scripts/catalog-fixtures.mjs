@@ -20,6 +20,15 @@ let mode = "normal";
 let failureCategoryId;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const endpoint = "http://127.0.0.1:4063/graphql";
+const authIssuer = new URL(process.env.CATALOG_AUTH_ISSUER ?? "http://127.0.0.1:4444");
+const tokenEndpoint = new URL(process.env.CATALOG_TOKEN_URL ?? "http://127.0.0.1:4447/internal/token");
+for (const url of [authIssuer, tokenEndpoint]) {
+  assert.equal(url.protocol, "http:");
+  assert.equal(url.hostname, "127.0.0.1", "Fixture credentials may only reach an explicitly configured loopback provider");
+  assert.equal(url.username + url.password + url.search + url.hash, "");
+}
+assert.equal(authIssuer.pathname, "/");
+assert.equal(tokenEndpoint.pathname, "/internal/token");
 
 async function requireFreePorts() {
   for (const port of [5463, 8063, 4063, 4064]) {
@@ -76,7 +85,7 @@ async function setupToken() {
   const email = process.env.CATALOG_SETUP_EMAIL;
   const password = process.env.CATALOG_SETUP_PASSWORD;
   assert.ok(email && password, "Supply CATALOG_SETUP_TOKEN or private CATALOG_SETUP_EMAIL/CATALOG_SETUP_PASSWORD. No credential fallback.");
-  const response = await fetch("http://127.0.0.1:4447/internal/token", {
+  const response = await fetch(tokenEndpoint, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }),
   });
   assert.ok(response.ok, `Supported dev-token operation failed: HTTP ${response.status}; AAL2 accounts require CATALOG_SETUP_TOKEN`);
@@ -156,8 +165,8 @@ try {
       SPRING_DATASOURCE_USERNAME: "catalog_verification", SPRING_DATASOURCE_PASSWORD: password,
       SPRING_KAFKA_LISTENER_AUTO_STARTUP: "false", SPRING_KAFKA_ADMIN_AUTO_CREATE: "false",
       SPRING_KAFKA_BOOTSTRAP_SERVERS: "127.0.0.1:59999",
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: "http://127.0.0.1:4444",
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: "http://127.0.0.1:4444/.well-known/jwks.json",
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: authIssuer.origin,
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: `${authIssuer.origin}/.well-known/jwks.json`,
       CART_GUEST_ALLOWED_ORIGINS: "http://localhost:3164,http://localhost:4002",
       MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED: "true",
     },

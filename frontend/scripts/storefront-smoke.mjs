@@ -14,7 +14,7 @@ if (artifacts) await mkdir(artifacts, { recursive: true });
 const routes = [
   { path: "/", label: "Home", heading: "Find your next connection." },
   { path: "/search", label: "Search", heading: "Search" },
-  { path: "/account", label: "Account", heading: "Account" },
+  { path: "/account", label: "Account", heading: "Your account" },
   { path: "/cart", label: "Cart", heading: "Cart" },
 ];
 // Desktop entries that open a nonmodal popover instead of linking directly.
@@ -67,7 +67,13 @@ async function inspect(page, route, mobile) {
       assert.equal(await section.isVisible(), true, "Every SSR selection is visible, including without JavaScript");
     }
   }
-  if (route.path !== "/" && route.path !== "/catalog/all-products" && route.path !== "/search") {
+  if (route.path === "/account") {
+    assert.match(await page.locator("main").textContent(), /Sign in to access your ByteCore account/);
+    assert.equal(await page.getByRole("link", { name: "Sign in", exact: true }).getAttribute("href"), "/login?returnTo=%2Faccount");
+    assert.equal(await page.getByRole("link", { name: "Create an account", exact: true }).getAttribute("href"), "/register?returnTo=%2Faccount");
+    assert.equal(await page.title(), "Account | ByteCore");
+  }
+  if (route.path !== "/" && route.path !== "/catalog/all-products" && route.path !== "/search" && route.path !== "/account") {
     assert.match(await page.locator("main").textContent(), /not available yet/i);
     assert.equal(await page.locator("main input, main form, main button").count(), 0);
     assert.equal(await page.getByRole("link", { name: "Return to home" }).getAttribute("href"), "/");
@@ -310,7 +316,7 @@ async function dismissOutside(page) {
 async function checkDesktopPopovers(page) {
   // The catalog dialog's own focusable entry is "All products", not a link
   // named "Catalog" (that destination no longer renders inside the dialog).
-  const popoverLinks = { Catalog: "All products", Account: "Account" };
+  const popoverLinks = { Catalog: "All products", Account: "Sign in" };
   for (const [buttonName, dialogName] of Object.entries(popovers)) {
     const button = page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: buttonName, exact: true });
     await button.focus();
@@ -333,7 +339,7 @@ async function checkDesktopPopovers(page) {
   const account = page.getByRole("button", { name: "Account", exact: true });
   await account.click();
   const dialog = page.getByRole("dialog", { name: "Account navigation" });
-  await dialog.getByRole("link", { name: "Account", exact: true }).focus();
+  await dialog.getByRole("link", { name: "Sign in", exact: true }).focus();
   await page.setViewportSize({ width: 390, height: 1000 });
   await dialog.waitFor({ state: "hidden" });
   await assertFocused(page.locator(".store-mobile-trigger"));

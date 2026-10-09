@@ -9,6 +9,8 @@ import { catalogHref, isResultsRoute, type Category } from "@/lib/catalog/model"
 import { CatalogRetry } from "./catalog-retry";
 import { CategoryNavigation, isPlainClick } from "./category-navigation";
 import { useProductSuggestions } from "./search-form";
+import { LogoutForm } from "./logout-form";
+import { safeReturnTo } from "@/lib/auth/model";
 
 const destinations = [
   { href: "/catalog", label: "Catalog" },
@@ -27,6 +29,8 @@ const DESKTOP_LINKS = ".store-catalog-slot a, .store-actions a";
 const DESKTOP_BUTTONS = ".store-catalog-slot button, .store-actions button";
 
 type Overlay = "mobile" | "catalog" | "account" | "search" | null;
+type HeaderAccount = { kind: "checking" | "anonymous" | "expired" | "unavailable" } |
+  { kind: "authenticated"; username: string; csrf: string };
 
 export function StoreNavigation({
   cartPreview,
@@ -44,8 +48,40 @@ export function StoreNavigation({
   const mobileTrigger = useRef<HTMLButtonElement>(null);
   const lastFocused = useRef<HTMLElement | null>(null);
   const drawerId = useId();
+  const [account, setAccount] = useState<HeaderAccount>({ kind: "checking" });
+  const [returnTo, setReturnTo] = useState("/");
 
   if (state.pathname !== pathname) setState({ pathname, overlay: null });
+
+  useEffect(() => {
+    const controller = new AbortController();
+    async function updateAccount() {
+      const route = ["/login", "/register", "/verify", "/auth/error", "/dev/foundation"].includes(pathname) ? "/account" :
+        window.location.pathname + window.location.search;
+      try {
+        setReturnTo(safeReturnTo(route));
+        const response = await fetch("/auth/session", {
+          credentials: "same-origin", cache: "no-store", signal: controller.signal, headers: { Accept: "application/json" },
+        });
+        const body: unknown = await response.json();
+        if (!body || typeof body !== "object") throw new TypeError("Invalid account response");
+        if ("kind" in body && body.kind === "anonymous" && response.ok) setAccount({ kind: "anonymous" });
+        else if ("kind" in body && body.kind === "authenticated" && response.ok &&
+          "user" in body && body.user && typeof body.user === "object" && "username" in body.user &&
+          typeof body.user.username === "string" && "csrf" in body && typeof body.csrf === "string" &&
+          /^[A-Za-z0-9_-]{43}$/.test(body.csrf)) setAccount({ kind: "authenticated", username: body.user.username, csrf: body.csrf });
+        else if (response.status === 401) setAccount({ kind: "expired" });
+        else if (response.status === 503) setAccount({ kind: "unavailable" });
+        else throw new TypeError("Invalid account response");
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        console.error("Account status could not be loaded", error instanceof TypeError ? "protocol" : "unavailable");
+        setAccount({ kind: "unavailable" });
+      }
+    }
+    void updateAccount();
+    return () => controller.abort();
+  }, [pathname]);
 
   function setOverlay(overlay: Overlay) {
     setState({ pathname, overlay });
@@ -158,7 +194,10 @@ export function StoreNavigation({
     const catalog = kind === "catalog";
     const Icon = catalog ? Grid2X2 : UserRound;
     const destination = destinations[catalog ? CATALOG : ACCOUNT];
-    const status = catalog ? categoryStatus() : "Account features are not available yet.";
+    const status = catalog ? categoryStatus() : account.kind === "checking" ? "Checking account..." :
+      account.kind === "authenticated" ? `Signed in as ${account.username}.` :
+        account.kind === "expired" ? "Your session has expired. Sign in again." :
+          account.kind === "unavailable" ? "Account status is unavailable. Try again." : "Sign in to your account.";
     return (
       <Popover isOpen={state.overlay === kind} onOpenChange={(open) => setOverlay(open ? kind : null)}>
         <Button
@@ -182,6 +221,11 @@ export function StoreNavigation({
             )}
             {status ? <p className={catalog ? "mb-3 text-sm text-muted" : "my-3 text-sm text-muted"}>{status}</p> : null}
             <div className={catalog ? "store-category-entry" : undefined}>{catalog ? allProductsLink() : navigationLink(destination)}</div>
+            {!catalog && account.kind === "authenticated" ? <div className="mt-3"><LogoutForm csrf={account.csrf} /></div> : null}
+            {!catalog && (account.kind === "anonymous" || account.kind === "expired") ? <div className="mt-3 grid gap-2">
+              <Link prefetch={false} className="store-cta" href={`/login?returnTo=${encodeURIComponent(returnTo)}`} onClick={() => setOverlay(null)}>Sign in</Link>
+              <Link prefetch={false} className="store-link" href={`/register?returnTo=${encodeURIComponent(returnTo)}`} onClick={() => setOverlay(null)}>Create an account</Link>
+            </div> : null}
             {catalog && categoryNavigation("panel")}
             {catalog && categoryError && <CatalogRetry />}
           </Popover.Dialog>
