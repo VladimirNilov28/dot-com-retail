@@ -180,5 +180,6 @@ The `/account` page is status/logout only, not an account dashboard.
 | `401` from Spring's `/internal/users` | Usually a stale Hydra client secret from a prior broken bootstrap run; self-heals on the next `oauth-service` restart (`make restart`) via its idempotent reconciliation |
 | `docker compose config` fails naming a variable | A required value is missing from `.env` — copy from `.env.example` |
 | `make dev` reports an unhealthy service | Inspect that service's logs; Spring must complete Flyway/schema validation before OAuth bootstrap starts |
+| `kratos` restarts with `A private registration hook secret is required.` | `.env` predates the auth package and still has `replace-with…` placeholders for `AUTH_BRIDGE_SECRET`, `BFF_CLIENT_SECRET`, `CAPTCHA_SECRET` and the three auth DB passwords. Set random values, recreate `postgres` (volume kept), run `04-create-storefront-auth.sh` once as described in [`docs/auth/browser-contract.md`](docs/auth/browser-contract.md), then `make dev` |
 | `127.0.0.1:4447` refuses connections | `oauth-service` is still bootstrapping or crash-looping — `docker logs oauth-service` |
 | Port 8080 is already allocated | Stop the manually started Spring instance before running `make dev` |
