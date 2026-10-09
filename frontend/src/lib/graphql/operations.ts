@@ -1,4 +1,7 @@
 import {
+  StorefrontMeSource,
+  type StorefrontMeQuery,
+  type StorefrontMeQueryVariables,
   ProductDetailSource,
   type ProductDetailQuery,
   type ProductDetailQueryVariables,
@@ -33,6 +36,7 @@ import {
 import { boolean, decimal, float, integer, json, list, object, text, uuid } from "./scalars";
 import { variantId } from "@/lib/product/model";
 import { comparePrice } from "@/lib/catalog/model";
+import { accountRole } from "@/lib/auth/model";
 
 export interface Operation<Data, Variables> {
   readonly name: string;
@@ -367,3 +371,23 @@ export const productDetail: Operation<ProductDetailQuery, ProductDetailQueryVari
 };
 
 export const publicOperations = [catalogCategories, catalogListing, catalogSuggestions, homeDiscovery, homeCategoryProducts, productDetail] as const;
+
+export const storefrontMe: Operation<StorefrontMeQuery, StorefrontMeQueryVariables> = {
+  name: "StorefrontMe",
+  source: StorefrontMeSource,
+  kind: "query",
+  access: "authenticated",
+  variables(value) {
+    variables(value, []);
+    return {};
+  },
+  decode(value) {
+    const data = object(value);
+    const user = object(data.me);
+    const id = text(user.id);
+    if (!/^[1-9][0-9]{0,18}$/.test(id)) throw new TypeError("Invalid canonical user id");
+    return { me: { id, username: text(user.username), email: text(user.email), role: accountRole(user.role) } };
+  },
+};
+
+export const authenticatedOperations = [storefrontMe] as const;

@@ -1,3 +1,7 @@
+query StorefrontMe {
+  me { id username email role }
+}
+
 query IntegrationShippingOptions($countryCode: String) {
   checkoutShippingOptions(countryCode: $countryCode) {
     method

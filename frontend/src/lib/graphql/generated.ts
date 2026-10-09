@@ -23,6 +23,14 @@ export type ProductSort =
   | 'RATING_DESC'
   | 'RELEVANCE';
 
+export type Role =
+  | 'ADMIN'
+  | 'CATALOG_MANAGER'
+  | 'ORDER_MANAGER'
+  | 'SUPPORT'
+  | 'USER'
+  | 'WAREHOUSE';
+
 export type ProductAttributeFilterInput = {
   name: string;
   value: string;
@@ -59,6 +67,11 @@ export type ProductSearchInput = {
   size?: number | null | undefined;
   sort?: ProductSort | null | undefined;
 };
+
+export type StorefrontMeQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type StorefrontMeQuery = { me: { id: string, username: string, email: string, role: Role } };
 
 export type IntegrationShippingOptionsQueryVariables = Exact<{
   countryCode?: string | null | undefined;
@@ -119,6 +132,7 @@ export type ProductDetailQueryVariables = Exact<{
 
 export type ProductDetailQuery = { product: { id: string, name: string, slug: string, description: string | null, averageRating: number | null, ratingCount: number, categories: Array<{ id: string, name: string, slug: string }>, variants: Array<{ id: string, sku: string, price: Decimal, attributes: JsonValue, isActive: boolean, barcode: string | null, weightGrams: number | null }> } | null };
 
+export const StorefrontMeSource = "query StorefrontMe {\n  me {\n    id\n    username\n    email\n    role\n  }\n}";
 export const IntegrationShippingOptionsSource = "query IntegrationShippingOptions($countryCode: String) {\n  checkoutShippingOptions(countryCode: $countryCode) {\n    method\n    charge\n    currency\n    estimate\n    supportedCountries\n  }\n}";
 export const IntegrationGuestCartSource = "query IntegrationGuestCart {\n  guestCart {\n    id\n    expiresAt\n    totals {\n      subtotal\n      currency\n    }\n    items {\n      id\n      quantity\n      subtotal\n      productVariant {\n        id\n        sku\n        price\n        attributes\n        isActive\n      }\n    }\n  }\n}";
 export const IntegrationGuestOrderSource = "query IntegrationGuestOrder($publicId: UUID, $requestId: UUID) {\n  guestOrder(publicId: $publicId, requestId: $requestId) {\n    publicId\n    requestId\n    status\n    totals {\n      merchandiseSubtotal\n      shippingCharge\n      total\n      currency\n    }\n  }\n}";
