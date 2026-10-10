@@ -60,6 +60,34 @@ ordinary form CSRF checks, protected by its bound state/PKCE/nonce checks.
 Return destinations are validated relative storefront routes, never arbitrary
 absolute URLs, internal API/auth paths or redirect loops.
 
+### Same-browser account switching
+
+Every new storefront authorization request explicitly sends **`prompt=login`**.
+Hydra must re-evaluate its login through the bridge rather than skip it using a
+remembered subject. The bridge still validates the current Kratos session,
+verification, assurance, canonical identity and bound OAuth transaction; its
+remembered-subject mismatch guard is unchanged.
+
+The reproduced failure was stale state, not a provider outage: after account A
+logged out, its BFF session was revoked, its cookies cleared, its Kratos session
+revoked and its refresh grant revoked, but Hydra still remembered A's login.
+Registration/login as B in the same browser produced `skip=true` with A's
+subject while Kratos authenticated B. The bridge correctly rejected the
+conflicting identities. Refresh-token revocation is not Hydra remembered-login
+revocation, so that remembered cookie must not determine the new BFF identity.
+The new authorization prompt fixes this at the source without accepting a
+mismatched subject, suppressing the error, adding retries or asking users to
+clear cookies. An existing valid BFF session still persists on reload.
+
+Real local verification preserved the failing browser cookies, provider jar and
+transaction privately before repair. Recovery from that preserved state and
+fresh same-browser registration A/login/logout/registration B/login, then
+B/logout/A, passed with the correct canonical identities. Reload persistence,
+cleared BFF cookies and completed revocation were checked on each logout.
+Same-browser customer/logout/designated-administrator login also passed,
+consistent with the earlier customer-to-administrator BridgeError having the
+same remembered-subject conflict. No owner account or provider state was reset.
+
 ## Registration and canonical linkage
 
 The new versioned customer schema requires email, password, username and date
