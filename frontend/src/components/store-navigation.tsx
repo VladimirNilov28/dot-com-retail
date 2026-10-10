@@ -402,9 +402,6 @@ function SearchControl({ expanded, onExpand, onCollapse }: {
                 </ul>
               )}
             </div>
-            <button type="submit" className="store-search-overlay-submit" aria-label="Search">
-              <Search className="store-icon" size={18} strokeWidth={2} aria-hidden="true" focusable="false" />
-            </button>
             <button type="button" className="store-search-overlay-close" aria-label="Close search" onClick={collapse}>
               <X className="store-icon" size={18} strokeWidth={2} aria-hidden="true" focusable="false" />
             </button>
