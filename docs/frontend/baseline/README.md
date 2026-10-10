@@ -599,6 +599,46 @@ files in this round. They remain *Model-reviewed — awaiting owner approval*.
 
 ## Retained-file inventory
 
+### #67 verification proof/link repair — 2026-10-11
+
+**UI implementation: `89781b5`, `dev`. Four individually inspected production
+captures: two replacements and two additions.** Verification desktop/mobile
+default captures supersede the earlier rows below. Total inventory is now
+**79 PNG files**. All four are **Model-reviewed — awaiting owner approval**.
+The password refinement captures and policy remain intact.
+
+Chromium **153.0.8010.12**, DPR 1, reduced motion, full page, 1440×1000 or
+390×1000. Browser origin remains canonical `127.0.0.1:3000` through a temporary
+loopback proxy to a separate production build. Owner frontend output was
+preserved. Only Kratos was rebuilt/recreated to load verification templates;
+provider/database data, owner passwords, keys and volumes were not reset.
+Helpers were stopped afterward.
+
+Default captures show an active genuine registration continuation, a blank
+code input, originating-browser/latest-message instructions and native resend.
+The invalid capture shows real provider rejection of a deliberately wrong
+proof. The other-browser capture shows actual binding rejection and recovery,
+not a fabricated provider response. Codes were cleared and fragments removed
+before capture; no proofs, secret links, credentials, cookies or tokens appear.
+
+Real-stack verification covered manual latest code, genuine new-template link
+with exact browser-local fragment filling and explicit confirmation, resend
+with stale-filled input, invalidation of the old code, wrong proof, stored
+consumption/HTTP 400 replay rejection, verified-customer login, foreign-browser
+recovery and native no-JS code submission. Expiry used only a shortened
+disposable provider proof; a test-session jar fault was restored and the same
+proof then worked. Neither was simulated success or a service outage.
+61 auth regressions, 10 provider configuration tests, lint (one existing
+homepage warning), typecheck, production build and 11 storefront smoke scenarios
+passed, including actual 200% zoom. Owner visual approval remains pending.
+
+| File | State | Status |
+| --- | --- | --- |
+| `issue-67-verify-desktop-1440-default.png` | Genuine bound continuation, native confirmation/resend | Model-reviewed — awaiting owner approval |
+| `issue-67-verify-mobile-390-default.png` | Mobile genuine flow and code instructions | Model-reviewed — awaiting owner approval |
+| `issue-67-verify-desktop-1440-invalid.png` | Actual incorrect proof rejected, proof removed from capture | Model-reviewed — awaiting owner approval |
+| `issue-67-verify-mobile-390-other-browser.png` | Actual unbound browser with originating-browser recovery | Model-reviewed — awaiting owner approval |
+
 ### #67/#66 compact password refinement — 2026-10-10
 
 **Rendered implementation: `3926c05`, `dev`. Twelve production screenshots
