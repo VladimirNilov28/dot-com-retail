@@ -395,7 +395,7 @@
   .results-suggestion-button:hover { background: var(--surface-secondary); }
 
   .results-sort { display: flex; align-items: center; gap: 0.5rem; min-width: 0; max-width: 100%; }
-  .results-sort-select { min-height: var(--control-height); min-width: 0; width: min(13rem, 100%); border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); color: var(--foreground); padding-inline: 0.5rem; }
+  .results-sort-select { min-height: var(--control-height); min-width: 0; width: min(13rem, 100%); flex: 1; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); color: var(--foreground); padding-inline: 0.5rem; }
 
   @media (min-width: 48rem) {
     .results-layout { grid-template-columns: 16rem minmax(0, 1fr); align-items: start; }
@@ -407,8 +407,10 @@
   .catalog-categories .store-cta { font-size: 0.875rem; padding-inline: 0.75rem; }
   .catalog-categories [aria-current="page"] { color: var(--accent); border-color: var(--accent); }
   .catalog-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem; border-block: 1px solid var(--separator); padding-block: 0.75rem; margin-bottom: 1.5rem; }
-  .catalog-view { display: flex; gap: 0.25rem; }
-  .catalog-view-button { min-height: var(--control-height); border-radius: var(--radius-lg); }
+  .catalog-toolbar-controls { display: flex; align-items: center; gap: 0.5rem; min-width: 0; width: min(22rem, 100%); }
+  .catalog-toolbar-controls .results-sort { flex: 1; }
+  .catalog-view { display: flex; gap: 0.25rem; flex-shrink: 0; }
+  .catalog-view-button { min-height: var(--control-height); min-width: var(--control-height); width: var(--control-height); padding-inline: 0; border-radius: var(--radius-lg); }
   .catalog-view-button[aria-pressed="true"] { background: var(--surface-secondary); color: var(--foreground); }
   .catalog-products { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem 1rem; }
   .product-card { min-width: 0; display: flex; flex-direction: column; gap: 0.75rem; padding-bottom: 1rem; border-bottom: 1px solid var(--separator); }

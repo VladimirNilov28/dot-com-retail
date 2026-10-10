@@ -20,7 +20,7 @@ export function CatalogSort({ route, state }: { route: string; state: ResultsSta
   const id = useId();
   return (
     <div className="results-sort">
-      <label htmlFor={id} className="text-xs text-muted">Sort</label>
+      <label htmlFor={id} className="sr-only min-[24rem]:not-sr-only text-xs text-muted">Sort</label>
       <select id={id} className="results-sort-select" value={state.sort} aria-busy={pending}
         onChange={(event) => {
           startTransition(() => router.push(resultsHref(route, state, { sort: event.target.value as ProductSort }), { scroll: false }));
