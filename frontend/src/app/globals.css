@@ -395,7 +395,7 @@
   .results-suggestion-button:hover { background: var(--surface-secondary); }
 
   .results-sort { display: flex; align-items: center; gap: 0.5rem; min-width: 0; max-width: 100%; }
-  .results-sort-select { min-height: var(--control-height); min-width: 0; width: min(9rem, 100%); border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); color: var(--foreground); padding-inline: 0.5rem; }
+  .results-sort-select { min-height: var(--control-height); min-width: 0; width: min(13rem, 100%); border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); color: var(--foreground); padding-inline: 0.5rem; }
 
   @media (min-width: 48rem) {
     .results-layout { grid-template-columns: 16rem minmax(0, 1fr); align-items: start; }
