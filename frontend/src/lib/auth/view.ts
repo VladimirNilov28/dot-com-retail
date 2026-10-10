@@ -24,6 +24,7 @@ const labels: Record<string, string> = {
   email: "Email", code: "Verification code",
 };
 const sensitive = new Set(["password", "totp_code", "lookup_secret", "code"]);
+export const temporaryAuthMessage = "Authentication is temporarily unavailable. Wait a moment and try again.";
 const safeHookMessages = new Set([
   "Complete a fresh security check.",
   "The security check is invalid. Try again.",
@@ -37,14 +38,50 @@ const safeHookMessages = new Set([
   "Authentication is unavailable. Try again.",
 ]);
 
-export function formMessages(values: unknown): string[] {
+function temporaryMessage(message: Record<string, unknown>): boolean {
+  return (typeof message.id === "number" && message.id >= 5000000) ||
+    message.text === "Authentication is unavailable. Try again.";
+}
+
+export function authFieldId(method: string, field: string): string {
+  return `auth-${method}-${field.replaceAll(".", "-")}`;
+}
+
+export function captchaFailure(status: number): "expired" | "service" | "captcha" {
+  return [401, 403, 410].includes(status) ? "expired" : status >= 500 ? "service" : "captcha";
+}
+
+export function formMessages(values: unknown, kind?: FormKind): string[] {
   if (values === undefined) return [];
   if (!Array.isArray(values) || values.length > 30) throw new TypeError("Invalid provider messages");
   return values.map((value) => {
     const message = object(value);
     if (message.type === "error") {
-      if (message.id === 4000006) return "Email or password is incorrect. Please try again.";
+      if (temporaryMessage(message)) return temporaryAuthMessage;
+      if ([4000006, 4000037, 4010010].includes(Number(message.id))) return "Email or password is incorrect. Please try again.";
+      if (kind === "login" && [4000005, 4000031, 4000032, 4000033, 4000034].includes(Number(message.id))) {
+        return "Email or password is incorrect. Please try again.";
+      }
+      if (message.id === 4000031) return "Choose a password that is not similar to your email address.";
+      if (message.id === 4000034) return "This password has appeared in a data breach. Choose a different, unique password.";
+      if (message.id === 4000032 || message.id === 4000033) {
+        const context = message.context && typeof message.context === "object" ? object(message.context) : {};
+        const limit = context[message.id === 4000032 ? "min_length" : "max_length"];
+        if (typeof limit === "number" && Number.isSafeInteger(limit) && limit > 0 && limit <= 4096) {
+          return `Use ${message.id === 4000032 ? "at least" : "no more than"} ${limit} UTF-8 bytes. Accented characters and emoji may use more than one byte.`;
+        }
+        return "This password was rejected. Choose a different password and try again.";
+      }
+      if (message.id === 4000005) return "This password was rejected by the account security policy. Choose a different password.";
+      if (message.id === 4000002) return "Complete this required field.";
+      if (message.id === 4000040) return "Enter a valid email address.";
+      if (message.id === 4000004) return "Enter a valid value for this field.";
+      if (message.id === 4000038) return "The security check failed. Complete a fresh check and try again.";
+      if ([4000007, 4000027, 4000028].includes(Number(message.id))) return "This email or username cannot be registered. Try signing in.";
+      if ([4000008, 4000012, 4000016, 4070006].includes(Number(message.id))) return "The code is incorrect, expired or already used. Try again.";
+      if ([4010001, 4040001, 4070005].includes(Number(message.id))) return "This form has expired. Start a new secure flow.";
       if (typeof message.text === "string" && safeHookMessages.has(message.text)) return message.text;
+      console.error("authentication validation reason", "unrecognized_provider_validation");
       return "Check the details below and try again.";
     }
     if (message.type === "info" || message.type === "success") {
@@ -78,10 +115,10 @@ export function formMethods(nodes: Record<string, unknown>[], kind: FormKind): A
       const type = input.type === "hidden" ? "hidden" : input.name === "password" ? "password" :
         input.name === "traits.dateOfBirth" ? "date" :
           ["identifier", "email", "traits.email"].includes(input.name) ? "email" : "text";
-      const errorMessages = formMessages(candidate.messages);
-      const error = errorMessages.length ? input.name === "password"
-        ? "Choose a strong, unique password that meets the account security policy."
-        : input.name === "traits.dateOfBirth" ? "Enter a valid date of birth." : "Please check this field." : undefined;
+      const messages = candidate.messages === undefined ? [] : candidate.messages;
+      if (!Array.isArray(messages) || messages.length > 30) throw new TypeError("Invalid provider messages");
+      const errorMessages = formMessages(messages.filter((message) => !temporaryMessage(object(message))), kind);
+      const error = errorMessages.length ? errorMessages.join(" ") : undefined;
       fields.push({
         name: input.name, label: labels[input.name], type, required: input.required === true,
         value: sensitive.has(input.name) ? "" : typeof input.value === "string" ? input.value : "",

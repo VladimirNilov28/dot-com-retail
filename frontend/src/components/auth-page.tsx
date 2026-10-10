@@ -8,7 +8,7 @@ import { authConfig } from "@/lib/auth/config";
 import { AuthError, authCookie, flowIdentifier, safeReturnTo, type FormKind } from "@/lib/auth/model";
 import { readFlow } from "@/lib/auth/flows";
 import { withBrowser } from "@/lib/auth/store";
-import { formMessages, formMethods } from "@/lib/auth/view";
+import { authFieldId, formMessages, formMethods, temporaryAuthMessage } from "@/lib/auth/view";
 
 export type AuthSearch = Promise<Record<string, string | string[] | undefined>>;
 
@@ -39,7 +39,8 @@ export async function AuthPage({ kind, searchParams }: { kind: FormKind; searchP
         const flow = await readFlow(state, browser, flowIdentifier(flowId), kind, client);
         return { kind: "flow" as const, flow, csrf: state.csrf, returnTo: state.returnTo,
           methods: kind === "verification" && flow.state === "passed_challenge" ? [] : formMethods(flow.nodes, kind),
-          messages: formMessages(flow.messages) };
+          messages: [...new Set([...formMessages(flow.messages, kind), ...flow.nodes.flatMap((node) =>
+            formMessages(node.messages, kind).filter((message) => message === temporaryAuthMessage))])] };
       } catch (error) {
         if (!(error instanceof AuthError)) throw error;
         console.error("authentication form unavailable", error.code);
@@ -57,6 +58,9 @@ export async function AuthPage({ kind, searchParams }: { kind: FormKind; searchP
   const methods = view.methods;
   const secondFactor = kind === "login" && methods.every((method) => method.name !== "password");
   const messages = view.messages;
+  const fieldErrors = methods.flatMap((method) => method.fields.filter((field) => field.error).map((field) => ({
+    id: authFieldId(method.name, field.name), label: field.label, error: field.error,
+  })));
   const validation = query.validation === "1" || view.flow.messages.some((message) => message.type === "error") ||
     methods.some((method) => method.fields.some((field) => field.error));
   const title = secondFactor ? "Two-step verification" : kind === "login" ? "Sign in" :
@@ -79,7 +83,10 @@ export async function AuthPage({ kind, searchParams }: { kind: FormKind; searchP
           <div id={validation ? "auth-error-summary" : undefined}
             className={validation ? "auth-summary" : "mb-5 text-sm text-muted"}
             role={validation ? "alert" : "status"} tabIndex={validation ? -1 : undefined}>
-            {(messages.length ? messages : ["Check your details and try again."]).map((message) => <p key={message}>{message}</p>)}
+            {validation ? <h2 className="font-semibold">We couldn&apos;t submit your form</h2> : null}
+            {(messages.length ? messages : fieldErrors.length ? [] : ["Check your details and try again."]).map((message) => <p key={message}>{message}</p>)}
+            {fieldErrors.length ? <ul className="list-disc pl-5">{fieldErrors.map((field) =>
+              <li key={field.id}><a className="store-link" href={`#${field.id}`}>{field.label}: {field.error}</a></li>)}</ul> : null}
           </div>
         ) : null}
         {methods.map((method, index) => (
@@ -108,8 +115,8 @@ export function AuthProblem({ code, kind = "login", returnTo = "/" }: {
       <h1 id="auth-error-title" className="text-2xl font-semibold tracking-tight">{unavailable ?
         kind === "registration" ? "Registration is unavailable" : kind === "verification" ? "Verification is unavailable" : "Sign-in is unavailable" :
         code === "provider_logout_pending" ? "Signed out of ByteCore" :
-          code === "expired" ? "This session has expired" : "We couldn't complete this request"}</h1>
-      <p role="alert" className="text-muted">{unavailable ? "We couldn't confirm this request. Please try again." :
+          code === "expired" ? "This form has expired" : "We couldn't complete this request"}</h1>
+      <p role="alert" className="text-muted">{unavailable ? "The authentication service is temporarily unavailable. This does not mean your password was rejected. Wait a moment, then retry." :
         code === "provider_logout_pending" ? "You're signed out of ByteCore. Provider logout could not be confirmed and will be retried." :
           "Start a new secure flow to continue."}</p>
       <Link prefetch={false} className="store-cta" href={kind === "login" ? `/auth/start?returnTo=${encodeURIComponent(returnTo)}` :

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { formMessages, formMethods } from "./view";
+import { authFieldId, captchaFailure, formMessages, formMethods, temporaryAuthMessage } from "./view";
 
 const input = (name, value, group = "default", type = "text", messages = []) => ({
   type: "input", group, attributes: { name, value, type, required: true }, messages,
@@ -53,8 +53,56 @@ describe("safe provider form projection", () => {
   });
   test("does not display raw infrastructure diagnostics or arbitrary provider markup", () => {
     expect(formMessages([{ id: 5000001, type: "error", text: "http://private-service failed: credential" }]))
-      .toEqual(["Check the details below and try again."]);
+      .toEqual([temporaryAuthMessage]);
     expect(formMessages([{ id: 4000006, type: "error", text: "arbitrary <script>markup</script>" }]))
       .toEqual(["Email or password is incorrect. Please try again."]);
+  });
+  test("maps actual Kratos policy IDs without rendering raw text or untrusted reasons", () => {
+    for (const [id, context, fragment] of [
+      [4000032, { min_length: 8 }, "at least 8 UTF-8 bytes"],
+      [4000033, { max_length: 72 }, "no more than 72 UTF-8 bytes"],
+      [4000031, {}, "not similar to your email"],
+      [4000034, { breaches: 100 }, "data breach"],
+      [4000005, { reason: "http://internal/?password=private-value" }, "rejected by the account security policy"],
+    ]) {
+      const messages = [{ id, context, type: "error", text: "private-value" }];
+      expect(formMessages(messages, "registration")[0]).toContain(fragment);
+      const field = formMethods([csrf, input("password", "private-value", "password", "password", messages), password], "registration")[0].fields;
+      expect(field.find((value) => value.name === "password").error).toContain(fragment);
+      expect(JSON.stringify(field)).not.toContain("private-value");
+    }
+    expect(formMessages([{ id: 4000032, context: { min_length: "secret" }, type: "error" }])[0])
+      .toBe("This password was rejected. Choose a different password and try again.");
+  });
+  test("infrastructure failures are form-level, never invalid-password errors", () => {
+    for (const message of [
+      { id: 5000001, type: "error", text: "private failure" },
+      { id: 4000001, type: "error", text: "Authentication is unavailable. Try again." },
+    ]) {
+      expect(formMessages([message], "registration")).toEqual([temporaryAuthMessage]);
+      expect(formMethods([csrf, input("password", "", "password", "password", [message]), password], "registration")[0]
+        .fields.find((value) => value.name === "password").error).toBeUndefined();
+    }
+  });
+  test("rejects malformed field messages rather than silently dropping validation", () => {
+    expect(() => formMethods([csrf, input("password", "", "password", "password", {}), password], "registration"))
+      .toThrow("Invalid provider messages");
+  });
+  test("login credential/account/policy rejections stay generic", () => {
+    for (const id of [4000006, 4000037, 4010010, 4000034, 4000031]) {
+      expect(formMessages([{ id, type: "error", text: "account exists", context: { reason: "private" } }], "login"))
+        .toEqual(["Email or password is incorrect. Please try again."]);
+    }
+  });
+  test("preserves safe CAPTCHA/expiry recovery and stable field targets", () => {
+    expect(formMessages([{ id: 4000001, type: "error", text: "The security check expired. Try again." }], "registration"))
+      .toEqual(["The security check expired. Try again."]);
+    expect(formMessages([{ id: 4040001, type: "error" }], "registration")[0]).toContain("form has expired");
+    expect(authFieldId("password", "traits.email")).toBe("auth-password-traits-email");
+    expect(captchaFailure(401)).toBe("expired");
+    expect(captchaFailure(503)).toBe("service");
+    expect(captchaFailure(400)).toBe("captcha");
+    expect(formMessages([{ id: 4000038, type: "error", text: "private" }])[0]).toContain("security check failed");
+    expect(formMessages([{ id: 4000040, type: "error", text: "private" }])).toEqual(["Enter a valid email address."]);
   });
 });

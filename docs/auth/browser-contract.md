@@ -66,6 +66,72 @@ The new versioned customer schema requires email, password, username and date
 of birth. Existing default-schema identities remain unchanged. Roles/scopes
 cannot be submitted as traits. Kratos remains the password-policy authority.
 
+### Password guidance and safe validation
+
+The running **Kratos v26.2.0** configuration was inspected on 2026-10-10:
+password authentication is enabled without policy/hasher overrides. Its defaults
+enforce a minimum of **8 UTF-8 bytes** and the bcrypt maximum of **72 UTF-8
+bytes**, reject passwords similar to the email identifier, and reject breached
+passwords (HIBP threshold zero). There is no mandatory uppercase/digit/symbol
+mix. Go's byte-length checks differ from the upstream wording "characters";
+emoji and accented characters can occupy multiple bytes. Actual provider
+responses confirmed minimum, maximum, similarity and breached-password
+rejections (`4000032`, `4000033`, `4000031`, `4000034` respectively).
+
+The server's existing HIBP check remains authoritative; its configured default
+ignores HIBP network errors. This work neither strengthens nor weakens that
+policy. Before changing Kratos versions, policy or hashers, re-inspect the
+effective configuration and update `frontend/src/lib/auth/password.ts`, the
+rendered guidance and its tests together. Do not copy generic composition rules
+from a password-strength library into acceptance requirements.
+
+Registration renders requirements before submission and keeps them visible
+after rejection, including without JavaScript. Live feedback checks UTF-8 byte
+length. A lazy-loaded, browser-local `@zxcvbn-ts` estimator supplies a labelled
+strength meter only as guidance, never an acceptance verdict. Passwords remain
+in the native form field; strength evaluation does not log/persist them or call
+an external service. Existing password-manager autocomplete and paste remain
+enabled. Show/hide is a keyboard-accessible button and is omitted without
+JavaScript; the field stays masked.
+
+Provider validation follows Kratos → BFF flow validation → safe form projection.
+Registration hook messages follow bridge → Kratos's preserved UI messages →
+the same projection. Only recognized message IDs, bounded numeric length
+limits and exact allowlisted hook messages reach the form. Arbitrary provider
+text, exception messages, payloads and URLs never reach the browser. Password
+errors retain actionable reasons; system errors are form-level temporary-service
+failures, not password failures. Login credential/account-not-found errors share
+the same generic wording. Unexpected provider/bridge failures emit bounded
+server-side reason codes without response bodies or request credentials.
+
+Failed native submissions return a focused error summary with links to affected
+fields and associated inline errors. Invalid CAPTCHA, expired browser-bound
+flows and unavailable services have separate recovery guidance. CAPTCHA
+challenge HTTP 401/403/410 offers a new registration flow; HTTP 5xx offers a
+delayed check reload. A provider password rejection still requires the normal
+fresh-widget retry; CAPTCHA proof/replay semantics are unchanged.
+
+Production-browser verification used the real existing local providers,
+PostgreSQL and Mailpit. A temporary loopback proxy forwarded only the canonical
+storefront origin to an isolated production build, preserving the owner's dev
+server and exact OAuth callback. Checks covered all four password rejections,
+local Unicode feedback, paste/keyboard visibility, actual invalid CAPTCHA and
+duplicate registration, valid registration/courier verification/login/reload/
+logout, mobile layout, server-rendered errors and native login without
+JavaScript. Hydra's existing no-JS continuation button completes form_post.
+Registration still requires JavaScript for the official ALTCHA widget; the
+server-rendered warning states that limitation rather than bypassing it.
+
+Expiry was additionally exercised by expiring only one newly created test
+browser's durable flow binding: challenge retrieval returned `401 expired` and
+the form offered a registration restart. Service recovery used a controlled
+browser HTTP 503 on challenge retrieval and the real unavailable-page template,
+not an outage imposed on owner services. Desktop/mobile captures and their
+provenance are recorded in the frontend baseline manifest; visual owner approval
+is still pending.
+
+### CAPTCHA and canonical linkage
+
 Self-hosted ALTCHA PoW-v2 uses the official widget/verifier, signed expiring
 flow-bound challenges and durable atomic replay protection. No mock CAPTCHA,
 client-success flag or testing bypass is supported. Cookie-authenticated

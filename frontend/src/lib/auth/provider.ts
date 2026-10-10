@@ -47,10 +47,14 @@ export async function bridgeRequest(path: string, body: Record<string, unknown>)
       }
       throw new AuthError("forbidden", 403);
     }
-    if (!response.ok) throw new AuthError("unavailable");
+    if (!response.ok) {
+      console.error("authentication bridge reason", "upstream_http_failure", response.status);
+      throw new AuthError("unavailable");
+    }
     return response.status === 204 ? null : await response.json();
   } catch (error) {
     if (error instanceof AuthError) throw error;
+    console.error("authentication bridge reason", "transport_or_invalid_response");
     throw new AuthError("unavailable");
   }
 }
@@ -73,6 +77,9 @@ export function providerRedirect(value: unknown): URL {
 }
 
 export function providerFailure(error: unknown): { status: number; body: unknown } {
-  if (!isAxiosError<unknown>(error) || !error.response) throw new AuthError("unavailable");
+  if (!isAxiosError<unknown>(error) || !error.response) {
+    console.error("authentication provider reason", isAxiosError(error) ? "transport_failure" : "invalid_response");
+    throw new AuthError("unavailable");
+  }
   return { status: error.response.status, body: error.response.data };
 }
