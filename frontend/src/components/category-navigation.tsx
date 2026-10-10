@@ -22,7 +22,7 @@ const ROWS_PER_COLUMN = 8;
 // from the mobile drawer's collapsed disclosures.
 const PANEL_CHILD_DEPTH = 1;
 
-type CategoryNode = { category: Category; children: CategoryNode[] };
+export type CategoryNode = { category: Category; children: CategoryNode[] };
 
 export function isPlainClick(event: MouseEvent) {
   return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
@@ -38,7 +38,7 @@ function columnCount(tree: CategoryNode[]): number {
   return Math.max(1, Math.min(tree.length, MAX_COLUMNS, Math.ceil(rows / ROWS_PER_COLUMN)));
 }
 
-function categoryTree(categories: Category[]): CategoryNode[] {
+export function categoryTree(categories: Category[]): CategoryNode[] {
   const index = categoryIndex(categories);
   function descend(parent: string | undefined, depth: number): CategoryNode[] {
     if (depth >= MAX_DEPTH) return [];

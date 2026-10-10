@@ -224,10 +224,18 @@ try {
     assert.equal(await page.locator("ul.catalog-products .product-card").count(), 0);
     assert.equal(await page.getByRole("list", { name: "Products" }).count(), 0);
     assert.match(await page.locator("main").textContent(), /No products assigned directly/);
-    // Subcategories are listed inside the sidebar/drawer's single "Category
-    // navigation" region (grouped under a plain "Subcategories" label, not a
-    // separate nav landmark) rather than the old discovery page's own nav.
+    // The selected category's branch opens automatically. Browsing its
+    // subcategories toggles in place, without changing the results URL.
     const gamingSidebar = await sidebarScope(page, width);
+    const gamingToggle = gamingSidebar.getByRole("button", { name: "Subcategories of Gaming", exact: true });
+    assert.equal(await gamingToggle.getAttribute("aria-expanded"), "true");
+    const categoryUrl = page.url();
+    await gamingToggle.click();
+    assert.equal(await gamingToggle.getAttribute("aria-expanded"), "false");
+    assert.equal(page.url(), categoryUrl, "Expanding categories must not navigate");
+    await gamingToggle.click();
+    assert.equal(await gamingToggle.getAttribute("aria-expanded"), "true");
+    assert.equal(await gamingSidebar.getByRole("link", { name: /Up a level/ }).count(), 0);
     assert.equal(await gamingSidebar.getByRole("navigation", { name: "Category navigation" })
       .getByRole("link", { name: "Components", exact: true }).count(), 1);
     await gamingSidebar.getByRole("link", { name: "Components", exact: true }).click();

@@ -949,10 +949,13 @@ discovery page above it did not survive:
 
 **Desktop (≥48rem, or a wider breakpoint if you justify it):** two regions.
 
-- A **left sidebar** carrying (a) category navigation *in context* — an "All
-  products" entry, ancestors, the current category marked `aria-current`, and its
-  children or siblings — and (b) the **real filters** from §9.0, with selected
+- A **left sidebar** carrying (a) expandable category/subcategory navigation —
+  an "All products" entry and collapsed taxonomy groups, with the current
+  category marked `aria-current` and its ancestor branches expanded — and (b) the **real filters** from §9.0, with selected
   values reflected as removable chips and a "Clear all".
+  The owner's 2026-10-11 correction replaces level-by-level browsing and "Up a
+  level" links: separate disclosure buttons expand subcategories without
+  navigation, while category links still select that category's own products.
 - A **compact product area** to its right. With the sidebar present, prefer
   three columns at desktop rather than squeezing four.
 

@@ -3,10 +3,10 @@
 import { ChevronDown, SlidersHorizontal, X } from "lucide-react";
 import { Button, Disclosure, Drawer } from "@heroui/react";
 import { useId, useState, type MouseEvent } from "react";
-import { isPlainClick } from "./category-navigation";
+import { categoryTree, isPlainClick, type CategoryNode } from "./category-navigation";
 import { CatalogLink } from "./catalog-link";
 import {
-  ATTRIBUTE_PARAM_PREFIX, DEFAULT_SORT, attributeLabel, catalogHref, hasActiveFilters, resultsHref,
+  ATTRIBUTE_PARAM_PREFIX, DEFAULT_SORT, attributeLabel, catalogHref, categoryIndex, hasActiveFilters, resultsHref,
   type AttributeFilter, type Category, type CatalogFacets, type ResultsState,
 } from "@/lib/catalog/model";
 
@@ -31,35 +31,48 @@ function PreserveParams({ state, omit }: { state: ResultsState; omit: readonly s
   </>;
 }
 
-/** Contextual category navigation for the results sidebar/drawer: an "up"
- * link, direct children or siblings, and real facet counts where available.
- * Deliberately NOT the megamenu's full taxonomy (§9.4) — only what is
- * relevant to the current page, so it stays scannable instead of becoming a
- * second sitemap. */
-function CategoryContext({ state, category, links, linksLabel, parentHref, facets, onNavigate }: {
-  state: ResultsState; category?: Category; links: Category[]; linksLabel: string;
-  parentHref?: string; facets: CatalogFacets | null; onNavigate: () => void;
+function CategoryContext({ state, category, categories, facets, onNavigate }: {
+  state: ResultsState; category?: Category; categories: Category[];
+  facets: CatalogFacets | null; onNavigate: () => void;
 }) {
+  const expanded = new Set(category
+    ? [category.id, ...categoryIndex(categories).ancestors(category).map((entry) => entry.id)]
+    : []);
+  function branch(node: CategoryNode): React.ReactNode {
+    const entry = node.category;
+    const count = facetCount(facets, entry.id);
+    const link = <CatalogLink href={catalogHref(entry.slug, 1, state.view)} className="results-nav-link"
+      aria-current={entry.id === category?.id ? "page" : undefined} onClick={navClick(onNavigate)}>
+      {entry.name}{count !== undefined && <span className="results-nav-count"> ({count})</span>}
+    </CatalogLink>;
+    return <li key={entry.id}>
+      {node.children.length === 0 ? link : (
+        <Disclosure defaultExpanded={expanded.has(entry.id)}>
+          <Disclosure.Heading className="results-category-row">
+            {link}
+            <Disclosure.Trigger className="store-category-toggle" aria-label={`Subcategories of ${entry.name}`}>
+              <Disclosure.Indicator>
+                <ChevronDown size={18} strokeWidth={2} aria-hidden="true" focusable="false" />
+              </Disclosure.Indicator>
+            </Disclosure.Trigger>
+          </Disclosure.Heading>
+          <Disclosure.Content>
+            <Disclosure.Body className="results-category-children">
+              <ul>{node.children.map(branch)}</ul>
+            </Disclosure.Body>
+          </Disclosure.Content>
+        </Disclosure>
+      )}
+    </li>;
+  }
   return (
     <section className="results-section" aria-label="Category navigation">
       <h2 className="results-section-heading">Categories</h2>
       <nav aria-label="Category navigation" className="results-nav">
-        {category && (
-          <CatalogLink href={parentHref ?? catalogHref(undefined, 1, state.view)} className="results-nav-link results-nav-up" onClick={navClick(onNavigate)}>
-            {category.parent ? "↑ Up a level" : "↑ All categories"}
-          </CatalogLink>
-        )}
-        {!category && <span className="results-nav-link results-nav-current" aria-current="page">All products</span>}
-        {links.length > 0 && <p className="results-nav-group-label">{linksLabel}</p>}
-        {links.map((entry) => {
-          const count = facetCount(facets, entry.id);
-          return (
-            <CatalogLink key={entry.id} href={catalogHref(entry.slug, 1, state.view)} className="results-nav-link"
-              aria-current={entry.id === category?.id ? "page" : undefined} onClick={navClick(onNavigate)}>
-              {entry.name}{count !== undefined && <span className="results-nav-count"> ({count})</span>}
-            </CatalogLink>
-          );
-        })}
+        <CatalogLink href={catalogHref(undefined, 1, state.view)} className="results-nav-link"
+          aria-current={!category ? "page" : undefined} onClick={navClick(onNavigate)}>All products</CatalogLink>
+        <p className="results-nav-group-label">Browse by category</p>
+        <ul>{categoryTree(categories).map(branch)}</ul>
       </nav>
     </section>
   );
@@ -170,8 +183,8 @@ function Filters({ route, state, facets, onNavigate }: {
 }
 
 export interface CatalogSidebarProps {
-  route: string; state: ResultsState; category?: Category; links: Category[]; linksLabel: string;
-  parentHref?: string; facets: CatalogFacets | null;
+  route: string; state: ResultsState; category?: Category; categories: Category[];
+  facets: CatalogFacets | null;
 }
 
 /** One sidebar implementation, rendered twice: a static desktop `<aside>`
@@ -185,7 +198,7 @@ export function ResultsSidebar(props: CatalogSidebarProps) {
   return (
     <>
       <aside className="results-sidebar" aria-label="Category navigation and filters">
-        <CategoryContext {...props} onNavigate={() => {}} />
+        <CategoryContext key={props.category?.id ?? "all"} {...props} onNavigate={() => {}} />
         <Filters {...props} onNavigate={() => {}} />
       </aside>
       <div className="results-drawer-trigger-wrap">
@@ -205,7 +218,7 @@ export function ResultsSidebar(props: CatalogSidebarProps) {
                   </Drawer.CloseTrigger>
                 </Drawer.Header>
                 <Drawer.Body className="store-drawer-body">
-                  <CategoryContext {...props} onNavigate={close} />
+                  <CategoryContext key={props.category?.id ?? "all"} {...props} onNavigate={close} />
                   <Filters {...props} onNavigate={close} />
                 </Drawer.Body>
               </Drawer.Dialog>

@@ -38,10 +38,6 @@ export async function CatalogPageContent({ slug, isSearch = false, parameters }:
   </section>;
   const trail = category ? index.ancestors(category) : [];
   const children = index.children(category?.id);
-  const siblings = category ? index.children(category.parent?.id) : [];
-  const links = category ? (children.length ? children : siblings) : index.children(undefined);
-  const linksLabel = category ? (children.length ? "Subcategories" : "Related categories") : "Browse by category";
-  const parentHref = trail.length ? catalogHref(trail[trail.length - 1]?.slug, 1, state.view) : undefined;
   const heading = isSearch ? (state.query ? `Search results for “${state.query}”` : "Search") : (category?.name ?? "All products");
   const results = await CatalogResults({ route, categoryId: category?.id, hasChildren: children.length > 0, isSearch, state });
   return (
@@ -71,8 +67,8 @@ export async function CatalogPageContent({ slug, isSearch = false, parameters }:
         </p> : null}
       </header>
       <div className="results-layout">
-        <ResultsSidebar route={route} state={state} category={category} links={links} linksLabel={linksLabel}
-          parentHref={parentHref} facets={results.facets} />
+        <ResultsSidebar route={route} state={state} category={category} categories={categories.data.categories}
+          facets={results.facets} />
         <div className="results-main">
           <div className="catalog-transition-loading"><CatalogSkeleton /></div>
           {results.content}
