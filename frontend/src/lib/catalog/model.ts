@@ -47,7 +47,7 @@ export interface ResultsState {
 }
 
 function parsePriceParam(value: string | string[] | undefined): Decimal | null | undefined {
-  if (value === undefined) return undefined;
+  if (value === undefined || value === "") return undefined;
   if (Array.isArray(value)) return null;
   try {
     const parsed = decimal(value);

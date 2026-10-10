@@ -49,6 +49,13 @@ describe("catalog URL state", () => {
 });
 
 describe("shared results state (category pages, All products, search)", () => {
+  test("accepts blank optional price fields from native filter submissions", () => {
+    expect(resultsState({ minPrice: "10", maxPrice: "" })).toEqual(resultsState({ minPrice: "10" }));
+    expect(resultsState({ minPrice: "", maxPrice: "100" })).toEqual(resultsState({ maxPrice: "100" }));
+    expect(resultsState({ minPrice: "", maxPrice: "" })).toEqual(resultsState({}));
+    expect(resultsState({ minPrice: ["", "10"] })).toBeNull();
+    expect(resultsState({ maxPrice: "invalid" })).toBeNull();
+  });
   test("defaults sort by query presence and round trips through resultsHref", () => {
     expect(resultsState({})).toEqual({ page: 1, view: "grid", sort: "PRICE_ASC", query: "", attributes: [] });
     expect(resultsState({ q: "cable" })).toEqual({ page: 1, view: "grid", sort: "RELEVANCE", query: "cable", attributes: [] });
