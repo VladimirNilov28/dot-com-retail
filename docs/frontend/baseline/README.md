@@ -599,7 +599,69 @@ files in this round. They remain *Model-reviewed — awaiting owner approval*.
 
 ## Retained-file inventory
 
-### #67/#66 password guidance and safe errors — 2026-10-10
+### #67/#66 compact password refinement — 2026-10-10
+
+**Rendered implementation: `3926c05`, `dev`. Twelve production screenshots
+were captured and individually inspected: eleven replacements and one new
+mobile minimum-validation capture.** All are **Model-reviewed — awaiting owner
+approval**. This section supersedes the earlier password/authentication rows
+below for the refreshed filenames. Inventory is now **77 PNG files**.
+
+Captures use Chromium **153.0.8010.12**, full page, reduced motion, DPR 1,
+1440×1000 desktop or 390×1000 mobile. A temporary loopback proxy preserves the
+canonical `http://127.0.0.1:3000` origin/callback while forwarding the storefront
+to a separate production build at `:3037`. Real provider requests are unchanged.
+Only Kratos was rebuilt/recreated to load the explicit local-development HIBP
+override; other owner services, frontend output, secrets, accounts and volumes
+were preserved. Helpers were stopped after verification. Passwords are blank
+or masked; no credentials, verification codes, tokens or cookies are visible.
+
+The guidance is a single compact advisory line, with the actual byte minimum.
+Lowercase/uppercase/numbers/symbols are recommended, not new required classes.
+Strength is local and labelled **Estimated strength**, not an acceptance claim.
+Minimum-validation captures show actual native BFF rejection with all browser
+validation bypassed, an associated inline error and a linked/focused summary
+without duplicated error text. Weak captures show a locally compliant value
+with a Weak estimate. The CAPTCHA unavailable image uses a controlled challenge
+HTTP 503, not an outage imposed on owner services.
+
+Real direct-provider probes confirmed minimum enforcement and actual HIBP-only
+rejection before the local override. Afterward two distinct disposable users
+registered using the same formerly breach-rejected password, genuine ALTCHA
+and the existing verification flow; both completed login/reload/logout. BFF
+minimum/maximum, retained provider similarity and invalid-proof rejection,
+real durable-flow expiry, actual refresh rotation and completed provider
+revocation passed. Existing designated login, native no-JS login to `/cart`,
+no-JS guidance/errors, keyboard show/hide/paste and canonical development HMR
+passed. The unchanged no-JS registration limitation is explicitly visible.
+No email infrastructure or delivery investigation was performed.
+
+59 auth regressions, 3 development/base-policy boundary tests, lint (one existing
+homepage warning), typecheck, production build and all 11 existing production
+storefront smoke scenarios passed. Actual smoke checks include Chromium 200%
+zoom. No owner visual approval or deployed-production verification is claimed.
+
+| File/set | Current state | Status |
+| --- | --- | --- |
+| `issue-67-register-{desktop-1440,mobile-390}-default.png` | Compact guidance before submission; genuine widget | Model-reviewed — awaiting owner approval |
+| `issue-67-register-{desktop-1440,mobile-390}-weak.png` | Masked value, Weak estimate distinct from acceptance | Model-reviewed — awaiting owner approval |
+| `issue-67-register-{desktop-1440,mobile-390}-validation.png` | Actual BFF minimum rejection and concise linked summary | Model-reviewed — awaiting owner approval |
+| `issue-67-register-mobile-390-no-js.png` | Server-rendered compact guidance and unchanged ALTCHA limitation | Model-reviewed — awaiting owner approval |
+| `issue-67-register-desktop-1440-captcha-unavailable.png` | Controlled challenge 503 with distinct recovery guidance | Model-reviewed — awaiting owner approval |
+| `issue-66-login-{desktop-1440,mobile-390}-default.png` | Native manager-compatible password field and show/hide | Model-reviewed — awaiting owner approval |
+| `issue-66-login-{desktop-1440,mobile-390}-invalid.png` | Real generic credential error, focused summary, blank password | Model-reviewed — awaiting owner approval |
+
+**Historical only:** `issue-67-register-{desktop-1440,mobile-390}-breached.png`
+and `issue-67-register-mobile-390-duplicate.png` still depict the previous
+extensive guidance and are **Stale**, not current baseline evidence. Their
+actual provider rejections remain historical evidence at `fc4db62`. The breach
+state is intentionally absent from the current local policy; protected base
+policy/error mapping remain covered by configuration/regression checks. The
+older tables' approval statuses for these three files are superseded by this
+explicit stale record. Unchanged error-page/MFA/verification/account captures
+retain their previous provenance.
+
+### #67/#66 password guidance and safe errors — 2026-10-10 (historical)
 
 **16 inspected production captures: 10 replacements and 6 additions.**
 Rendered implementation revision:
