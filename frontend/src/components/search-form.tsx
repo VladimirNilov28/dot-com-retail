@@ -109,6 +109,7 @@ export function SearchForm({ route, state }: { route: string; state: ResultsStat
         go(value);
       }}>
         <label htmlFor={inputId} className="sr-only">Search products</label>
+        <div className="results-search-entry">
         <Search size={18} strokeWidth={2} aria-hidden="true" focusable="false" className="results-search-icon" />
         <div className="results-search-field">
           <input id={inputId} name="q" type="search" value={value} autoComplete="off"
@@ -136,6 +137,7 @@ export function SearchForm({ route, state }: { route: string; state: ResultsStat
               ))}
             </ul>
           )}
+        </div>
         </div>
         <button type="submit" className="store-cta results-search-submit">Search</button>
       </form>

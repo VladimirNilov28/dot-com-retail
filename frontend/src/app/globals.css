@@ -380,14 +380,15 @@
   .results-filter-count { color: var(--muted); font-weight: 400; }
 
   .results-search { min-width: 0; }
-  .results-search-form { display: flex; align-items: center; gap: 0.5rem; border: 1px solid var(--border); border-radius: var(--radius-lg); padding-inline: 0.75rem; background: var(--surface); }
+  .results-search-form { display: flex; align-items: center; gap: 0.5rem; }
+  .results-search-entry { display: flex; align-items: center; gap: 0.5rem; flex: 1; min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-lg); padding-inline: 0.75rem; background: var(--surface); }
   .results-search-icon { color: var(--muted); flex-shrink: 0; }
   /* The suggestions panel is positioned from this field wrapper, not the
      whole form, so it aligns with the input instead of spanning the icon and
      submit button either side of it. */
   .results-search-field { position: relative; flex: 1; min-width: 0; }
   .results-search-input { width: 100%; min-width: 0; min-height: var(--control-height); background: transparent; color: var(--foreground); }
-  .results-search-submit { font-size: 0.8125rem; padding-inline: 0.875rem; min-height: calc(var(--control-height) - 0.5rem); }
+  .results-search-submit { font-size: 0.8125rem; padding-inline: 0.875rem; min-height: var(--control-height); flex-shrink: 0; }
   .results-suggestions { position: absolute; z-index: 20; inset-inline: 0; top: calc(100% + 0.25rem); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.35); }
   .results-suggestion-status { padding: 0.5rem 0.75rem; font-size: 0.8125rem; color: var(--muted); }
   .results-suggestion-button { display: block; width: 100%; text-align: left; padding: 0.5rem 0.75rem; font-size: 0.875rem; }
