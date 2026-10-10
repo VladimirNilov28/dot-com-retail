@@ -68,26 +68,55 @@ cannot be submitted as traits. Kratos remains the password-policy authority.
 
 ### Password guidance and safe validation
 
-The running **Kratos v26.2.0** configuration was inspected on 2026-10-10:
-password authentication is enabled without policy/hasher overrides. Its defaults
-enforce a minimum of **8 UTF-8 bytes** and the bcrypt maximum of **72 UTF-8
-bytes**, reject passwords similar to the email identifier, and reject breached
-passwords (HIBP threshold zero). There is no mandatory uppercase/digit/symbol
-mix. Go's byte-length checks differ from the upstream wording "characters";
+The **Kratos v26.2.0** policy and real responses were inspected on 2026-10-10.
+The base configuration explicitly keeps the minimum at **8 UTF-8 bytes**,
+identifier-similarity checking enabled and breached-password protection enabled
+(HIBP threshold zero). The deployed bcrypt hasher limits passwords to **72 UTF-8
+bytes**. There is no mandatory lowercase/uppercase/digit/symbol mix. Go's
+byte-length checks differ from the upstream wording "characters";
 emoji and accented characters can occupy multiple bytes. Actual provider
 responses confirmed minimum, maximum, similarity and breached-password
 rejections (`4000032`, `4000033`, `4000031`, `4000034` respectively).
 
-The server's existing HIBP check remains authoritative; its configured default
-ignores HIBP network errors. This work neither strengthens nor weakens that
-policy. Before changing Kratos versions, policy or hashers, re-inspect the
+The breach message comes from Kratos's HIBP validation (`4000034`), not a
+comparison with other users' passwords. Distinct users may use the same
+policy-compliant password. Neither the BFF nor Spring hashes, stores or compares
+credentials; Kratos owns credential storage and authentication.
+
+**Local development only:** `infrastructure/compose.yml`, the documented local
+stack, explicitly sets
+`SELFSERVICE_METHODS_PASSWORD_CONFIG_HAVEIBEENPWNED_ENABLED: "false"` on Kratos.
+This is the supported v26.2.0 provider override and disables the actual HIBP
+check, not just its error display. It does not override the minimum, bcrypt
+maximum, similarity, CAPTCHA, verification or authentication checks. Apply a
+configuration/image change to an existing local stack with:
+
+```bash
+docker compose -f infrastructure/compose.yml --env-file .env up -d --no-deps --build kratos
+```
+
+No database reset or volume deletion is needed. **Production must not inherit
+this local Compose override.** The base `infrastructure/oauth/kratos/kratos.yml`
+and provider defaults retain `haveibeenpwned_enabled: true`; omit the
+development environment override (or explicitly set it to `true`) in production.
+Do not determine this setting from frontend `NODE_ENV`, browser data or headers.
+The retained upstream default ignores HIBP network errors.
+
+Before changing Kratos versions, policy or hashers, re-inspect the
 effective configuration and update `frontend/src/lib/auth/password.ts`, the
 rendered guidance and its tests together. Do not copy generic composition rules
 from a password-strength library into acceptance requirements.
 
-Registration renders requirements before submission and keeps them visible
-after rejection, including without JavaScript. Live feedback checks UTF-8 byte
-length. A lazy-loaded, browser-local `@zxcvbn-ts` estimator supplies a labelled
+Registration renders one compact advisory line before submission:
+“Recommended: Use lowercase and uppercase letters, numbers and symbols. Minimum
+8 UTF-8 bytes.” Composition is advice, not a new acceptance requirement.
+The line stays visible after rejection and without JavaScript. Live feedback
+adds a concise error only for locally checkable byte-length violations.
+The Next.js BFF reuses the same byte bounds before forwarding registration
+to Kratos, so bypassing browser validation cannot bypass the BFF policy.
+Direct provider registration remains protected by Kratos's own minimum and
+bcrypt limit; the BFF is not the only enforcement point.
+A lazy-loaded, browser-local `@zxcvbn-ts` estimator supplies a compact labelled
 strength meter only as guidance, never an acceptance verdict. Passwords remain
 in the native form field; strength evaluation does not log/persist them or call
 an external service. Existing password-manager autocomplete and paste remain
@@ -105,22 +134,35 @@ the same generic wording. Unexpected provider/bridge failures emit bounded
 server-side reason codes without response bodies or request credentials.
 
 Failed native submissions return a focused error summary with links to affected
-fields and associated inline errors. Invalid CAPTCHA, expired browser-bound
+fields without duplicating the inline error text. BFF length rejection uses only
+an allowlisted `minimum`/`maximum` reason in the native redirect, never a password;
+it renders only after the normal browser-bound flow validation. Invalid CAPTCHA, expired browser-bound
 flows and unavailable services have separate recovery guidance. CAPTCHA
 challenge HTTP 401/403/410 offers a new registration flow; HTTP 5xx offers a
 delayed check reload. A provider password rejection still requires the normal
 fresh-widget retry; CAPTCHA proof/replay semantics are unchanged.
 
-Production-browser verification used the real existing local providers,
-PostgreSQL and Mailpit. A temporary loopback proxy forwarded only the canonical
+Production-build browser verification used the real existing local providers
+and PostgreSQL. A temporary loopback proxy forwarded only the canonical
 storefront origin to an isolated production build, preserving the owner's dev
-server and exact OAuth callback. Checks covered all four password rejections,
-local Unicode feedback, paste/keyboard visibility, actual invalid CAPTCHA and
-duplicate registration, valid registration/courier verification/login/reload/
-logout, mobile layout, server-rendered errors and native login without
+server and exact OAuth callback. Before applying the development override, real
+direct-provider requests confirmed minimum enforcement and HIBP-only rejection.
+After applying it, direct requests still rejected an invalid CAPTCHA proof and
+an under-minimum password. Two distinct disposable users registered with the same
+formerly HIBP-only-rejected password using genuine ALTCHA and the existing email
+verification flow, then logged in, reloaded and logged out successfully.
+BFF minimum/maximum bypass tests, preserved provider similarity rejection,
+invalid CAPTCHA, local text-labelled strength, paste/keyboard visibility,
+mobile layout, server-rendered errors and native login without
 JavaScript. Hydra's existing no-JS continuation button completes form_post.
 Registration still requires JavaScript for the official ALTCHA widget; the
 server-rendered warning states that limitation rather than bypassing it.
+The designated existing account still logs in and out; its test session exercised
+actual Hydra refresh-token rotation, completed logout revocation and rejection
+of both the revoked refresh grant and provider session. Canonical `127.0.0.1`
+development HMR received WebSocket frames. Production policy retention was
+verified in the base configuration and regression tests, not by deploying a
+production stack. No email infrastructure or delivery investigation was performed.
 
 Expiry was additionally exercised by expiring only one newly created test
 browser's durable flow binding: challenge retrieval returned `401 expired` and

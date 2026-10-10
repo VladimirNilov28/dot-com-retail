@@ -16,6 +16,10 @@ selfservice:
   methods:
     password:
       enabled: true
+      config:
+        min_password_length: 8
+        identifier_similarity_check_enabled: true
+        haveibeenpwned_enabled: true
     code:
       enabled: true
       passwordless_enabled: false

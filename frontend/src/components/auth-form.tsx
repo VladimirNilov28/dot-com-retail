@@ -6,16 +6,16 @@ import { createElement, useEffect, useRef, useState, useSyncExternalStore, type 
 import { flushSync } from "react-dom";
 import { authFieldId, captchaFailure, type AuthMethod } from "@/lib/auth/view";
 import type { FormKind } from "@/lib/auth/model";
-import { passwordLengthFeedback } from "@/lib/auth/password";
+import { passwordGuidance, passwordErrorMessage, registrationPasswordError } from "@/lib/auth/password";
 
 const subscribeHydration = () => () => {};
 const clientSnapshot = () => true;
 const serverSnapshot = () => false;
 
 function PasswordGuidance({ inputId }: { inputId: string }) {
-  const [length, setLength] = useState<ReturnType<typeof passwordLengthFeedback>>();
+  const [lengthError, setLengthError] = useState<string>();
   const [score, setScore] = useState<number>();
-  const [strengthState, setStrengthState] = useState("Enter a password to see strength guidance.");
+  const [strengthState, setStrengthState] = useState("Not measured");
   useEffect(() => {
     const input = document.getElementById(inputId);
     if (!(input instanceof HTMLInputElement)) return;
@@ -26,9 +26,9 @@ function PasswordGuidance({ inputId }: { inputId: string }) {
       if (!(input instanceof HTMLInputElement)) return;
       const current = ++revision;
       clearTimeout(timer);
-      setLength(input.value ? passwordLengthFeedback(input.value) : undefined);
+      setLengthError(input.value ? passwordErrorMessage(registrationPasswordError(input.value)) : undefined);
       setScore(undefined);
-      setStrengthState(input.value ? "Estimating strength locally..." : "Enter a password to see strength guidance.");
+      setStrengthState(input.value ? "Measuring..." : "Not measured");
       if (!input.value) return;
       timer = setTimeout(() => {
         import("@/lib/auth/password-strength").then(({ passwordStrength, strengthLabels }) => {
@@ -39,7 +39,7 @@ function PasswordGuidance({ inputId }: { inputId: string }) {
           setStrengthState(strengthLabels[result]);
         }).catch(() => {
           console.error("authentication guidance reason", "strength_module_unavailable");
-          if (active && current === revision) setStrengthState("Strength guidance is unavailable. Server validation still applies.");
+          if (active && current === revision) setStrengthState("Unavailable");
         });
       }, 200);
     }
@@ -50,17 +50,11 @@ function PasswordGuidance({ inputId }: { inputId: string }) {
   }, [inputId]);
   return (
     <div id={`${inputId}-guidance`} className="auth-password-guidance text-sm text-muted">
-      <p className="font-medium text-foreground">Password requirements</p>
-      <ul className="list-disc pl-5">
-        <li>Use 8–72 UTF-8 bytes. Plain English characters use one byte each; accented characters and emoji may use more.</li>
-        <li>Do not use a password similar to your email address or found in a data breach. These checks happen on the server.</li>
-        <li>No uppercase, number or symbol mix is required. Use a long, unique password or passphrase.</li>
-      </ul>
-      <p role="status">{length ? `${length.bytes} UTF-8 bytes · ${length.minimumMet ? "Minimum met" : "Too short"} · ${length.maximumMet ? "Within maximum" : "Too long"}` : ""}</p>
+      <p>{passwordGuidance}</p>
+      {lengthError ? <p className="text-danger" role="status">{lengthError}</p> : null}
       <div className="auth-strength">
-        <p role="status">Strength: {strengthState}</p>
-        {score !== undefined ? <meter min={0} max={4} value={score} aria-label={`Password strength: ${strengthState}`} /> : null}
-        <p>Strength is guidance, not acceptance. The server makes the final decision.</p>
+        <p role="status">Estimated strength: {strengthState}</p>
+        {score !== undefined ? <meter min={0} max={4} value={score} aria-label={`Estimated password strength: ${strengthState}`} /> : null}
       </div>
       <noscript><style>{".auth-strength { display: none; }"}</style></noscript>
     </div>

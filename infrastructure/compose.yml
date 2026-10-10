@@ -148,6 +148,8 @@ services:
       SECRETS_COOKIE: ${KRATOS_SECRETS_COOKIE:?KRATOS_SECRETS_COOKIE is required}
       SECRETS_CIPHER: ${KRATOS_SECRETS_CIPHER:?KRATOS_SECRETS_CIPHER is required}
       AUTH_BRIDGE_SECRET: ${AUTH_BRIDGE_SECRET:?AUTH_BRIDGE_SECRET is required}
+      # Explicit local-development override; the base Kratos policy keeps HIBP enabled.
+      SELFSERVICE_METHODS_PASSWORD_CONFIG_HAVEIBEENPWNED_ENABLED: "false"
 
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4434/health/ready"]

@@ -9,6 +9,7 @@ import { AuthError, authCookie, flowIdentifier, safeReturnTo, type FormKind } fr
 import { readFlow } from "@/lib/auth/flows";
 import { withBrowser } from "@/lib/auth/store";
 import { authFieldId, formMessages, formMethods, temporaryAuthMessage } from "@/lib/auth/view";
+import { passwordErrorMessage } from "@/lib/auth/password";
 
 export type AuthSearch = Promise<Record<string, string | string[] | undefined>>;
 
@@ -55,7 +56,10 @@ export async function AuthPage({ kind, searchParams }: { kind: FormKind; searchP
   if (kind === "verification" && view.flow.state === "passed_challenge") {
     redirect(`/auth/start?returnTo=${encodeURIComponent(view.returnTo)}`);
   }
-  const methods = view.methods;
+  const passwordError = kind === "registration" && query.validation === "1" ? passwordErrorMessage(query.passwordError) : undefined;
+  const methods = passwordError ? view.methods.map((method) => ({
+    ...method, fields: method.fields.map((field) => field.name === "password" ? { ...field, error: passwordError } : field),
+  })) : view.methods;
   const secondFactor = kind === "login" && methods.every((method) => method.name !== "password");
   const messages = view.messages;
   const fieldErrors = methods.flatMap((method) => method.fields.filter((field) => field.error).map((field) => ({
@@ -85,8 +89,9 @@ export async function AuthPage({ kind, searchParams }: { kind: FormKind; searchP
             role={validation ? "alert" : "status"} tabIndex={validation ? -1 : undefined}>
             {validation ? <h2 className="font-semibold">We couldn&apos;t submit your form</h2> : null}
             {(messages.length ? messages : fieldErrors.length ? [] : ["Check your details and try again."]).map((message) => <p key={message}>{message}</p>)}
-            {fieldErrors.length ? <ul className="list-disc pl-5">{fieldErrors.map((field) =>
-              <li key={field.id}><a className="store-link" href={`#${field.id}`}>{field.label}: {field.error}</a></li>)}</ul> : null}
+            {fieldErrors.length ? <p>Check {fieldErrors.map((field, index) => <span key={field.id}>
+              {index ? ", " : ""}<a className="store-link" href={`#${field.id}`}>{field.label.toLowerCase()}</a>
+            </span>)}.</p> : null}
           </div>
         ) : null}
         {methods.map((method, index) => (

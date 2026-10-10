@@ -5,6 +5,7 @@ import { AuthError, type BrowserState, type FormKind } from "./model";
 import { providerClient, providerFailure } from "./provider";
 import { assertFlow, bindFlow } from "./store";
 import { object, text, uuid } from "@/lib/graphql/scalars";
+import { registrationPasswordError, type PasswordErrorCode } from "./password";
 
 export interface ProviderFlow {
   id: string;
@@ -92,7 +93,7 @@ export async function readFlow(
 }
 
 export type Submission = { complete: true; verificationFlow?: string } |
-  { complete: false; validation: boolean; flow: ProviderFlow };
+  { complete: false; validation: boolean; flow: ProviderFlow; passwordError?: PasswordErrorCode };
 
 function field(form: URLSearchParams, name: string, maximum: number, optional = false): string {
   const values = form.getAll(name);
@@ -132,8 +133,14 @@ export async function submitFlow(
       } else throw new AuthError("invalid_request", 400);
     } else if (kind === "registration") {
       if (method !== "password") throw new AuthError("invalid_request", 400);
+      const password = field(form, "password", 4096);
+      const passwordError = registrationPasswordError(password);
+      if (passwordError) {
+        console.error("authentication password reason", passwordError);
+        return { complete: false, validation: true, flow, passwordError };
+      }
       result = (await provider.api.updateRegistrationFlow({ flow: id, updateRegistrationFlowBody: {
-        method, csrf_token, password: field(form, "password", 4096),
+        method, csrf_token, password,
         traits: {
           email: field(form, "traits.email", 255), username: field(form, "traits.username", 255),
           dateOfBirth: field(form, "traits.dateOfBirth", 10),

@@ -169,7 +169,8 @@ async function submit(request: NextRequest): Promise<NextResponse> {
     return { ...await submitFlow(state, browser, flowId, kind, form, client), returnTo: state.returnTo };
   });
   if (!submission.complete) return redirectResponse(`${flowRoute(kind)}?flow=${flowId}` +
-    `&returnTo=${encodeURIComponent(submission.returnTo)}${submission.validation ? "&validation=1" : ""}`);
+    `&returnTo=${encodeURIComponent(submission.returnTo)}${submission.validation ? "&validation=1" : ""}` +
+    `${submission.passwordError ? `&passwordError=${submission.passwordError}` : ""}`);
   if (submission.verificationFlow) return redirectResponse(`/verify?flow=${submission.verificationFlow}` +
     `&returnTo=${encodeURIComponent(submission.returnTo)}`);
   if (kind === "registration") return flow(new NextRequest(`${authConfig().origin}/auth/flow?kind=verification` +

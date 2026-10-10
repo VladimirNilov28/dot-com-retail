@@ -61,18 +61,24 @@ describe("safe provider form projection", () => {
     for (const [id, context, fragment] of [
       [4000032, { min_length: 8 }, "at least 8 UTF-8 bytes"],
       [4000033, { max_length: 72 }, "no more than 72 UTF-8 bytes"],
-      [4000031, {}, "not similar to your email"],
-      [4000034, { breaches: 100 }, "data breach"],
+      [4000031, {}, "unlike your email"],
+      [4000034, { breaches: 100 }, "known to be breached"],
       [4000005, { reason: "http://internal/?password=private-value" }, "rejected by the account security policy"],
     ]) {
       const messages = [{ id, context, type: "error", text: "private-value" }];
-      expect(formMessages(messages, "registration")[0]).toContain(fragment);
+      const expected = id === 4000005 ? "does not meet the security policy" : fragment;
+      expect(formMessages(messages, "registration")[0]).toContain(expected);
       const field = formMethods([csrf, input("password", "private-value", "password", "password", messages), password], "registration")[0].fields;
-      expect(field.find((value) => value.name === "password").error).toContain(fragment);
+      expect(field.find((value) => value.name === "password").error).toContain(expected);
       expect(JSON.stringify(field)).not.toContain("private-value");
     }
     expect(formMessages([{ id: 4000032, context: { min_length: "secret" }, type: "error" }])[0])
-      .toBe("This password was rejected. Choose a different password and try again.");
+      .toBe("This password was rejected. Choose another.");
+  });
+  test("breach mapping never implies that another user chose the password", () => {
+    const message = formMessages([{ id: 4000034, type: "error", context: { breaches: 100 } }], "registration")[0];
+    expect(message).toBe("This password is known to be breached. Choose another.");
+    expect(message).not.toMatch(/unique|another user|already used/i);
   });
   test("infrastructure failures are form-level, never invalid-password errors", () => {
     for (const message of [

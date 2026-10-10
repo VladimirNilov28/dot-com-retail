@@ -62,17 +62,17 @@ export function formMessages(values: unknown, kind?: FormKind): string[] {
       if (kind === "login" && [4000005, 4000031, 4000032, 4000033, 4000034].includes(Number(message.id))) {
         return "Email or password is incorrect. Please try again.";
       }
-      if (message.id === 4000031) return "Choose a password that is not similar to your email address.";
-      if (message.id === 4000034) return "This password has appeared in a data breach. Choose a different, unique password.";
+      if (message.id === 4000031) return "Use a password unlike your email address.";
+      if (message.id === 4000034) return "This password is known to be breached. Choose another.";
       if (message.id === 4000032 || message.id === 4000033) {
         const context = message.context && typeof message.context === "object" ? object(message.context) : {};
         const limit = context[message.id === 4000032 ? "min_length" : "max_length"];
         if (typeof limit === "number" && Number.isSafeInteger(limit) && limit > 0 && limit <= 4096) {
-          return `Use ${message.id === 4000032 ? "at least" : "no more than"} ${limit} UTF-8 bytes. Accented characters and emoji may use more than one byte.`;
+          return `Use ${message.id === 4000032 ? "at least" : "no more than"} ${limit} UTF-8 bytes.`;
         }
-        return "This password was rejected. Choose a different password and try again.";
+        return "This password was rejected. Choose another.";
       }
-      if (message.id === 4000005) return "This password was rejected by the account security policy. Choose a different password.";
+      if (message.id === 4000005) return "This password does not meet the security policy.";
       if (message.id === 4000002) return "Complete this required field.";
       if (message.id === 4000040) return "Enter a valid email address.";
       if (message.id === 4000004) return "Enter a valid value for this field.";
