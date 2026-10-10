@@ -35,6 +35,7 @@ export default async function AccountPage() {
       <div className="auth-panel space-y-4">
         <p>You&apos;re signed in as <strong className="font-semibold">{result.user.username}</strong>.</p>
         <p className="text-sm text-muted">{result.user.email}</p>
+        {result.user.role === "USER" ? <Link prefetch={false} className="store-link" href="/account/security">Authenticator and backup codes</Link> : null}
         <LogoutForm csrf={result.state.csrf} />
       </div>
       <Link className="store-link" href="/catalog/all-products">Continue browsing</Link>

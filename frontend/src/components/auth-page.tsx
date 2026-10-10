@@ -27,6 +27,7 @@ export async function AuthPage({ kind, searchParams }: { kind: FormKind; searchP
     return <AuthProblem code="invalid_request" kind={kind} returnTo={returnTo} />;
   }
   if (!flowId) {
+    if (kind === "reset") return <AuthProblem code="expired" kind={kind} returnTo={returnTo} />;
     redirect(kind === "login" ? `/auth/start?returnTo=${encodeURIComponent(returnTo)}`
       : `/auth/flow?kind=${kind}&returnTo=${encodeURIComponent(returnTo)}`);
   }
@@ -56,11 +57,11 @@ export async function AuthPage({ kind, searchParams }: { kind: FormKind; searchP
   if (kind === "verification" && view.flow.state === "passed_challenge") {
     redirect(`/auth/start?returnTo=${encodeURIComponent(view.returnTo)}`);
   }
-  const passwordError = kind === "registration" && query.validation === "1" ? passwordErrorMessage(query.passwordError) : undefined;
+  const passwordError = (kind === "registration" || kind === "reset") && query.validation === "1" ? passwordErrorMessage(query.passwordError) : undefined;
   const methods = passwordError ? view.methods.map((method) => ({
     ...method, fields: method.fields.map((field) => field.name === "password" ? { ...field, error: passwordError } : field),
   })) : view.methods;
-  const secondFactor = kind === "login" && methods.every((method) => method.name !== "password");
+  const secondFactor = kind === "login" && methods.every((method) => method.name !== "password" && method.name !== "oidc");
   const messages = view.messages;
   const fieldErrors = methods.flatMap((method) => method.fields.filter((field) => field.error).map((field) => ({
     id: authFieldId(method.name, field.name), label: field.label, error: field.error,
@@ -68,10 +69,13 @@ export async function AuthPage({ kind, searchParams }: { kind: FormKind; searchP
   const validation = query.validation === "1" || view.flow.messages.some((message) => message.type === "error") ||
     methods.some((method) => method.fields.some((field) => field.error));
   const title = secondFactor ? "Two-step verification" : kind === "login" ? "Sign in" :
-    kind === "registration" ? "Create your account" : "Verify your email";
+    kind === "registration" ? "Create your account" : kind === "recovery" ? "Recover your account" :
+      kind === "reset" ? "Set a new password" : "Verify your email";
   const description = secondFactor ? "Confirm it's you using your authenticator or a recovery code." :
     kind === "login" ? "Sign in to your ByteCore account." :
       kind === "registration" ? "Create your account, verify your email, then sign in." :
+        kind === "recovery" ? "Request a secure email code to reset your password." :
+          kind === "reset" ? "Choose a new password, then sign in again. Other sessions will be invalidated." :
         "Complete email verification before signing in.";
   return (
     <section className="auth-page" aria-labelledby="auth-title">
@@ -83,6 +87,11 @@ export async function AuthPage({ kind, searchParams }: { kind: FormKind; searchP
         <p className="text-muted">{description}</p>
       </div>
       <div className="auth-panel">
+        {kind === "login" && (query.social === "cancelled" || query.social === "failed") ? <p role="alert" className="mb-5 text-sm text-muted">
+          {query.social === "cancelled" ? "Google sign-in was cancelled. Try again or use your password." :
+            "Google sign-in could not complete. Start again or use your password."}
+        </p> : null}
+        {kind === "login" && query.reset === "success" ? <p role="status" className="mb-5 text-sm text-muted">Your password has changed. Sign in with your new password.</p> : null}
         {messages.length || validation ? (
           <div id={validation ? "auth-error-summary" : undefined}
             className={validation ? "auth-summary" : "mb-5 text-sm text-muted"}
@@ -96,7 +105,8 @@ export async function AuthPage({ kind, searchParams }: { kind: FormKind; searchP
         ) : null}
         {methods.map((method, index) => (
           <div key={method.name} className={index ? "auth-alternative-method" : undefined}>
-            {methods.length > 1 ? <h2 className="mb-3 font-semibold">{method.name === "lookup_secret" ? "Recovery" : "Authenticator"}</h2> : null}
+            {methods.length > 1 ? <h2 className="mb-3 font-semibold">{method.name === "lookup_secret" ? "Recovery" :
+              method.name === "oidc" ? "Google" : method.name === "password" ? "Email and password" : "Authenticator"}</h2> : null}
             <AuthForm kind={kind} flow={view.flow.id} csrf={view.csrf} returnTo={view.returnTo} method={method} />
           </div>
         ))}
@@ -104,7 +114,9 @@ export async function AuthPage({ kind, searchParams }: { kind: FormKind; searchP
       <div className="auth-secondary text-sm">
         {kind === "registration" ? <>Already have an account? <Link prefetch={false} className="store-link" href={`/login?returnTo=${encodeURIComponent(view.returnTo)}`}>Sign in</Link></> :
           kind === "login" ? <>New to ByteCore? <Link prefetch={false} className="store-link" href={`/register?returnTo=${encodeURIComponent(view.returnTo)}`}>Create an account</Link></> :
+            kind === "recovery" || kind === "reset" ? <Link prefetch={false} className="store-link" href="/recover">Request a new recovery code</Link> :
             <Link prefetch={false} className="store-link" href={`/auth/flow?kind=verification&returnTo=${encodeURIComponent(view.returnTo)}`}>Request a new verification code</Link>}
+        {kind === "login" && !secondFactor ? <Link prefetch={false} className="store-link" href="/recover">Forgot your password?</Link> : null}
         <Link href="/catalog/all-products" className="store-link">Continue browsing</Link>
       </div>
     </section>
@@ -118,14 +130,17 @@ export function AuthProblem({ code, kind = "login", returnTo = "/" }: {
   return (
     <section className="auth-page" aria-labelledby="auth-error-title">
       <h1 id="auth-error-title" className="text-2xl font-semibold tracking-tight">{unavailable ?
-        kind === "registration" ? "Registration is unavailable" : kind === "verification" ? "Verification is unavailable" : "Sign-in is unavailable" :
+        kind === "registration" ? "Registration is unavailable" : kind === "verification" ? "Verification is unavailable" :
+          kind === "recovery" ? "Recovery is unavailable" : kind === "reset" ? "Password reset is unavailable" : "Sign-in is unavailable" :
         code === "provider_logout_pending" ? "Signed out of ByteCore" :
           code === "expired" ? "This form has expired" : "We couldn't complete this request"}</h1>
       <p role="alert" className="text-muted">{unavailable ? "The authentication service is temporarily unavailable. This does not mean your password was rejected. Wait a moment, then retry." :
         code === "provider_logout_pending" ? "You're signed out of ByteCore. Provider logout could not be confirmed and will be retried." :
           kind === "verification" ? "Return to the browser where you registered and use its latest email. If that form expired, start again and request a new code." :
+            kind === "recovery" || kind === "reset" ? "Return to the browser where you requested recovery and use its latest email, or request a new code." :
           "Start a new secure flow to continue."}</p>
       <Link prefetch={false} className="store-cta" href={kind === "login" ? `/auth/start?returnTo=${encodeURIComponent(returnTo)}` :
+        kind === "reset" ? "/recover" :
         `/auth/flow?kind=${kind}&returnTo=${encodeURIComponent(returnTo)}`}>{unavailable ? "Retry" : "Start again"}</Link>
       <Link className="store-link" href="/catalog/all-products">Continue browsing</Link>
     </section>

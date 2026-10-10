@@ -9,9 +9,10 @@ export class AuthError extends Error {
   }
 }
 
-export type FormKind = "login" | "registration" | "verification";
+export type FormKind = "login" | "registration" | "verification" | "recovery" | "reset";
 export function formKind(value: unknown): FormKind {
-  if (value === "login" || value === "registration" || value === "verification") return value;
+  if (value === "login" || value === "registration" || value === "verification" ||
+      value === "recovery" || value === "reset") return value;
   throw new AuthError("invalid_request", 400);
 }
 
@@ -52,6 +53,8 @@ export interface BrowserState {
   tokens?: { accessToken: string; refreshToken: string; expiresAt: number };
   previousSessionHash?: string;
   revokeProvider?: boolean;
+  securityReauth?: "aal1" | "aal2";
+  social?: { state: string; flow: string; kind: "login" | "registration" };
 }
 
 export function grantTokens(response: {
@@ -105,7 +108,7 @@ export function safeReturnTo(value: unknown): string {
   if (path.startsWith("//") || path.split("/").some((part) => part === "." || part === "..")) {
     throw new AuthError("invalid_request", 400);
   }
-  if (url.hash || !/^(?:\/|\/catalog(?:\/[^/]+)?|\/products\/[^/]+|\/search|\/account|\/cart)$/.test(path) ||
+  if (url.hash || !/^(?:\/|\/catalog(?:\/[^/]+)?|\/products\/[^/]+|\/search|\/account(?:\/security)?|\/cart)$/.test(path) ||
       Array.from(url.searchParams).some(([key, item]) => /[\\\u0000-\u001f\u007f]/.test(key + item)) ||
       Array.from(url.searchParams.keys()).some((key) =>
         ["access_token", "refresh_token", "id_token", "client_secret", "password", "code", "csrf_token"].includes(key))) {
@@ -181,6 +184,17 @@ export function decodeBrowserState(value: unknown): BrowserState {
   if (input.revokeProvider !== undefined) {
     if (typeof input.revokeProvider !== "boolean") throw new AuthError("unavailable");
     state.revokeProvider = input.revokeProvider;
+  }
+  if (input.securityReauth !== undefined) {
+    if (input.securityReauth !== "aal1" && input.securityReauth !== "aal2") throw new AuthError("unavailable");
+    state.securityReauth = input.securityReauth;
+  }
+  if (input.social !== undefined) {
+    const social = object(input.social);
+    if (typeof social.state !== "string" || social.state.length < 16 || social.state.length > 4096 ||
+        /[\u0000-\u0020\u007f]/.test(social.state) ||
+        (social.kind !== "login" && social.kind !== "registration")) throw new AuthError("unavailable");
+    state.social = { state: social.state, flow: flowIdentifier(social.flow), kind: social.kind };
   }
   if (input.tokens !== undefined) {
     const tokens = object(input.tokens);

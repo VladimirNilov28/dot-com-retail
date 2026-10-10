@@ -4,28 +4,32 @@ import { authConfig } from "./config";
 import { AuthError, assertSameProvider, decodeProviderSession, flowIdentifier, formKind, grantTokens, hasSessionCookie,
   oneParameter, safeReturnTo, type FormKind } from "./model";
 import { object } from "@/lib/graphql/scalars";
-import { bridgeRequest, currentProviderSession, emptyJar, providerCookie, providerRedirect } from "./provider";
+import { bridgeRequest, currentProviderSession, emptyJar, providerClient, providerCookie, providerRedirect } from "./provider";
 import { authorizationUrl, exchangeCode, newTransaction } from "./oauth";
 import { initializeFlow, submitFlow } from "./flows";
 import { createBrowser, createTransaction, claimTransaction, identifier, identifierHash,
   removePreauth, retirePrevious, revokeBrowser, transactionFor, withBrowser, assertFlow } from "./store";
 import { authenticatedState, readCurrentUser, revokeSession } from "./session";
+import { handleSecuritySettings } from "./settings";
 import { assertCsrf, authBoundary, authHeaders, boundedForm, browserCookie,
   clearBrowserCookies, redirectResponse, setBrowserCookie } from "./http";
 
 function flowRoute(kind: FormKind): string {
-  return kind === "registration" ? "/register" : kind === "verification" ? "/verify" : "/login";
+  return kind === "registration" ? "/register" : kind === "verification" ? "/verify" :
+    kind === "recovery" ? "/recover" : kind === "reset" ? "/reset" : "/login";
 }
 
-async function start(request: NextRequest): Promise<NextResponse> {
-  const returnTo = safeReturnTo(oneParameter(request.nextUrl.searchParams, "returnTo"));
+async function start(request: NextRequest, securityReauth = false): Promise<NextResponse> {
+  const returnTo = securityReauth ? "/account/security" : safeReturnTo(oneParameter(request.nextUrl.searchParams, "returnTo"));
   let jar = emptyJar();
   let previousSessionHash: string | undefined;
+  let assurance: "aal1" | "aal2" = "aal1";
   if (request.cookies.has(authConfig().sessionCookie)) {
     const previous = browserCookie(request, true);
     try {
       jar = await withBrowser(previous, async (state, _client, row) => {
         if (!row.authenticated) throw new AuthError("expired", 401);
+        assurance = state.provider?.aal ?? "aal1";
         return state.jar;
       });
       previousSessionHash = identifierHash(previous);
@@ -42,6 +46,7 @@ async function start(request: NextRequest): Promise<NextResponse> {
   const transaction = newTransaction(returnTo);
   const browser = await createBrowser({
     jar, csrf: identifier(), returnTo, transactionState: transaction.state, previousSessionHash,
+    securityReauth: securityReauth ? assurance : undefined,
   });
   await createTransaction(browser.id, transaction);
   const response = redirectResponse(await authorizationUrl(transaction));
@@ -74,11 +79,18 @@ async function loginChallenge(request: NextRequest): Promise<NextResponse> {
   const browser = browserCookie(request);
   const challenge = oneParameter(request.nextUrl.searchParams, "login_challenge");
   if (!challenge || challenge.length > 8192) throw new AuthError("invalid_request", 400);
-  await withBrowser(browser, async (state, client) => {
+  const refreshFlow = await withBrowser(browser, async (state, client) => {
     if (!state.transactionState) throw new AuthError("expired", 401);
     await transactionFor(browser, state.transactionState, client);
     state.loginChallenge = challenge;
+    if (state.securityReauth) {
+      const assurance = state.securityReauth;
+      delete state.securityReauth;
+      const flow = await initializeFlow(state, browser, "login", client, assurance, true);
+      return flow.id;
+    }
   });
+  if (refreshFlow) return redirectResponse(`/login?flow=${refreshFlow}&returnTo=%2Faccount%2Fsecurity`);
   return handoff(browser);
 }
 
@@ -134,6 +146,8 @@ async function callback(request: NextRequest): Promise<NextResponse> {
 async function flow(request: NextRequest): Promise<NextResponse> {
   const kind = formKind(oneParameter(request.nextUrl.searchParams, "kind"));
   if (kind === "login") return start(request);
+  // Only a redeemed, browser-bound recovery continuation may expose reset.
+  if (kind === "reset") throw new AuthError("forbidden", 403);
   const returnTo = safeReturnTo(oneParameter(request.nextUrl.searchParams, "returnTo"));
   let browser: string;
   let created: Awaited<ReturnType<typeof createBrowser>> | undefined;
@@ -173,6 +187,24 @@ async function submit(request: NextRequest): Promise<NextResponse> {
     `${submission.passwordError ? `&passwordError=${submission.passwordError}` : ""}`);
   if (submission.verificationFlow) return redirectResponse(`/verify?flow=${submission.verificationFlow}` +
     `&returnTo=${encodeURIComponent(submission.returnTo)}`);
+  if (submission.settingsFlow) return redirectResponse(`/reset?flow=${submission.settingsFlow}`);
+  if (submission.socialRedirect) return redirectResponse(submission.socialRedirect);
+  if (submission.socialComplete) return handoff(browser);
+  if (kind === "reset") {
+    // A recovery session is not a storefront OAuth login. Discard it after
+    // changing the credential and require a fresh password/factor login.
+    await withBrowser(browser, async (state, client) => {
+      const provider = providerClient(state);
+      try {
+        const logout = (await provider.api.createBrowserLogoutFlow()).data;
+        await provider.api.updateLogoutFlow({ token: logout.logout_token });
+      } finally { provider.save(); }
+      await removePreauth(browser, client);
+    });
+    const response = redirectResponse("/login?reset=success");
+    clearBrowserCookies(response);
+    return response;
+  }
   if (kind === "registration") return flow(new NextRequest(`${authConfig().origin}/auth/flow?kind=verification` +
     `&returnTo=${encodeURIComponent(submission.returnTo)}`, {
     headers: request.headers,
@@ -208,6 +240,7 @@ async function logout(request: NextRequest): Promise<NextResponse> {
 }
 
 export async function handleAuth(request: NextRequest, action: string): Promise<NextResponse> {
+  if (action === "security") return handleSecuritySettings(request);
   return authBoundary(async () => {
     if (request.method === "GET" && action === "session") {
       if (!hasSessionCookie(request.headers.get("cookie"))) {
@@ -223,6 +256,7 @@ export async function handleAuth(request: NextRequest, action: string): Promise<
     }
     if (request.method === "GET") {
       if (action === "start") return start(request);
+      if (action === "security-reauth") return start(request, true);
       if (action === "challenge") return loginChallenge(request);
       if (action === "consent") return consent(request);
       if (action === "resume") {

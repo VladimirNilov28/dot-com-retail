@@ -9,7 +9,9 @@ if [ "${#AUTH_BRIDGE_SECRET}" -lt 32 ]; then
   exit 1
 fi
 umask 077
-yq -o=json '.' /etc/kratos/kratos.yml > /tmp/bytecore-base.json
+runtime=/home/ory/bytecore-runtime
+mkdir -p "$runtime"
+yq -o=json '.' /etc/kratos/kratos.yml > "$runtime/bytecore-base.json"
 jq '
   .selfservice.flows.registration.after.password.hooks = [
     {hook: "web_hook", config: {
@@ -29,7 +31,8 @@ jq '
     }},
     {hook: "show_verification_ui"}
   ]
-' /tmp/bytecore-base.json > /tmp/bytecore-registration.json
-rm /tmp/bytecore-base.json
-unset AUTH_BRIDGE_SECRET
-exec kratos "$@" --config /tmp/bytecore-registration.json
+' "$runtime/bytecore-base.json" |
+  jq -f /etc/kratos/google-config.jq > "$runtime/bytecore-registration.json"
+rm "$runtime/bytecore-base.json"
+unset AUTH_BRIDGE_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET
+exec kratos "$@" --config "$runtime/bytecore-registration.json"

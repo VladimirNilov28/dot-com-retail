@@ -76,6 +76,7 @@ selfservice:
       lifespan: 15m
       notify_unknown_recipients: true
     settings:
+      ui_url: http://127.0.0.1:3000/reset
       required_aal: highest_available
       privileged_session_max_age: 15m
       after:
@@ -88,6 +89,8 @@ selfservice:
     recovery:
       enabled: true
       use: code
+      ui_url: http://127.0.0.1:3000/recover
+      lifespan: 15m
       # Always respond identically whether or not the address belongs to a
       # known identity, so the recovery flow can't be used to enumerate
       # registered accounts.
@@ -112,6 +115,12 @@ session:
 # SMTP provider instead — tracked separately, not part of this dev config.
 courier:
   templates:
+    recovery_code:
+      valid:
+        email:
+          body:
+            html: file:///etc/kratos/templates/recovery_code/valid/email.body.gotmpl
+            plaintext: file:///etc/kratos/templates/recovery_code/valid/email.body.plaintext.gotmpl
     verification_code:
       valid:
         email:

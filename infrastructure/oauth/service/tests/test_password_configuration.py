@@ -31,7 +31,8 @@ class PasswordConfigurationTest(unittest.TestCase):
     def test_runtime_renderer_preserves_base_password_policy(self):
         entrypoint = (OAUTH / "kratos" / "entrypoint.sh").read_text()
         self.assertNotIn("haveibeenpwned_enabled", entrypoint)
-        self.assertIn("/tmp/bytecore-registration.json", entrypoint)
+        self.assertIn("/home/ory/bytecore-runtime", entrypoint)
+        self.assertIn('exec kratos "$@" --config "$runtime/bytecore-registration.json"', entrypoint)
 
 
 if __name__ == "__main__":

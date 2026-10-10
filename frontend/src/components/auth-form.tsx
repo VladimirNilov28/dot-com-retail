@@ -62,7 +62,7 @@ function PasswordGuidance({ inputId }: { inputId: string }) {
   );
 }
 
-function Captcha({ flow, returnTo }: { flow: string; returnTo: string }) {
+function Captcha({ flow, returnTo, method }: { flow: string; returnTo: string; method: string }) {
   const widget = useRef<HTMLElement>(null);
   const [status, setStatus] = useState("loading");
   const [failure, setFailure] = useState<ReturnType<typeof captchaFailure>>("captcha");
@@ -101,7 +101,7 @@ function Captcha({ flow, returnTo }: { flow: string; returnTo: string }) {
   return (
     <div className="auth-captcha">
       <p className="font-medium">Security check</p>
-      {createElement("altcha-widget", { ref: widget, id: "auth-security-check", tabIndex: -1, challenge: `/auth/captcha?flow=${flow}`, name: "altcha", theme: "dark" })}
+      {createElement("altcha-widget", { ref: widget, id: `auth-security-check-${method}`, tabIndex: -1, challenge: `/auth/captcha?flow=${flow}`, name: "altcha", theme: "dark" })}
       <p className="auth-captcha-status text-sm text-muted" role="status">{messages[status] ?? "Complete the security check."}</p>
       {status === "error" || status === "expired" ? (
         <a href={failure === "expired" ? `/auth/flow?kind=registration&returnTo=${encodeURIComponent(returnTo)}` :
@@ -129,7 +129,7 @@ export function AuthForm({ kind, flow, csrf, returnTo, method }: {
     document.getElementById("auth-error-summary")?.focus();
   }, []);
   useEffect(() => {
-    if (kind !== "verification" || !location.hash) return;
+    if (!["verification", "recovery"].includes(kind) || !location.hash) return;
     const code = verificationLinkCode(location.hash);
     history.replaceState(history.state, "", location.pathname + location.search);
     const input = form.current?.querySelector<HTMLInputElement>('input[name="code"]');
@@ -145,11 +145,11 @@ export function AuthForm({ kind, flow, csrf, returnTo, method }: {
     if (kind === "registration" && !new FormData(event.currentTarget).get("altcha")) {
       event.preventDefault();
       flushSync(() => setCaptchaError(true));
-      document.getElementById("auth-client-error-summary")?.focus();
+      document.getElementById(`auth-client-error-summary-${method.name}`)?.focus();
       return;
     }
     const submitter = (event.nativeEvent as SubmitEvent).submitter;
-    if (kind === "verification" && submitter instanceof HTMLButtonElement && submitter.name === "email") {
+    if ((kind === "verification" || kind === "recovery") && submitter instanceof HTMLButtonElement && submitter.name === "email") {
       const email = document.createElement("input");
       email.type = "hidden";
       email.name = "email";
@@ -165,8 +165,12 @@ export function AuthForm({ kind, flow, csrf, returnTo, method }: {
       <input type="hidden" name="flow" value={flow} />
       <input type="hidden" name="_csrf" value={csrf} />
       <input type="hidden" name="method" value={method.name} />
+      {method.provider ? <input type="hidden" name="provider" value={method.provider} /> : null}
       {kind === "verification" ? <p className="text-sm text-muted" role="status">
         Stay in the browser where you registered. Email links fill the code; choose Verify email to continue.
+      </p> : null}
+      {kind === "recovery" ? <p className="text-sm text-muted" role="status">
+        Use the browser where you requested recovery. Email links fill the code; submit it to continue.
       </p> : null}
       {method.fields.map((field) => field.type === "hidden"
         ? <input key={field.name} type="hidden" name={field.name} value={field.value} />
@@ -175,7 +179,7 @@ export function AuthForm({ kind, flow, csrf, returnTo, method }: {
             type={field.name === "password" && showPassword ? "text" : field.type} defaultValue={field.value}
             isRequired={field.required} isInvalid={Boolean(field.error) && !edited[field.name]} validationBehavior="native"
             className="auth-field" autoComplete={field.autocomplete}
-            aria-describedby={field.name === "password" && kind === "registration" ? `${authFieldId(method.name, field.name)}-guidance` : undefined}
+            aria-describedby={field.name === "password" && (kind === "registration" || kind === "reset") ? `${authFieldId(method.name, field.name)}-guidance` : undefined}
             onChange={() => setEdited((previous) => ({ ...previous, [field.name]: true }))}>
             <Label>{field.label}</Label>
             <Input className="auth-input"
@@ -187,21 +191,21 @@ export function AuthForm({ kind, flow, csrf, returnTo, method }: {
               {showPassword ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
               {showPassword ? "Hide password" : "Show password"}
             </button> : null}
-            {field.name === "password" && kind === "registration"
+            {field.name === "password" && (kind === "registration" || kind === "reset")
               ? <PasswordGuidance inputId={authFieldId(method.name, field.name)} /> : null}
           </TextField>
         ))}
-      {kind === "registration" ? <Captcha flow={flow} returnTo={returnTo} /> : null}
-      {captchaError ? <div id="auth-client-error-summary" className="auth-summary" role="alert" tabIndex={-1}>
+      {kind === "registration" ? <Captcha flow={flow} returnTo={returnTo} method={method.name} /> : null}
+      {captchaError ? <div id={`auth-client-error-summary-${method.name}`} className="auth-summary" role="alert" tabIndex={-1}>
         <p>Complete the security check, then try again. If it cannot load, use the recovery link above.</p>
-        <a className="store-link" href="#auth-security-check">Go to security check</a>
+        <a className="store-link" href={`#auth-security-check-${method.name}`}>Go to security check</a>
       </div> : null}
       <Button type="submit" variant={method.name === "lookup_secret" ? "secondary" : "primary"}
         isDisabled={pending} className="auth-submit">
         {pending ? <LoaderCircle size={18} className="animate-spin" aria-hidden="true" /> : null}
         {pending ? "Submitting..." : method.label}
       </Button>
-      {kind === "verification" && method.resendEmail ? <Button type="submit" variant="secondary"
+      {(kind === "verification" || kind === "recovery") && method.resendEmail ? <Button type="submit" variant="secondary"
         name="email" value={method.resendEmail} formNoValidate isDisabled={pending} className="auth-submit">
         Send a new code
       </Button> : null}

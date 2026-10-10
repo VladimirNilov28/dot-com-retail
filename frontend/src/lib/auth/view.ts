@@ -12,10 +12,11 @@ export interface AuthField {
 }
 
 export interface AuthMethod {
-  name: "password" | "totp" | "lookup_secret" | "code";
+  name: "password" | "totp" | "lookup_secret" | "code" | "oidc";
   label: string;
   fields: AuthField[];
   resendEmail?: string;
+  provider?: "google";
 }
 
 const labels: Record<string, string> = {
@@ -79,8 +80,12 @@ export function formMessages(values: unknown, kind?: FormKind): string[] {
       if (message.id === 4000004) return "Enter a valid value for this field.";
       if (message.id === 4000038) return "The security check failed. Complete a fresh check and try again.";
       if ([4000007, 4000027, 4000028].includes(Number(message.id))) return "This email or username cannot be registered. Try signing in.";
-      if (message.id === 4070006 || (kind !== "verification" &&
+      if ([4060006, 4070006].includes(Number(message.id)) || (kind !== "verification" &&
           [4000008, 4000012, 4000016].includes(Number(message.id)))) return "The code is incorrect, expired or already used. Try again.";
+      if (message.id === 4060001) return "This recovery proof is invalid or already used. Request a new code.";
+      if (message.id === 4060002) return "This recovery was already completed. Sign in or start a new recovery request.";
+      if (message.id === 4060003) return "This recovery could not continue. Start a new recovery request.";
+      if (message.id === 4060005) return "This recovery form has expired. Request a new code.";
       if (message.id === 4070001) return "This verification link is invalid or already used. Request a new code.";
       if (message.id === 4070002) return "This verification was already completed. Try signing in.";
       if (message.id === 4070003) return "This verification could not continue. Start a new verification form.";
@@ -90,6 +95,9 @@ export function formMessages(values: unknown, kind?: FormKind): string[] {
       return "Check the details below and try again.";
     }
     if (message.type === "info" || message.type === "success") {
+      if (kind === "recovery" && [1060001, 1060003].includes(Number(message.id))) {
+        return "If this address has an account, a recovery email has been sent. Use the latest email in this browser.";
+      }
       if (message.id === 1080001 || message.id === 1080003) return "Use the latest email for this verification form. Resending replaces the previous code.";
       if (message.id === 1080002) return "Your email is verified.";
       return "";
@@ -99,20 +107,24 @@ export function formMessages(values: unknown, kind?: FormKind): string[] {
 }
 
 export function formMethods(nodes: Record<string, unknown>[], kind: FormKind): AuthMethod[] {
-  const allowed = kind === "login" ? ["password", "totp", "lookup_secret"] :
-    kind === "registration" ? ["password"] : ["code"];
+  const allowed = kind === "login" ? ["password", "totp", "lookup_secret", "oidc"] :
+    kind === "registration" ? ["password", "oidc"] : kind === "reset" ? ["password"] : ["code"];
   const methods: AuthMethod[] = [];
   for (const node of nodes) {
     if (node.type !== "input") continue;
     const attributes = object(node.attributes);
-    if (attributes.name !== "method" || attributes.type !== "submit" || !allowed.includes(String(attributes.value))) continue;
-    const name = attributes.value;
-    if (name !== "password" && name !== "totp" && name !== "lookup_secret" && name !== "code") continue;
+    const google = node.group === "oidc" && attributes.name === "provider" && attributes.value === "google";
+    if ((!google && attributes.name !== "method") || attributes.type !== "submit" ||
+        !allowed.includes(google ? "oidc" : String(attributes.value))) continue;
+    const name = google ? "oidc" : attributes.value;
+    if (name !== "password" && name !== "totp" && name !== "lookup_secret" && name !== "code" && name !== "oidc") continue;
     const fields: AuthField[] = [];
     for (const candidate of nodes) {
-      if (candidate.type !== "input" || (candidate.group !== "default" && candidate.group !== node.group)) continue;
+      if (candidate.type !== "input" || (candidate.group !== "default" && candidate.group !== node.group &&
+          !(google && ["traits.username", "traits.dateOfBirth"].includes(String(object(candidate.attributes).name))))) continue;
       const input = object(candidate.attributes);
       if (input.name === "method" || input.type === "submit") continue;
+      if (google && !["csrf_token", "traits.username", "traits.dateOfBirth"].includes(String(input.name))) continue;
       if (typeof input.name !== "string" || !(input.name in labels)) {
         if (input.required === true) throw new TypeError("Unsupported required provider field");
         continue;
@@ -125,23 +137,27 @@ export function formMethods(nodes: Record<string, unknown>[], kind: FormKind): A
       const errorMessages = formMessages(messages.filter((message) => !temporaryMessage(object(message))), kind);
       const error = errorMessages.length ? errorMessages.join(" ") : undefined;
       fields.push({
-        name: input.name, label: labels[input.name], type, required: input.required === true,
+        name: input.name, label: input.name === "code" && kind === "recovery" ? "Recovery code" : labels[input.name], type, required: input.required === true,
         value: sensitive.has(input.name) ? "" : typeof input.value === "string" ? input.value : "",
         error, autocomplete: type === "hidden" ? undefined : input.name === "password"
-          ? kind === "registration" ? "new-password" : "current-password"
+          ? kind === "registration" || kind === "reset" ? "new-password" : "current-password"
           : sensitive.has(input.name) ? "one-time-code"
             : input.name === "traits.dateOfBirth" ? "bday" : input.name === "traits.username" ? "username" : "email",
       });
     }
     if (!fields.some((field) => field.name === "csrf_token")) throw new TypeError("Provider CSRF control is missing");
-    const resend = kind === "verification" ? nodes.find((candidate) => candidate.type === "input" &&
+    const resend = kind === "verification" || kind === "recovery" ? nodes.find((candidate) => candidate.type === "input" &&
       object(candidate.attributes).name === "email" && object(candidate.attributes).type === "submit") : undefined;
     const resendEmail = resend ? object(resend.attributes).value : undefined;
     if (resendEmail !== undefined && (typeof resendEmail !== "string" || resendEmail.length > 255)) {
       throw new TypeError("Invalid provider resend control");
     }
-    methods.push({ name, fields, ...(typeof resendEmail === "string" ? { resendEmail } : {}), label: name === "totp" ? "Verify code" : name === "lookup_secret" ? "Use recovery code" :
-      kind === "registration" ? "Create account" : kind === "verification"
+    methods.push({ name, fields, ...(google ? { provider: "google" as const } : {}),
+      ...(typeof resendEmail === "string" ? { resendEmail } : {}), label: google ? "Continue with Google" :
+        name === "totp" ? "Verify code" : name === "lookup_secret" ? "Use recovery code" :
+      kind === "registration" ? "Create account" : kind === "reset" ? "Save new password" :
+        kind === "recovery" ? fields.some((field) => field.name === "code" && field.type !== "hidden")
+          ? "Continue to password reset" : "Send recovery email" : kind === "verification"
         ? fields.some((field) => field.name === "code" && field.type !== "hidden") ? "Verify email" : "Send verification code"
         : "Sign in" });
   }

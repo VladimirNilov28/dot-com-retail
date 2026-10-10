@@ -22,6 +22,7 @@ export function providerClient(state: BrowserState) {
     headers: { Accept: "application/json", Origin: config.origin },
   }));
   return {
+    http: client,
     api: new FrontendApi(new Configuration({ basePath: config.kratos }), config.kratos, client),
     jar,
     save() {

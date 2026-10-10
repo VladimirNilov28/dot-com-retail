@@ -8,6 +8,18 @@ const csrf = input("csrf_token", "provider-csrf-control", "default", "hidden");
 const password = input("method", "password", "password", "submit");
 
 describe("safe provider form projection", () => {
+  test("recovery and reset use provider controls without exposing proofs or unrelated settings", () => {
+    const recovery = formMethods([csrf, input("code", "never-echo", "code"),
+      input("method", "code", "code", "submit")], "recovery")[0];
+    expect(recovery.label).toBe("Continue to password reset");
+    expect(recovery.fields.find((field) => field.name === "code").value).toBe("");
+    const reset = formMethods([csrf, input("password", "never-echo", "password", "password"),
+      password, input("method", "profile", "profile", "submit")], "reset");
+    expect(reset.map((method) => method.name)).toEqual(["password"]);
+    expect(reset[0].fields.find((field) => field.name === "password").autocomplete).toBe("new-password");
+    expect(formMessages([{ id: 4060006, type: "error", text: "raw" }], "recovery")[0]).toContain("already used");
+    expect(formMessages([{ id: 5000001, type: "error", text: "raw" }], "recovery")[0]).toContain("temporarily unavailable");
+  });
   test("retains required controls and actual schema fields but never echoes credential values", () => {
     const methods = formMethods([
       csrf, input("traits.email", "customer@bytecore.example"),

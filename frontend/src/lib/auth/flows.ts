@@ -6,6 +6,7 @@ import { providerClient, providerFailure } from "./provider";
 import { assertFlow, bindFlow } from "./store";
 import { object, text, uuid } from "@/lib/graphql/scalars";
 import { registrationPasswordError, type PasswordErrorCode } from "./password";
+import { googleAuthorization } from "./social";
 
 export interface ProviderFlow {
   id: string;
@@ -15,14 +16,15 @@ export interface ProviderFlow {
   messages: Record<string, unknown>[];
 }
 
-function validateFlow(value: unknown, kind: FormKind): ProviderFlow {
+export function validateFlow(value: unknown, kind: FormKind): ProviderFlow {
   const flow = object(value);
   const ui = object(flow.ui);
   const config = authConfig();
   const action = new URL(text(ui.action));
   const id = uuid(flow.id);
   const expiresAt = text(flow.expires_at);
-  const providerKind = kind === "registration" ? "registration" : kind;
+  const providerKind = kind === "reset" ? "settings" : kind;
+  if (kind === "recovery" && flow.state === "passed_challenge") throw new AuthError("expired", 401);
   const verified = kind === "verification" && flow.state === "passed_challenge";
   const validAction = verified
     ? action.origin === config.origin && action.pathname === "/auth/resume" &&
@@ -44,21 +46,25 @@ function validateFlow(value: unknown, kind: FormKind): ProviderFlow {
 }
 
 export async function initializeFlow(
-  state: BrowserState, browser: string, kind: FormKind, client: PoolClient, aal: "aal1" | "aal2" = "aal1",
+  state: BrowserState, browser: string, kind: FormKind, client: PoolClient, aal: "aal1" | "aal2" = "aal1", refresh = false,
 ): Promise<ProviderFlow> {
   const provider = providerClient(state);
   try {
     const config = authConfig();
     const flow = kind === "login"
       ? (await provider.api.createBrowserLoginFlow({
-        aal, refresh: aal === "aal2", returnTo: `${config.origin}/auth/resume`,
+        aal, refresh: refresh || aal === "aal2", returnTo: `${config.origin}/auth/resume`,
       })).data
       : kind === "registration"
         ? (await provider.api.createBrowserRegistrationFlow({
           returnTo: `${config.origin}/verify`, afterVerificationReturnTo: `${config.origin}/auth/resume`,
           identitySchema: "customer-v1",
         })).data
-        : (await provider.api.createBrowserVerificationFlow({ returnTo: `${config.origin}/auth/resume` })).data;
+        : kind === "recovery"
+          ? (await provider.api.createBrowserRecoveryFlow({ returnTo: `${config.origin}/reset` })).data
+          : kind === "reset"
+            ? (await provider.api.createBrowserSettingsFlow({ returnTo: `${config.origin}/reset` })).data
+            : (await provider.api.createBrowserVerificationFlow({ returnTo: `${config.origin}/auth/resume` })).data;
     const validated = validateFlow(flow, kind);
     await bindFlow(browser, validated.id, kind, validated.expiresAt, client);
     return validated;
@@ -80,7 +86,9 @@ export async function readFlow(
   try {
     const flow = kind === "login" ? (await provider.api.getLoginFlow({ id })).data
       : kind === "registration" ? (await provider.api.getRegistrationFlow({ id })).data
-        : (await provider.api.getVerificationFlow({ id })).data;
+        : kind === "recovery" ? (await provider.api.getRecoveryFlow({ id })).data
+          : kind === "reset" ? (await provider.api.getSettingsFlow({ id })).data
+            : (await provider.api.getVerificationFlow({ id })).data;
     return validateFlow(flow, kind);
   } catch (error) {
     if (error instanceof AuthError) throw error;
@@ -94,7 +102,7 @@ export async function readFlow(
   }
 }
 
-export type Submission = { complete: true; verificationFlow?: string } |
+export type Submission = { complete: true; verificationFlow?: string; settingsFlow?: string; socialRedirect?: string; socialComplete?: true } |
   { complete: false; validation: boolean; flow: ProviderFlow; passwordError?: PasswordErrorCode };
 
 function field(form: URLSearchParams, name: string, maximum: number, optional = false): string {
@@ -112,14 +120,27 @@ export async function submitFlow(
   const flow = await readFlow(state, browser, id, kind, client);
   const method = field(form, "method", 32);
   if (!flow.nodes.some((node) => node.type === "input" &&
-      object(node.attributes).name === "method" && object(node.attributes).value === method)) {
+      ((object(node.attributes).name === "method" && object(node.attributes).value === method) ||
+        (method === "oidc" && node.group === "oidc" && object(node.attributes).name === "provider" &&
+          object(node.attributes).value === "google")))) {
     throw new AuthError("invalid_request", 400);
   }
   const csrf_token = field(form, "csrf_token", 1024);
   const provider = providerClient(state);
   try {
     let result: unknown;
-    if (kind === "login") {
+    if (method === "oidc") {
+      if (field(form, "provider", 32) !== "google") throw new AuthError("invalid_request", 400);
+      if (kind === "login") {
+        result = (await provider.api.updateLoginFlow({ flow: id, updateLoginFlowBody: { method: "oidc", provider: "google", csrf_token } })).data;
+      } else if (kind === "registration") {
+        result = (await provider.api.updateRegistrationFlow({ flow: id, updateRegistrationFlowBody: {
+          method: "oidc", provider: "google", csrf_token,
+          traits: { username: field(form, "traits.username", 255), dateOfBirth: field(form, "traits.dateOfBirth", 10) },
+          transient_payload: { altcha: field(form, "altcha", 16384) },
+        } })).data;
+      } else throw new AuthError("invalid_request", 400);
+    } else if (kind === "login") {
       if (method === "password") {
         result = (await provider.api.updateLoginFlow({ flow: id, updateLoginFlowBody: {
           method, csrf_token, identifier: field(form, "identifier", 255), password: field(form, "password", 4096),
@@ -149,6 +170,18 @@ export async function submitFlow(
         },
         transient_payload: { altcha: field(form, "altcha", 16384) },
       } })).data;
+    } else if (kind === "reset") {
+      if (method !== "password") throw new AuthError("invalid_request", 400);
+      const password = field(form, "password", 4096);
+      const passwordError = registrationPasswordError(password);
+      if (passwordError) return { complete: false, validation: true, flow, passwordError };
+      const updated = (await provider.api.updateSettingsFlow({ flow: id, updateSettingsFlowBody: {
+        method, csrf_token, password,
+      } })).data;
+      if (updated.state !== "success") {
+        return { complete: false, validation: true, flow: validateFlow(updated, kind) };
+      }
+      return { complete: true };
     } else {
       if (method !== "code") throw new AuthError("invalid_request", 400);
       const code = field(form, "code", 128, true);
@@ -158,17 +191,34 @@ export async function submitFlow(
           object(node.attributes).value === email) && flow.state === "sent_email") {
         throw new AuthError("invalid_request", 400);
       }
-      result = (await provider.api.updateVerificationFlow({ flow: id, updateVerificationFlowBody: {
-        method, csrf_token, ...(email ? { email } : { code }),
-      } })).data;
-      const verification = validateFlow(result, kind);
-      return verification.state === "passed_challenge" ? { complete: true } :
-        { complete: false, validation: false, flow: verification };
+      const body: { method: "code"; csrf_token: string; email?: string; code?: string } =
+        { method: "code", csrf_token, ...(email ? { email } : { code }) };
+      result = kind === "recovery"
+        ? (await provider.api.updateRecoveryFlow({ flow: id, updateRecoveryFlowBody: {
+          ...body, transient_payload: { storefront_flow_id: id },
+        } })).data
+        : (await provider.api.updateVerificationFlow({ flow: id, updateVerificationFlowBody: body })).data;
+      if (kind === "verification") {
+        const verification = validateFlow(result, kind);
+        return verification.state === "passed_challenge" ? { complete: true } :
+          { complete: false, validation: verification.messages.some((message) => message.type === "error"), flow: verification };
+      }
+      const recovered = object(result);
+      if (recovered.state !== "passed_challenge") {
+        const pending = validateFlow(result, kind);
+        return { complete: false, validation: pending.messages.some((message) => message.type === "error"), flow: pending };
+      }
     }
     const body = object(result);
     const continuations = Array.isArray(body.continue_with) ? body.continue_with : [];
     for (const item of continuations) {
       const continuation = object(item);
+      if (kind === "recovery" && continuation.action === "show_settings_ui") {
+        const settingsFlow = uuid(object(continuation.flow).id);
+        const settings = validateFlow((await provider.api.getSettingsFlow({ id: settingsFlow })).data, "reset");
+        await bindFlow(browser, settings.id, "reset", settings.expiresAt, client);
+        return { complete: true, settingsFlow };
+      }
       if (continuation.action === "show_verification_ui") {
         const target = object(continuation.flow);
         const verificationFlow = uuid(target.id);
@@ -177,7 +227,7 @@ export async function submitFlow(
         return { complete: true, verificationFlow };
       }
     }
-    return { complete: true };
+    return { complete: true, ...(method === "oidc" ? { socialComplete: true as const } : {}) };
   } catch (error) {
     if (error instanceof AuthError) throw error;
     const failure = providerFailure(error);
@@ -193,7 +243,22 @@ export async function submitFlow(
       const config = authConfig();
       if (typeof redirect !== "string") throw new AuthError("unavailable");
       const url = new URL(redirect);
+      if (method === "oidc" && url.origin === "https://accounts.google.com") {
+        const destination = googleAuthorization(redirect);
+        state.social = { state: text(destination.searchParams.get("state")), flow: id,
+          kind: kind === "registration" ? "registration" : "login" };
+        return { complete: true, socialRedirect: destination.href };
+      }
       console.error("provider completion destination", kind, url.pathname, Array.from(url.searchParams.keys()).join(","));
+      if (kind === "recovery" && url.origin === config.origin && url.pathname === "/reset" &&
+          url.searchParams.getAll("flow").length === 1 &&
+          Array.from(url.searchParams.keys()).every((key) => key === "flow") &&
+          !url.hash && !url.username && !url.password) {
+        const settingsFlow = uuid(url.searchParams.get("flow"));
+        const settings = validateFlow((await provider.api.getSettingsFlow({ id: settingsFlow })).data, "reset");
+        await bindFlow(browser, settings.id, "reset", settings.expiresAt, client);
+        return { complete: true, settingsFlow };
+      }
       if (kind === "login" && url.origin === config.kratos && url.pathname === "/self-service/login/browser" &&
           url.searchParams.getAll("aal").length === 1 && url.searchParams.get("aal") === "aal2" &&
           url.searchParams.getAll("return_to").length === 1 &&
@@ -206,7 +271,9 @@ export async function submitFlow(
       }
       if (url.origin === config.origin && url.pathname === "/auth/resume" &&
           !url.search && !url.hash && !url.username && !url.password) {
-        if (kind === "login") return { complete: true };
+        if (kind === "login" || (kind === "registration" && method === "oidc")) {
+          return { complete: true, ...(method === "oidc" ? { socialComplete: true as const } : {}) };
+        }
         if (kind === "verification") {
           const verified = validateFlow((await provider.api.getVerificationFlow({ id })).data, kind);
           if (verified.state === "passed_challenge") return { complete: true };

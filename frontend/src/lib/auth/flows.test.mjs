@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { submitFlow } from "./flows";
+import { submitFlow, validateFlow } from "./flows";
 import { emptyJar } from "./provider";
 
 const id = "11111111-1111-4111-8111-111111111111";
@@ -8,6 +8,9 @@ let server;
 let posts = 0;
 let previous;
 let postedVerification;
+let postedRecovery;
+let postedReset;
+let postedSocial;
 const names = ["STOREFRONT_ORIGIN", "AUTH_OAUTH_ISSUER", "AUTH_KRATOS_URL", "AUTH_BRIDGE_URL",
   "AUTH_CLIENT_ID", "AUTH_CLIENT_SECRET", "AUTH_BRIDGE_SECRET", "AUTH_DATABASE_URL", "AUTH_SEAL_KEYS"];
 
@@ -16,18 +19,34 @@ beforeAll(() => {
     hostname: "127.0.0.1", port: 0,
     async fetch(request) {
       const verification = new URL(request.url).pathname.includes("verification");
+      const recovery = new URL(request.url).pathname.includes("recovery");
+      const reset = new URL(request.url).pathname.includes("settings");
       if (request.method === "POST") {
         posts++;
-        if (!verification) return Response.json({});
-        postedVerification = await request.json();
+        const body = await request.json();
+        if (body.method === "oidc") {
+          postedSocial = body;
+          return Response.json({});
+        }
+        if (reset) {
+          postedReset = body;
+        } else if (recovery) {
+          postedRecovery = body;
+          if (postedRecovery.code === "001234") return Response.json({
+            state: "passed_challenge", continue_with: [{ action: "show_settings_ui", flow: { id } }],
+          });
+        } else if (verification) postedVerification = body;
+        else return Response.json({});
       }
       return Response.json({
         id, type: "browser", expires_at: new Date(Date.now() + 600000).toISOString(),
-        ...(verification ? { state: "sent_email" } : {}),
-        ui: { action: `${server.url.origin}/self-service/${verification ? "verification" : "registration"}?flow=${id}`, method: "POST", nodes: [
-          { type: "input", group: "password", attributes: { name: "method", type: "submit", value: verification ? "code" : "password" } },
-          ...(verification ? [{ type: "input", group: "code", attributes: { name: "email", type: "submit", value: "fixture@bytecore.example" } }] : []),
+        ...(verification || recovery ? { state: "sent_email" } : reset ? { state: request.method === "POST" ? "success" : "show_form" } : {}),
+        ui: { action: `${server.url.origin}/self-service/${verification ? "verification" : recovery ? "recovery" : reset ? "settings" : "registration"}?flow=${id}`, method: "POST", nodes: [
+          { type: "input", group: "password", attributes: { name: "method", type: "submit", value: verification || recovery ? "code" : "password" } },
+          ...(verification || recovery ? [{ type: "input", group: "code", attributes: { name: "email", type: "submit", value: "fixture@bytecore.example" } }] : []),
           { type: "input", group: "default", attributes: { name: "csrf_token", type: "hidden", value: "fixture-csrf" } },
+          ...(!verification && !recovery && !reset ? [{ type: "input", group: "oidc",
+            attributes: { name: "provider", type: "submit", value: "google" } }] : []),
         ] },
       });
 
@@ -68,6 +87,54 @@ test("verification preserves code bytes and sends only the explicitly allowed re
   expect(postedVerification.code).toBeUndefined();
   form.set("email", "foreign@bytecore.example");
   await expect(submitFlow(state(), browser, id, "verification", form, client)).rejects.toThrow();
+});
+
+test("recovery redeems exact code into only a bound provider settings flow", async () => {
+  const result = await submitFlow(state(), browser, id, "recovery",
+    new URLSearchParams({ method: "code", csrf_token: "fixture-csrf", code: "001234" }), client);
+  expect(postedRecovery.code).toBe("001234");
+  expect(postedRecovery.email).toBeUndefined();
+  expect(result).toEqual({ complete: true, settingsFlow: id });
+  const resend = await submitFlow(state(), browser, id, "recovery",
+    new URLSearchParams({ method: "code", csrf_token: "fixture-csrf", email: "fixture@bytecore.example", code: "001234" }), client);
+  expect(resend.complete).toBe(false);
+  expect(postedRecovery.code).toBeUndefined();
+  await expect(submitFlow(state(), browser, id, "recovery",
+    new URLSearchParams({ method: "code", csrf_token: "fixture-csrf", email: "foreign@bytecore.example" }), client)).rejects.toThrow();
+});
+
+test("reset enforces shared byte policy before provider mutation and forwards no traits", async () => {
+  const before = posts;
+  const invalid = await submitFlow(state(), browser, id, "reset", form("short"), client);
+  expect(invalid.passwordError).toBe("minimum");
+  expect(posts).toBe(before);
+  expect((await submitFlow(state(), browser, id, "reset", form("alllowercase"), client)).complete).toBe(true);
+  expect(Object.keys(postedReset).sort()).toEqual(["csrf_token", "method", "password"]);
+});
+
+test("provider-authenticated registration continuation completes through canonical handoff, not a second redirect", async () => {
+  const submitted = form("must-not-forward");
+  submitted.set("method", "oidc");
+  submitted.set("provider", "google");
+  const result = await submitFlow(state(), browser, id, "registration", submitted, client);
+  expect(result).toEqual({ complete: true, socialComplete: true });
+  expect(postedSocial.traits).toEqual({ username: "fixture", dateOfBirth: "1990-06-01" });
+  expect(postedSocial.transient_payload.altcha).toBe("fixture-proof");
+  expect(postedSocial.password).toBeUndefined();
+  expect(postedSocial.traits.email).toBeUndefined();
+});
+
+test("already-consumed recovery flows cannot be resubmitted or mislabeled as an outage", () => {
+  try {
+    validateFlow({ id, type: "browser", state: "passed_challenge",
+      expires_at: new Date(Date.now() + 600000).toISOString(), ui: {
+        action: `${server.url.origin}/self-service/recovery?flow=${id}`, method: "POST", nodes: [],
+      } }, "recovery");
+    throw new Error("Expected consumed-flow rejection");
+  } catch (error) {
+    expect(error.code).toBe("expired");
+    expect(error.status).toBe(401);
+  }
 });
 
 describe("registration BFF validation before provider mutation", () => {
