@@ -55,4 +55,16 @@ describe("BFF deployment configuration", () => {
     expect(() => authConfig({ ...fixture, AUTH_BRIDGE_SECRET: "replace-with-secret" })).toThrow();
     expect(authOrigin({ STOREFRONT_ORIGIN: fixture.STOREFRONT_ORIGIN })).toBe(fixture.STOREFRONT_ORIGIN);
   });
+
+  test("rejects copied development secret placeholders before opening the auth store", () => {
+    for (const changes of [
+      { AUTH_CLIENT_SECRET: "replace-with-independent-random-bff-secret" },
+      { AUTH_BRIDGE_SECRET: "replace-with-independent-random-bridge-secret" },
+      { AUTH_SEAL_KEYS: JSON.stringify({
+        active: "v1", keys: { v1: "replace-with-base64url-encoded-32-byte-key" },
+      }) },
+    ]) {
+      expect(() => authConfig({ ...fixture, ...changes })).toThrow("unavailable");
+    }
+  });
 });

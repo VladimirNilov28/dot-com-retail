@@ -181,6 +181,43 @@ The client/bridge secrets must match root `BFF_CLIENT_SECRET` and
 `AUTH_BRIDGE_SECRET`; `BFF_REDIRECT_URI` is exactly the fixed storefront origin
 plus `/auth/callback`. CAPTCHA uses its own secret and database role.
 
+### Local startup and `start unavailable`
+
+Copying the examples is not sufficient to enable authentication. Before starting
+the frontend, replace missing or `replace-with...` development values in ignored
+local environment files only. Reuse valid root `BFF_CLIENT_SECRET` and
+`AUTH_BRIDGE_SECRET` in the frontend; the password in `AUTH_DATABASE_URL` must be
+the actual PostgreSQL runtime-role password, not the migration-role password or
+an example value. Generate cryptographically random values only for missing or
+placeholder secrets. Replace a placeholder seal key with a random 32-byte
+base64url key under its existing ID; preserve every valid key and the active ID.
+Never print resolved Compose configuration or credentials while diagnosing this.
+
+An anonymous `GET /auth/session` intentionally returns `200` without validating
+authentication configuration, opening PostgreSQL or contacting providers. It is
+not an authentication readiness check. `GET /auth/start` validates configuration
+first, then persists encrypted browser/OAuth transaction state, then performs
+OAuth discovery. Placeholder client/bridge secrets or a seal key therefore fail
+before database access or discovery, with the generic `unavailable` error.
+A database connection failure or provider outage can produce the same public
+error; do not diagnose the stage from latency or status alone.
+
+For existing volumes, inspect the database, all three roles, table ownership and
+runtime grants before provisioning. If they already exist, do not rerun the
+create-role script, reset passwords, recreate the database or delete volumes.
+Apply only missing setup after operator review. Reconcile an existing Hydra
+client secret only as a deliberate coordinated change: restarting the bridge
+does not rotate it. Verify the registered callback is exactly
+`http://127.0.0.1:3000/auth/callback`, then restart only services whose private
+configuration changed and the frontend to load its updated environment.
+
+Use `http://127.0.0.1:3000` in the browser, not a mixture of localhost and
+127.0.0.1. Next.js development requests also need the narrow `127.0.0.1` hostname
+entry in `allowedDevOrigins`; this HMR setting does not configure OAuth origins
+or relax authentication checks. Verify actual login with an existing designated
+test account, session persistence, provider logout and both `/` and `/cart`
+return destinations. Never reset an owner's password to complete verification.
+
 The origin validator rejects credentials, paths, queries and fragments.
 Production requires same-site HTTPS storefront/issuer, HTTPS provider/bridge
 connections and `sslmode=verify-full` for the BFF database; insecure Node TLS
