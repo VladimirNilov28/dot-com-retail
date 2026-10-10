@@ -212,6 +212,8 @@ export function StoreNavigation({
         </Button>
         <Popover.Content
           isNonModal
+          // Trigger presses own toggling; outside dismissal would close and then reopen it.
+          shouldCloseOnInteractOutside={(element) => !element.closest(".store-catalog-trigger, .store-panel-trigger")}
           placement="bottom start"
           className={catalog ? "store-popover store-catalog-popover" : "store-popover"}
         >

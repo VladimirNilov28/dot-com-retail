@@ -335,8 +335,23 @@ async function checkDesktopPopovers(page) {
     await dialog.waitFor();
     await dismissOutside(page);
     await dialog.waitFor({ state: "hidden" });
+    for (let repeat = 0; repeat < 2; repeat++) {
+      await button.click();
+      await dialog.waitFor();
+      await button.click();
+      await dialog.waitFor({ state: "hidden" });
+      assert.equal(await button.getAttribute("aria-expanded"), "false", "One trigger click closes the popover");
+    }
   }
+  const catalog = page.getByRole("button", { name: "Catalog", exact: true });
   const account = page.getByRole("button", { name: "Account", exact: true });
+  await catalog.click();
+  await page.getByRole("dialog", { name: "Category navigation" }).waitFor();
+  await account.click();
+  await page.getByRole("dialog", { name: "Category navigation" }).waitFor({ state: "hidden" });
+  await page.getByRole("dialog", { name: "Account navigation" }).waitFor();
+  await account.click();
+  await page.getByRole("dialog", { name: "Account navigation" }).waitFor({ state: "hidden" });
   await account.click();
   const dialog = page.getByRole("dialog", { name: "Account navigation" });
   await dialog.getByRole("link", { name: "Sign in", exact: true }).focus();
