@@ -358,7 +358,9 @@ function SearchControl({ expanded, onExpand, onCollapse }: {
             className="store-search-overlay-form"
             onSubmit={(event) => { event.preventDefault(); submit(value); }}
           >
-            <Search size={18} strokeWidth={2} aria-hidden="true" focusable="false" className="results-search-icon" />
+            <button type="submit" className="store-search-overlay-submit" aria-label="Search">
+              <Search size={18} strokeWidth={2} aria-hidden="true" focusable="false" className="store-icon" />
+            </button>
             <label htmlFor={inputId} className="sr-only">Search the catalog</label>
             <div className="results-search-field">
               <input
