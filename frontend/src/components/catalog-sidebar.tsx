@@ -114,12 +114,12 @@ function Filters({ route, state, facets, onNavigate }: {
             <PreserveParams state={state} omit={["minPrice", "maxPrice"]} />
             <label className="results-price-label">
               Min
-              <input type="number" min="0" step="0.01" name="minPrice" defaultValue={state.minPrice ?? ""} inputMode="decimal"
+              <input type="number" min="0" step="1" name="minPrice" defaultValue={state.minPrice ?? ""} inputMode="numeric"
                 aria-label="Minimum price in EUR" className="results-price-input" />
             </label>
             <label className="results-price-label">
               Max
-              <input type="number" min="0" step="0.01" name="maxPrice" defaultValue={state.maxPrice ?? ""} inputMode="decimal"
+              <input type="number" min="0" step="1" name="maxPrice" defaultValue={state.maxPrice ?? ""} inputMode="numeric"
                 aria-label="Maximum price in EUR" className="results-price-input" />
             </label>
             <button type="submit" className="store-cta results-price-submit">Apply</button>
