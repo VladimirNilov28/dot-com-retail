@@ -599,6 +599,70 @@ files in this round. They remain *Model-reviewed — awaiting owner approval*.
 
 ## Retained-file inventory
 
+### #67/#66 password guidance and safe errors — 2026-10-10
+
+**16 inspected production captures: 10 replacements and 6 additions.**
+Rendered implementation revision:
+`8bb44895e4b985be3a40a1fc90749f41921502c7`. The rows below supersede the
+2026-10-09 entries for these filenames; unchanged MFA, verification and account
+captures retain their existing provenance. Current retained inventory:
+**76 PNG files**. All new/refreshed files are **Model-reviewed — awaiting owner
+approval**, not an owner-approved visual baseline.
+
+Captures use viewport **1440×1000** or **390×1000**, full page, reduced motion,
+DPR 1. A temporary loopback proxy forwards canonical browser
+`http://127.0.0.1:3000` to an isolated production build on `:3037`; provider
+requests still reach the owner's real Kratos/Hydra/bridge/Spring/PostgreSQL/
+Mailpit stack. The owner's running dev server, provider configurations,
+passwords, encryption keys and volumes were not changed. The proxy/build helper
+was stopped after verification.
+
+Minimum and breached-password images show actual Kratos rejections, not
+fabricated provider data. Duplicate registration also used the real hook.
+Security-check unavailability is an explicitly controlled browser HTTP 503;
+the general unavailable capture exercises the real error-page template, not
+an imposed owner-service outage. The login expiry capture uses a stale,
+unbound flow; a separate real-stack check expired only a newly created test
+browser's durable registration binding and confirmed challenge `401 expired`
+and registration restart. Generated task-account labels are non-sensitive.
+Password fields are masked/blank; no passwords, codes, cookies or tokens are
+revealed. A premature desktop login capture was rejected and recaptured with
+the complete settled heading/shell before promotion.
+
+Interaction checks covered live UTF-8 byte feedback, local text-labelled
+strength separate from acceptance, paste, keyboard show/hide, label/error/
+description association, focused summary links, actual server-only rejection,
+valid registration and courier verification, login/reload/logout, existing
+designated-account login, generic errors for known/unknown accounts, mobile
+layout and 200%-equivalent 195 CSS-pixel auth layout. The existing production
+storefront smoke suite additionally passed its real Chromium 200% zoom checks
+and all 11 scenarios without console/hydration errors.
+
+Without JavaScript, requirements and real provider errors remain server-rendered,
+show/hide and strength controls are omitted, and native login succeeds using
+Hydra's continuation button. Registration still visibly requires JavaScript for
+the official ALTCHA widget. No deliberate departure from the design conventions
+or weakened authentication policy is introduced.
+
+| File | Issue / covers | Route/state | Status | Last updated by |
+| --- | --- | --- | --- | --- |
+| `issue-66-login-desktop-1440-default.png` | #66 | `/login`, native password field and show/hide | Model-reviewed — awaiting owner approval | #67/#66 |
+| `issue-66-login-mobile-390-default.png` | #66 | `/login`, mobile native password field and show/hide | Model-reviewed — awaiting owner approval | #67/#66 |
+| `issue-66-login-desktop-1440-invalid.png` | #66 | Actual generic credential error, focused summary, blank password | Model-reviewed — awaiting owner approval | #67/#66 |
+| `issue-66-login-mobile-390-invalid.png` | #66 | Mobile generic credential error and recovery | Model-reviewed — awaiting owner approval | #67/#66 |
+| `issue-66-login-mobile-390-expired.png` | #66 | Stale flow, distinct expiry and restart | Model-reviewed — awaiting owner approval | #67/#66 |
+| `issue-67-register-desktop-1440-default.png` | #67 | `/register`, visible enforced policy before submission | Model-reviewed — awaiting owner approval | #67 |
+| `issue-67-register-mobile-390-default.png` | #67 | Mobile visible policy and real ALTCHA | Model-reviewed — awaiting owner approval | #67 |
+| `issue-67-register-desktop-1440-validation.png` | #67 | Real minimum-byte rejection, linked summary/inline error, persistent requirements | Model-reviewed — awaiting owner approval | #67 |
+| `issue-67-register-desktop-1440-weak.png` | #67 | Local minimum met but text-labelled Weak strength, masked field | Model-reviewed — awaiting owner approval | #67 |
+| `issue-67-register-mobile-390-weak.png` | #67 | Mobile Weak strength separate from acceptance | Model-reviewed — awaiting owner approval | #67 |
+| `issue-67-register-desktop-1440-breached.png` | #67 | Real server-only breach rejection, actionable reason | Model-reviewed — awaiting owner approval | #67 |
+| `issue-67-register-mobile-390-breached.png` | #67 | Mobile breach rejection, linked summary/associated field error | Model-reviewed — awaiting owner approval | #67 |
+| `issue-67-register-mobile-390-duplicate.png` | #67 | Actual duplicate email rejection, distinct from password error | Model-reviewed — awaiting owner approval | #67 |
+| `issue-67-register-desktop-1440-captcha-unavailable.png` | #67 | Controlled challenge HTTP 503, distinct service recovery | Model-reviewed — awaiting owner approval | #67 |
+| `issue-67-register-mobile-390-unavailable.png` | #67 | Real unavailable template explicitly distinguishes service/password failures | Model-reviewed — awaiting owner approval | #67 |
+| `issue-67-register-mobile-390-no-js.png` | #67 | Server-rendered policy and explicit unchanged CAPTCHA limitation | Model-reviewed — awaiting owner approval | #67 |
+
 ### #40/#66/#67 coordinated authentication package — 2026-10-09
 
 **16 new auth captures** and the refreshed anonymous homepage account popover
@@ -629,7 +693,8 @@ All rows below are full-page captures from viewport **1440×1000** or
 Actual Chromium 200% zoom was separately verified at both widths, including
 195 CSS pixels at390, without overflow. Emulated-width PoW timings are not
 physical-phone performance claims.
-Current retained inventory: **70 PNG files**.
+Inventory at that delivery: **70 PNG files**; refreshed entries are superseded
+by the 2026-10-10 table above.
 
 | File | Issue | Route/state | Status | Last updated by |
 | --- | --- | --- | --- | --- |
