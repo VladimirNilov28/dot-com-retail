@@ -188,7 +188,12 @@ the frontend, replace missing or `replace-with...` development values in ignored
 local environment files only. Reuse valid root `BFF_CLIENT_SECRET` and
 `AUTH_BRIDGE_SECRET` in the frontend; the password in `AUTH_DATABASE_URL` must be
 the actual PostgreSQL runtime-role password, not the migration-role password or
-an example value. Generate cryptographically random values only for missing or
+an example value. Independently check root `CAPTCHA_DATABASE_URL`: its password
+must match the real `CAPTCHA_DB_PASSWORD` for the CAPTCHA role. Changing the role
+password setting does not rewrite a copied DSN; recreate only `oauth-service`
+after correcting its DSN so the running bridge loads the change. A valid
+`CAPTCHA_SECRET` alone does not establish CAPTCHA storage readiness.
+Generate cryptographically random values only for missing or
 placeholder secrets. Replace a placeholder seal key with a random 32-byte
 base64url key under its existing ID; preserve every valid key and the active ID.
 Never print resolved Compose configuration or credentials while diagnosing this.
