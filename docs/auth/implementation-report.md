@@ -7,6 +7,17 @@ awaiting owner approval**, not an extension of existing scoped approvals.
 
 ## Scope and contract
 
+**11 October follow-up:** #68 recovery/reset and #69 optional customer TOTP/
+backup-code management are now implemented locally. Genuine production-browser
+journeys and focused regression checks are recorded in
+[`browser-contract.md`](browser-contract.md) and E11 of the
+[`submission audit`](../submission-audit-2026-10-11.md).
+#70 Google entry/configuration/canonical onboarding is implemented independently;
+live provider verification is blocked by absent console credentials, as detailed
+in [`external-provider.md`](external-provider.md). Mandatory staff MFA remains a
+separate gap. The results below describe the historical 9 October baseline,
+not newly executed checks or claims that those newer workflows were absent.
+
 The [browser/security contract](browser-contract.md) records authorities,
 configuration, migration/rollout, rotation, limits and maintenance.
 Kratos owns identity/password/session/verification/factors; Hydra issues OAuth;

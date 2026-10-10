@@ -2,8 +2,9 @@
 
 This is the implementation contract for the coordinated authentication package,
 not a claim of completed verification or owner visual approval. Delivery reports
-record the implemented revision and actual checks. Social login, profile editing,
-password recovery UI and customer TOTP management remain separate work.
+record the implemented revision and actual checks. Recovery and optional
+customer factor management are implemented; real Google verification requires
+provider credentials. Profile editing remains separate work.
 
 ## Authorities and origins
 
@@ -36,6 +37,16 @@ maintained authenticated-encryption library and a versioned server key ring.
 Runtime database permissions exclude schema changes; migrations and bounded
 expiry/revocation maintenance are explicit deployment steps. Process-local
 memory is not a production session or replay store.
+
+The Foundation working specification asks for access tokens in memory, rather
+than browser persistent storage. This BFF satisfies the browser-exposure goal:
+no access/refresh tokens enter browser storage or client JavaScript. Its durable
+server store is encrypted PostgreSQL rather than literal memory-only storage.
+That architectural interpretation needs reviewer acceptance and remains
+explicitly Unverified in the submission matrix; we do not move tokens into the
+browser to imitate an example. Hydra's 30-minute access/7-day refresh lifetimes
+meet the supplied 15–60 minute/3–7 day bounds; BFF idle/absolute limits can end a
+browser session sooner.
 
 Absence of a cookie does not make anonymous browsing depend on auth services.
 An invalid/expired cookie differs from an auth-service outage. Private account
@@ -448,13 +459,98 @@ docker compose -f infrastructure/compose.yml exec -T postgres \
   bash /docker-entrypoint-initdb.d/04-create-storefront-auth.sh
 ```
 
-The dedicated database migration is
-`infrastructure/oauth/auth-store/001_initial.sql`. Its owner/migration role is
+The dedicated database migrations are
+`infrastructure/oauth/auth-store/001_initial.sql` and `002_flow_kinds.sql`.
+The second migration expands the bound-flow allowlist for recovery, reset and
+settings; fresh-volume provisioning applies both. For an already provisioned
+volume, apply only the second migration using its existing owner role:
+
+```bash
+docker exec postgres sh -c 'psql --username "$POSTGRES_USER" --dbname storefront_auth \
+  --set=ON_ERROR_STOP=1 --set=migration_user="$AUTH_MIGRATION_USER" <<EOF
+SET ROLE :"migration_user";
+\i /auth-store/002_flow_kinds.sql
+EOF'
+```
+
+Its owner/migration role is
 separate from the BFF role (session/transaction/flow DML only) and CAPTCHA role
 (challenge DML only). Neither runtime role can create schema objects or access
 the other's credential-bearing tables. Future migrations are explicit versioned
 SQL deployments, not anonymous-request initialization. Protect database backups
 and encryption keys separately; encrypted rows are not a reason to publish dumps.
+
+## Recovery and optional customer factors (#68, #69)
+
+The login page links to `/recover`. The BFF initializes Kratos's **browser code
+recovery**, binds its UUID to the encrypted provider jar and forwards either
+email or code, never both. Request and resend responses do not reveal whether
+an account exists. Code bytes are preserved, including leading zeroes.
+
+Recovery is not email verification: v26.2.0's recovery-code email model has
+`RequestURL`, not `RecoveryURL`, and that request URL need not contain a flow ID.
+The BFF supplies the already validated UUID in `transient_payload`; the template
+accepts only a complete UUID for its fixed storefront fragment link. Genuine
+proofs remain generated, checked, expired and consumed by Kratos. Direct
+provider requests without that field still receive the genuine code, without
+an invented link. A link fills the code and removes the fragment; explicit POST
+with BFF/provider CSRF completes redemption in the originating browser.
+Another browser must request its own recovery flow. Native no-JS code entry works.
+
+Successful recovery creates a limited Kratos session and **settings flow**.
+The BFF reads and binds that continuation, exposes only password settings at
+`/reset`, applies the shared byte policy, and leaves provider password checks
+enabled. Arbitrary settings IDs cannot open reset. Reset revokes other Kratos
+sessions via the existing hook, discards the recovery session and requires fresh
+login. Other BFF sessions fail their next provider check and enter the existing
+durable revocation path. Previously issued direct JWTs retain their bounded
+lifetime; this is not a claim of instantaneous global JWT invalidation.
+
+Customer `/account/security` uses authenticated, identity/session-bound Kratos
+settings. TOTP enrollment presents only the validated provider PNG/manual key,
+requires a real authenticator code, and updates the session's actual assurance.
+Backup codes are generated, displayed/downloaded, activated and consumed by
+Kratos. No external QR service or custom credential storage is introduced.
+Disable/reveal/replacement operations require recent authentication and the
+strongest available assurance plus explicit confirmation where destructive.
+The dedicated reauthentication action carries the current assurance into a
+fresh provider login: enrolled sessions explicitly refresh AAL2, rather than
+refreshing only a password while retaining an older second-factor assurance.
+Email password recovery does not silently remove TOTP; use an activated backup
+code if the authenticator is unavailable.
+
+Kratos can return a successful settings flow with its old ID and a new action
+ID. The BFF validates the completed identity, then creates and binds a fresh
+flow rather than weakening action/ID checks. Provider service failures remain
+unavailable, not invalid-code errors. New customer management is restricted
+to canonical `USER` identities; mandatory staff MFA/bootstrap is still #80/#40,
+not silently enabled for existing administrators.
+
+Google configuration, exact callback and credential prerequisites are in
+[`external-provider.md`](external-provider.md). Ordinary storefront grants
+remain only `openid offline_access user:read`.
+
+### Focused local batch verification (11 October 2026)
+
+Final affected frontend checks: **82 auth tests passed**, typecheck passed,
+production Turbopack build passed, lint had zero errors and one unchanged
+homepage `children` warning. Google renderer/mapper/hook tests: **10 passed**;
+existing password configuration tests: **3 passed**. No unrelated catalog suite
+or performance load tests were run.
+
+Real production browser evidence is E11 in the submission audit. The repeatable
+scripts are `frontend/scripts/auth-entry-smoke.mjs` and
+`auth-recovery-expiry.mjs`; require the existing Playwright module via
+`PLAYWRIGHT_MODULE` and explicitly set
+`STOREFRONT_BASE_URL=http://127.0.0.1:3000`. They create/use only disposable
+`authentry-…@bytecore.example` identities and suppress private values.
+The expiry script waits 16 minutes without altering the deployed 15-minute
+lifespan; genuine expired proof rejection passed. The final production journey
+also rejected consumed recovery proofs and used backup codes, exercised forced
+AAL2 reauthentication and completed same-browser A/logout/register B/login B/
+logout/login A with the correct identities. Native no-JS recovery/reset/login
+passed. Test identities are retained in this owner stack; no owner account,
+password, key or volume was reset.
 
 Bootstrap inserts client secrets only when creating clients. Routine
 reconciliation does not rotate an existing secret. Rotation is a coordinated

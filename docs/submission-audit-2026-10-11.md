@@ -48,16 +48,17 @@ Issue numbers refer to `VladimirNilov28/dot-com-retail`.
 |---|---|---|---|---|---|
 | All | Coverage of supplied working specifications | Partial | Complete working requirements supplied by owner on 11 October; source/evidence mapped below | Implement gaps and verify explicit acceptance criteria; this matrix is not a passing submission certificate | #94, #72, #77, #93 |
 | Foundation | Email/password registration and login, verified identity, same-browser switching | Complete | `F/lib/auth/{flows,oauth,session}.ts`, `F/components/auth-form.tsx`; E1–E3; owner confirms switching | Final submission regression only; retain current protections and generic login errors | #66, #67, #40 |
-| Foundation | External-provider OAuth login/onboarding | Missing | `O/kratos/kratos.yml` has no OIDC provider; BFF form projection supports password/TOTP/lookup-secret, not social methods | Configure at least one real provider; native provider callback, safe canonical onboarding/linking, cancellation and real new/returning-user verification | #70, #40 |
+| Foundation | External-provider OAuth login/onboarding | Blocked | Conditional Google config/mapper/canonical hooks; `F/lib/auth/social.ts`, native provider form/callback; Google config/mapper and state/jar/replay tests pass | Google client credentials/console registration unavailable. Exact callback in `docs/auth/external-provider.md`; real new/returning/cancel/account-linking evidence remains required | #70, #40 |
 | Foundation | Genuine registration CAPTCHA and browser/flow binding | Complete | `O/service/src/services/registration.py`, auth flows; E1, E2; genuine ALTCHA and invalid/foreign/reused-proof checks reported | Preserve retry/binding behavior; no fake challenge or bypass | #27, #67 |
 | Foundation | Password guidance and authoritative policy validation | Complete | `F/lib/auth/password.ts`, auth form; Kratos minimum/similarity checks and private pre-persist hook; E2, E3 | Final negative checks only; breach check stays enabled in base config, disabled only by explicit local override | #67, #66 |
-| Foundation | Password recovery/reset usable by customers | Partial | Kratos code recovery and password-change session-revocation hook exist; `FormKind` excludes recovery/settings and no recovery route exists | Add request/redeem/reset UI and BFF transport; genuine latest email, expiry/reuse, safe enumeration behavior and post-reset session/grant checks | #68, #40, #19 |
-| Foundation | Optional customer 2FA | Partial | Kratos TOTP/backup codes, highest-available assurance, BFF login challenges; E1; `O/service/tests/real/totp_flow_test.py` | Customer enrollment, QR/manual setup, verify/disable and backup-code management UI; complete real customer journey | #69, #26, #40 |
+| Foundation | Password recovery/reset usable by customers | Complete | `/recover`, `/reset`, bound Kratos continuation/shared policy; genuine production-browser code/link/resend/reset/new-password/other-session and native no-JS checks; E11 | Final submission regression; retain provider expiry/CSRF and durable revocation semantics | #68, #40, #19 |
+| Foundation | Optional customer 2FA | Complete | `/account/security`, `F/lib/auth/settings.ts`; genuine Kratos TOTP confirmation/challenge, backup-code activation/login and disable; E11 | Final submission regression; mandatory staff enrollment remains separate | #69, #26, #40 |
 | Foundation | Access/refresh lifetimes and refresh rotation | Complete | `O/hydra/hydra.yml`: 30m access, 168h refresh meet 15–60 minute/3–7 day bounds; `F/lib/auth/store.ts`: 24h absolute/1h idle BFF cap; E1–E3 | Final rotation/replay regression, not a fresh implementation | #66, #19 |
 | Foundation | Access tokens in memory versus BFF architecture | Unverified | Tokens never enter browser storage; encrypted server-side PostgreSQL BFF state, opaque HttpOnly browser cookie; `F/lib/auth/{store,session}.ts`, E1 | BFF prevents browser persistent-token exposure but stores encrypted tokens server-side rather than literally memory-only. Document rationale and obtain reviewer acceptance of this architectural interpretation; do not introduce browser tokens | #66, #40, #72 |
 | Foundation | Logout and revocation | Complete | Durable revoke/retry path; E1–E3; paired provider session and refresh grant rejected after logout | Preserve documented residual issued-JWT lifetime; do not claim instantaneous global JWT invalidation | #66, #40, #19 |
 | Foundation | Relational DB and integrity | Complete | PostgreSQL/Flyway, `B/resources/db/migration/V1`, V6, V11–V16; FK/check/unique constraints; migration/concurrency tests and E4–E6 | Apply new migrations append-only as features land; do not reset owner volumes | #33, #34 |
 | Foundation | ERD and database documentation | Partial | Mermaid ERD in `docs/database/FLYWAY_DB.md`; core catalog/cart/order/inventory/rating relations documented | Reconcile final model and service DB diagrams/receipts/reservations; current migration table also omits V8/V9 despite source files existing | #34, #72 |
+| Foundation | Product identifier/name/description/price/category | Complete | `B/java/ee/bytecore/backend/entities/product/{Product,ProductVariant}.java`, product SDL, real catalog/PDP variant prices/category associations; E7, E9 | Preserve exact monetary values and variant semantics as remaining catalog fields land | #38, #63, #65 |
 | Foundation | Product stock usable in storefront | Partial | V6 stock constraints, `InventoryService`; product page literally says “Availability unknown”; anonymous inventory traversal intentionally denied | Add a narrow public stock/availability projection and truthful card/PDP UI; preserve warehouse privacy and server checkout revalidation | #95, #38, #65 |
 | Foundation | Brand model and customer presentation | Missing | `Product.java` and product SDL have no brand field/entity/relationship | Brand persistence/management/read contract, validation and PDP/filter integration where required | #97, #38, #65 |
 | Foundation | Real product images | Missing | No image model/read API; PDP/cards render `ImageUnavailable` | Ordered images, safe storage/URLs and alt text; gallery/card/cart usage, missing-media state; no placeholder-as-completion | #96, #65, #81 |
@@ -102,7 +103,7 @@ Issue numbers refer to `VladimirNilov28/dot-com-retail`.
 | Experience | Token-bucket rate limiting | Missing | No token-bucket implementation found in application/bridge/payment source; CAPTCHA and bounded queries are not token buckets | Trusted principal/IP keys, refill/burst/429 behavior and shared deployment consistency; test aliases/direct ingress/forwarded-header spoofing | #90 |
 | Experience | Client/server syntactic, semantic and allowlist validation | Partial | Typed variable/operation allowlists, auth BFF and Kratos policy, quote/address/ownership checks; E1, E4, E7 | New screens/privileged actions; nonblank catalog fields and profile-update validation parity; no browser-only acceptance or relaxed authorization | #38, #40, #58, #90, owning UI tickets |
 | Experience | SEO | Partial | SSR public pages, dynamic product/category metadata, private auth noindex; generic root description still says features “coming soon” | Unique descriptive titles under 60 characters, descriptions targeting 155–160 characters, one meaningful H1 and logical heading hierarchy; canonical/private indexing policy and real alt text | #91, #93 |
-| Experience | Accessibility/responsive customer/admin workflows | Partial | Existing keyboard/focus/zoom/no-JS/contrast evidence E1, E7–E9; latest touch checks E10 | Missing screens cannot pass; no full screen-reader/Safari/physical-device pass. Owner's other mobile-button failures remain unidentified | #91, #61, owning UI tickets |
+| Experience | Accessibility/responsive customer/admin workflows | Partial | Existing keyboard/focus/zoom/no-JS/contrast evidence E1, E7–E9; latest touch checks E10 | Semantic/native/ARIA and keyboard access, meaningful alt text, 4.5:1 normal/3:1 large-text contrast, 200% zoom and responsive workflows required. Missing screens cannot pass; full assistive-tech/physical-device verification remains | #91, #61, owning UI tickets |
 | Experience | At least three load scenarios and specified report | Missing | No load suite/performance report located; smoke timing is not a load benchmark | Measure p90 <2s, 50 concurrent users, 10 transactions/s, 98% success and <5% errors. Report concurrency before >5s, normal/peak throughput, CPU/memory including 90% saturation and actual bottlenecks | #92 |
 | Experience | Docker setup, review/source/usage documentation | Partial | Monorepo sources, domain/API/auth/DB runbooks and Docker backend exist; no Docker frontend or complete submission bundle | Final overview, complete ERD/setup/usage/performance/evidence and Docker-only review path; remove stale claims without repetitive edits | #59, #34, #93 |
 
@@ -162,6 +163,20 @@ current remote SHA. Remaining implementation/evidence gaps limit submission clai
   Search, drawer and view checks). Session verification is recorded in the
   owner's conversation; this audit did not repeat it. Physical-phone/browser
   identity was unavailable for the remaining reported mobile failures.
+- **E11 — implemented authentication entry batch (11 October):**
+  `frontend/scripts/auth-entry-smoke.mjs`, focused auth tests and
+  `docs/auth/browser-contract.md`. Real production frontend with the existing
+  Kratos/Hydra/Mailpit/Hive stack verified genuine recovery code/link/resend,
+  incorrect and replaced proofs, foreign-browser guidance, shared reset policy,
+  old-password rejection/new-password login, other-session invalidation,
+  TOTP setup/challenge, backup codes, disable and same-browser A/B/A switching.
+  Final checks also rejected consumed recovery proofs and used backup codes,
+  exercised forced AAL2 reauthentication, and rejected a genuine naturally
+  expired recovery proof without changing the 15-minute lifespan.
+  Native no-JS recovery/reset/login, 390px/200% zoom and three inspected
+  credential-free captures supplement those checks. Google configuration,
+  mapper/onboarding and callback state/jar/replay checks pass; actual Google
+  authentication remains blocked by absent provider credentials.
 
 ## Delivery batches
 
@@ -179,9 +194,10 @@ batch, not in extra process tickets.
    and invalid/used/expired proofs, enrollment/AAL2/backup-code lifecycle,
    provider new/returning/cancel/error flows and cross-account denial.
    **14–24h**; main uncertainty is provider setup and safe OIDC onboarding.
-   **This is the single recommended next three-ticket batch.**
+   **Implemented locally for #68/#69; #70 live provider evidence is blocked.**
 
 2. **Complete required catalog data/PDP — #96, #97, #65.**
+   **This is now the single recommended next three-ticket batch.**
    Deliver real images/gallery, brand and measurements plus truthful storefront
    availability. Dependencies: metric/imperial conversion; retain current public-read
    boundary. Resolve the existing #38/#95 public-stock gap inside the
@@ -293,7 +309,8 @@ batch, not in extra process tickets.
     explicit per-project gaps. **12–20h before measured bottleneck fixes**;
     performance tuning cannot be priced reliably before measurement.
 
-**Estimated listed scope: 184–312 active hours**, excluding unexpected
+**Original audit baseline for listed scope: 184–312 active hours**, before
+the local authentication entry batch, excluding unexpected
 performance fixes and provider approval delays.
 Do not add these estimates to historical completed work. A single developer
 with roughly 30–40 focused hours across 11–14 October cannot complete this

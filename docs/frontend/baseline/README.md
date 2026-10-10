@@ -16,6 +16,23 @@ owner's.
 
 ## Status vocabulary
 
+### Recovery and customer security follow-up -- 2026-10-11
+
+Three production captures from the owner's existing local provider stack were
+opened and inspected. **Model-reviewed -- awaiting owner approval**; they do not
+extend previous design approvals. Disposable customer identity, enabled-factor
+status and native recovery entry only: no QR key, backup code or recovery proof
+is retained.
+
+| Asset | State |
+|---|---|
+| `issue-68-recovery-mobile-390-native.png` | Native no-JS recovery entry, 390px |
+| `issue-69-security-desktop-1440-enabled.png` | Authenticated TOTP/backup-code management, 1440px |
+| `issue-69-security-mobile-390-enabled.png` | Same customer management controls, 390px |
+
+The journey also checked 200% zoom/no overflow. These images are layout evidence,
+not external-provider verification or a physical-device accessibility claim.
+
 ### Owner approval -- desktop search compositions, 2026-10-08
 
 The owner approved the visible compositions of these original assets:
