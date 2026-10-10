@@ -85,6 +85,8 @@ export async function readFlow(
   } catch (error) {
     if (error instanceof AuthError) throw error;
     const failure = providerFailure(error);
+    console.error("authentication flow read reason", kind, failure.status,
+      failure.status === 403 ? "provider_csrf_binding" : [400, 404, 410].includes(failure.status) ? "flow_unusable" : "provider_unavailable");
     if ([400, 403, 404, 410].includes(failure.status)) throw new AuthError("expired", 401);
     throw new AuthError("unavailable");
   } finally {
@@ -151,8 +153,13 @@ export async function submitFlow(
       if (method !== "code") throw new AuthError("invalid_request", 400);
       const code = field(form, "code", 128, true);
       const email = field(form, "email", 255, true);
+      if (email && !flow.nodes.some((node) => node.type === "input" &&
+          object(node.attributes).name === "email" && object(node.attributes).type === "submit" &&
+          object(node.attributes).value === email) && flow.state === "sent_email") {
+        throw new AuthError("invalid_request", 400);
+      }
       result = (await provider.api.updateVerificationFlow({ flow: id, updateVerificationFlowBody: {
-        method, csrf_token, ...(code ? { code } : { email }),
+        method, csrf_token, ...(email ? { email } : { code }),
       } })).data;
       const verification = validateFlow(result, kind);
       return verification.state === "passed_challenge" ? { complete: true } :

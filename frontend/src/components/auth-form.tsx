@@ -7,6 +7,7 @@ import { flushSync } from "react-dom";
 import { authFieldId, captchaFailure, type AuthMethod } from "@/lib/auth/view";
 import type { FormKind } from "@/lib/auth/model";
 import { passwordGuidance, passwordErrorMessage, registrationPasswordError } from "@/lib/auth/password";
+import { verificationLinkCode } from "@/lib/auth/verification";
 
 const subscribeHydration = () => () => {};
 const clientSnapshot = () => true;
@@ -127,6 +128,18 @@ export function AuthForm({ kind, flow, csrf, returnTo, method }: {
   useEffect(() => {
     document.getElementById("auth-error-summary")?.focus();
   }, []);
+  useEffect(() => {
+    if (kind !== "verification" || !location.hash) return;
+    const code = verificationLinkCode(location.hash);
+    history.replaceState(history.state, "", location.pathname + location.search);
+    const input = form.current?.querySelector<HTMLInputElement>('input[name="code"]');
+    if (!code || !input) return;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    if (!setter) return;
+    setter.call(input, code);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.focus();
+  }, [kind]);
   function submit(event: FormEvent<HTMLFormElement>) {
     if (pending) { event.preventDefault(); return; }
     if (kind === "registration" && !new FormData(event.currentTarget).get("altcha")) {
@@ -134,6 +147,14 @@ export function AuthForm({ kind, flow, csrf, returnTo, method }: {
       flushSync(() => setCaptchaError(true));
       document.getElementById("auth-client-error-summary")?.focus();
       return;
+    }
+    const submitter = (event.nativeEvent as SubmitEvent).submitter;
+    if (kind === "verification" && submitter instanceof HTMLButtonElement && submitter.name === "email") {
+      const email = document.createElement("input");
+      email.type = "hidden";
+      email.name = "email";
+      email.value = submitter.value;
+      event.currentTarget.append(email);
     }
     // Commit the disabled state before the native POST starts navigation.
     flushSync(() => setPending(true));
@@ -144,6 +165,9 @@ export function AuthForm({ kind, flow, csrf, returnTo, method }: {
       <input type="hidden" name="flow" value={flow} />
       <input type="hidden" name="_csrf" value={csrf} />
       <input type="hidden" name="method" value={method.name} />
+      {kind === "verification" ? <p className="text-sm text-muted" role="status">
+        Stay in the browser where you registered. Email links fill the code; choose Verify email to continue.
+      </p> : null}
       {method.fields.map((field) => field.type === "hidden"
         ? <input key={field.name} type="hidden" name={field.name} value={field.value} />
         : (
@@ -177,6 +201,10 @@ export function AuthForm({ kind, flow, csrf, returnTo, method }: {
         {pending ? <LoaderCircle size={18} className="animate-spin" aria-hidden="true" /> : null}
         {pending ? "Submitting..." : method.label}
       </Button>
+      {kind === "verification" && method.resendEmail ? <Button type="submit" variant="secondary"
+        name="email" value={method.resendEmail} formNoValidate isDisabled={pending} className="auth-submit">
+        Send a new code
+      </Button> : null}
       <p className="sr-only" role="status">{pending ? "Submitting your form. Please wait." : ""}</p>
     </form>
   );

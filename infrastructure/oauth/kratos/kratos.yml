@@ -111,6 +111,13 @@ session:
 # disable_starttls is required here. Production must point this at a real
 # SMTP provider instead — tracked separately, not part of this dev config.
 courier:
+  templates:
+    verification_code:
+      valid:
+        email:
+          body:
+            html: file:///etc/kratos/templates/verification_code/valid/email.body.gotmpl
+            plaintext: file:///etc/kratos/templates/verification_code/valid/email.body.plaintext.gotmpl
   smtp:
     connection_uri: smtp://mailpit:1025/?disable_starttls=true
     from_address: no-reply@bytecore.ee

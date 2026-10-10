@@ -15,6 +15,7 @@ export interface AuthMethod {
   name: "password" | "totp" | "lookup_secret" | "code";
   label: string;
   fields: AuthField[];
+  resendEmail?: string;
 }
 
 const labels: Record<string, string> = {
@@ -78,14 +79,18 @@ export function formMessages(values: unknown, kind?: FormKind): string[] {
       if (message.id === 4000004) return "Enter a valid value for this field.";
       if (message.id === 4000038) return "The security check failed. Complete a fresh check and try again.";
       if ([4000007, 4000027, 4000028].includes(Number(message.id))) return "This email or username cannot be registered. Try signing in.";
-      if ([4000008, 4000012, 4000016, 4070006].includes(Number(message.id))) return "The code is incorrect, expired or already used. Try again.";
+      if (message.id === 4070006 || (kind !== "verification" &&
+          [4000008, 4000012, 4000016].includes(Number(message.id)))) return "The code is incorrect, expired or already used. Try again.";
+      if (message.id === 4070001) return "This verification link is invalid or already used. Request a new code.";
+      if (message.id === 4070002) return "This verification was already completed. Try signing in.";
+      if (message.id === 4070003) return "This verification could not continue. Start a new verification form.";
       if ([4010001, 4040001, 4070005].includes(Number(message.id))) return "This form has expired. Start a new secure flow.";
       if (typeof message.text === "string" && safeHookMessages.has(message.text)) return message.text;
       console.error("authentication validation reason", "unrecognized_provider_validation");
       return "Check the details below and try again.";
     }
     if (message.type === "info" || message.type === "success") {
-      if (message.id === 1080001) return "Check your inbox for the verification code.";
+      if (message.id === 1080001 || message.id === 1080003) return "Use the latest email for this verification form. Resending replaces the previous code.";
       if (message.id === 1080002) return "Your email is verified.";
       return "";
     }
@@ -129,7 +134,13 @@ export function formMethods(nodes: Record<string, unknown>[], kind: FormKind): A
       });
     }
     if (!fields.some((field) => field.name === "csrf_token")) throw new TypeError("Provider CSRF control is missing");
-    methods.push({ name, fields, label: name === "totp" ? "Verify code" : name === "lookup_secret" ? "Use recovery code" :
+    const resend = kind === "verification" ? nodes.find((candidate) => candidate.type === "input" &&
+      object(candidate.attributes).name === "email" && object(candidate.attributes).type === "submit") : undefined;
+    const resendEmail = resend ? object(resend.attributes).value : undefined;
+    if (resendEmail !== undefined && (typeof resendEmail !== "string" || resendEmail.length > 255)) {
+      throw new TypeError("Invalid provider resend control");
+    }
+    methods.push({ name, fields, ...(typeof resendEmail === "string" ? { resendEmail } : {}), label: name === "totp" ? "Verify code" : name === "lookup_secret" ? "Use recovery code" :
       kind === "registration" ? "Create account" : kind === "verification"
         ? fields.some((field) => field.name === "code" && field.type !== "hidden") ? "Verify email" : "Send verification code"
         : "Sign in" });

@@ -1,0 +1,10 @@
+Verify your email with this code:
+
+{{ .VerificationCode }}
+
+Or open this link in the browser where you registered, then choose Verify email:
+{{ $flow := regexFind "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}" .VerificationURL }}http://127.0.0.1:3000/verify?flow={{ $flow }}#code={{ .VerificationCode }}
+
+Use the latest email for that verification form. Resending replaces the previous code. This code expires in {{ .ExpiresInMinutes }} minutes.
+If the link opens in another browser, return to the browser where you registered and enter the code there. Without JavaScript, enter the code manually.
+If you did not request this, ignore this email.

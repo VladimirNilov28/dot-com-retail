@@ -66,6 +66,63 @@ The new versioned customer schema requires email, password, username and date
 of birth. Existing default-schema identities remain unchanged. Roles/scopes
 cannot be submitted as traits. Kratos remains the password-policy authority.
 
+### Verification code and email-link contract
+
+Kratos **v26.2.0** is configured with verification **`use: code`**, not the
+separate token-link strategy. Registration's `show_verification_ui` continuation
+supplies the verification flow ID; the BFF fetches and binds that exact flow
+to the originating browser and retains its provider cookie jar.
+
+The upstream default email contains both a six-digit code and a provider GET
+link carrying the same code and flow. That GET does **not** verify the identity:
+it prefills the provider UI and regenerates the flow's CSRF token/cookie.
+Navigating directly from email bypassed the BFF jar, leaving it with the old
+cookie. The next BFF flow read was rejected by Kratos's CSRF binding check;
+the storefront also intentionally omitted provider-prefilled sensitive values.
+Fresh manually entered codes worked before the correction; a general fresh-code
+failure was not reproduced. Do not infer that every rejected email was expired.
+
+The local Kratos image now includes custom HTML/plaintext verification-code
+templates. Both point to the canonical storefront `/verify?flow=...#code=...`.
+The fragment is read only in the browser, validated as exactly one six-digit
+string, removed from the address bar, and used to fill the native code input.
+It is not sent in an HTTP query, logged by the BFF, or automatically consumed.
+The user chooses **Verify email**, which uses the existing CSRF-protected native
+POST and bound server-side provider jar. The code remains a string, including
+leading zeroes. No identity is marked verified outside Kratos.
+
+Links require the originating browser's active storefront binding. Another
+browser receives guidance to return to that browser or start a new verification
+form and request a code. This does not consume the proof. Without JavaScript,
+the email instructs the user to enter the displayed code manually; native code
+submission and resend still work. Previously issued default provider links are
+historical and are not rewritten: use a new email/new verification form if
+one already invalidated its old BFF binding.
+
+**Send a new code** uses Kratos's allowlisted email submit control on the same
+flow. The BFF sends **email or code, never both**; a stale code in the input
+cannot turn a resend into a proof submission. Resend replaces the previous
+proof, so use the latest email for that particular form. Provider expiry remains
+**15 minutes**; it was not extended. Incorrect/superseded proof rejection,
+completed-flow state, expired flow and service/session failures remain distinct.
+Safe flow-read diagnostics distinguish `provider_csrf_binding`,
+`flow_unusable` and `provider_unavailable` without raw provider bodies or proofs.
+
+Real local-stack checks covered genuine latest code and link, verified-customer
+login, wrong code, resend/old-code rejection, actual stored consumption and
+HTTP 400 replay rejection, foreign-browser recovery, and no-JavaScript code
+submission. Expiry was tested by shortening only one disposable flow's provider
+proof lifetime; it was rejected with new-flow recovery. A temporary invalid jar
+on one disposable browser session produced service-unavailable rather than an
+incorrect-code message; the original jar was restored and the same proof then
+completed native verification. No owner session or provider service was disabled.
+
+To load template/image changes, rebuild/recreate **only Kratos** using the local
+Compose command below. The templates currently match this repository's explicit
+local `127.0.0.1:3000` UI configuration. A production deployment must update both
+the configured storefront origin and the templates' storefront link origin
+together; do not ship the local host or inherit development overrides.
+
 ### Password guidance and safe validation
 
 The **Kratos v26.2.0** policy and real responses were inspected on 2026-10-10.

@@ -45,6 +45,7 @@ describe("safe provider form projection", () => {
     expect(methods[0].label).toBe("Verify email");
     expect(methods[0].fields.map((field) => field.name)).toEqual(["code", "csrf_token"]);
     expect(methods[0].fields[0].value).toBe("");
+    expect(methods[0].resendEmail).toBe("customer@bytecore.example");
   });
   test("fails explicitly for missing provider CSRF or an unsupported required node", () => {
     expect(() => formMethods([password], "login")).toThrow();
@@ -101,6 +102,12 @@ describe("safe provider form projection", () => {
     }
   });
   test("preserves safe CAPTCHA/expiry recovery and stable field targets", () => {
+    expect(formMessages([{ id: 4070002, type: "error" }], "verification")[0]).toContain("already completed");
+    expect(formMessages([{ id: 4070003, type: "error" }], "verification")[0]).not.toContain("code is incorrect");
+    expect(formMessages([{ id: 4000012, type: "error" }], "verification")[0]).not.toContain("code is incorrect");
+    expect(formMessages([{ id: 4070001, type: "error" }], "verification")[0]).toContain("verification link");
+    expect(formMessages([{ id: 5000001, type: "error" }], "verification")).toEqual([temporaryAuthMessage]);
+    expect(formMessages([{ id: 1080003, type: "info" }], "verification")[0]).toContain("latest email");
     expect(formMessages([{ id: 4000001, type: "error", text: "The security check expired. Try again." }], "registration"))
       .toEqual(["The security check expired. Try again."]);
     expect(formMessages([{ id: 4040001, type: "error" }], "registration")[0]).toContain("form has expired");

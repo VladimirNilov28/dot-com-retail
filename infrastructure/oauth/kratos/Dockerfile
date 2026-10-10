@@ -10,6 +10,7 @@ COPY identity.schema.json /etc/kratos/identity.schema.json
 COPY customer.schema.json /etc/kratos/customer.schema.json
 COPY registration-hook.jsonnet /etc/kratos/registration-hook.jsonnet
 COPY registration-bind.jsonnet /etc/kratos/registration-bind.jsonnet
+COPY templates /etc/kratos/templates
 COPY --chmod=755 entrypoint.sh /etc/kratos/entrypoint.sh
 
 USER 1000

@@ -123,6 +123,7 @@ export function AuthProblem({ code, kind = "login", returnTo = "/" }: {
           code === "expired" ? "This form has expired" : "We couldn't complete this request"}</h1>
       <p role="alert" className="text-muted">{unavailable ? "The authentication service is temporarily unavailable. This does not mean your password was rejected. Wait a moment, then retry." :
         code === "provider_logout_pending" ? "You're signed out of ByteCore. Provider logout could not be confirmed and will be retried." :
+          kind === "verification" ? "Return to the browser where you registered and use its latest email. If that form expired, start again and request a new code." :
           "Start a new secure flow to continue."}</p>
       <Link prefetch={false} className="store-cta" href={kind === "login" ? `/auth/start?returnTo=${encodeURIComponent(returnTo)}` :
         `/auth/flow?kind=${kind}&returnTo=${encodeURIComponent(returnTo)}`}>{unavailable ? "Retry" : "Start again"}</Link>
