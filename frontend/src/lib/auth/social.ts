@@ -61,6 +61,16 @@ export async function completeSocialCallback(state: BrowserState, browser: strin
   const provider = providerClient(state);
   let stage = "provider_callback";
   let restarted = false;
+  async function continueFlow(kind: "login" | "registration", id: string) {
+    stage = kind === "registration" ? "registration_continuation" : "login_continuation";
+    const result = kind === "login" ? (await provider.api.getLoginFlow({ id })).data
+      : (await provider.api.getRegistrationFlow({ id })).data;
+    const validated = validateFlow(result, kind);
+    if (validated.id !== id) throw new AuthError("unavailable");
+    await bindFlow(browser, id, kind, validated.expiresAt, client);
+    return redirectResponse(`${kind === "registration" ? "/register" : "/login"}?flow=${id}` +
+      `&returnTo=${encodeURIComponent(state.returnTo)}`);
+  }
   async function restart(notice: "cancelled" | "failed") {
     provider.save();
     restarted = true;
@@ -80,6 +90,15 @@ export async function completeSocialCallback(state: BrowserState, browser: strin
       // Kratos must consume/verify its own state before cancellation recovery.
       return restart([302, 303].includes(response.status) ? "cancelled" : "failed");
     }
+    if (response.status === 400 && response.data && typeof response.data === "object" &&
+        typeof response.data.id === "string" && response.data.ui &&
+        typeof response.data.ui.action === "string") {
+      const action = new URL(response.data.ui.action);
+      if (action.origin === authConfig().kratos && action.pathname === "/self-service/registration") {
+        const registration = validateFlow(response.data, "registration");
+        return await continueFlow("registration", registration.id);
+      }
+    }
     if (![302, 303].includes(response.status) || typeof response.headers.location !== "string") {
       console.error("authentication social reason", "provider_callback_rejected", response.status);
       return restart("failed");
@@ -94,16 +113,8 @@ export async function completeSocialCallback(state: BrowserState, browser: strin
     if (["/login", "/register"].includes(target.pathname) &&
         Array.from(target.searchParams.keys()).every((key) => key === "flow")) {
       const kind = target.pathname === "/register" ? "registration" : "login";
-      stage = kind === "registration" ? "registration_continuation" : "login_continuation";
       const id = flowIdentifier(oneParameter(target.searchParams, "flow"));
-      const result = kind === "login" ? (await provider.api.getLoginFlow({ id })).data
-        : (await provider.api.getRegistrationFlow({ id })).data;
-      // Conversion to registration is provider-controlled after state validation.
-      const validated = validateFlow(result, kind);
-      if (validated.id !== id) throw new AuthError("unavailable");
-      await bindFlow(browser, id, kind, validated.expiresAt, client);
-      target.searchParams.set("returnTo", state.returnTo);
-      return redirectResponse(target);
+      return await continueFlow(kind, id);
     }
     if (target.pathname === "/auth/error") {
       return restart("failed");

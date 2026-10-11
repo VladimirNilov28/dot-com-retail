@@ -7,15 +7,31 @@ const names = ["STOREFRONT_ORIGIN", "AUTH_OAUTH_ISSUER", "AUTH_KRATOS_URL", "AUT
   "AUTH_CLIENT_ID", "AUTH_CLIENT_SECRET", "AUTH_BRIDGE_SECRET", "AUTH_DATABASE_URL", "AUTH_SEAL_KEYS"];
 const flow = "11111111-1111-4111-8111-111111111111";
 const nonce = "opaque-provider-state-not-issued-32";
-let previous, server, callbacks = 0, callbackFailure;
+const registrationFlow = "22222222-2222-4222-8222-222222222222";
+let previous, server, callbacks = 0, callbackFailure, registrationContinuation, registrationReads = 0;
+function nativeRegistration() {
+  return { id: registrationFlow, type: "browser", expires_at: new Date(Date.now() + 600000).toISOString(),
+    ui: { action: `${server.url.origin}/self-service/registration?flow=${registrationFlow}`, method: "POST",
+      nodes: [{ type: "input", group: "default", attributes: { name: "csrf_token", type: "hidden", value: "fixture-csrf" } },
+        ...["traits.username", "traits.dateOfBirth"].map((name) => ({ type: "input", group: "default",
+          attributes: { name, type: "text", required: true }, messages: [{ id: 4000002, type: "error" }] })),
+        { type: "input", group: "oidc", attributes: { name: "provider", type: "submit", value: "google" } }] } };
+}
 beforeAll(() => {
   server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch(request) {
     if (new URL(request.url).pathname.includes("/callback/")) {
       callbacks++;
+      if (registrationContinuation) return Response.json(registrationContinuation, { status: 400,
+        headers: { "Set-Cookie": "ory_kratos_continuity=fixture; Path=/; HttpOnly" } });
       if (callbackFailure) return Response.json(callbackFailure, { status: 500,
         headers: { "Set-Cookie": "ory_kratos_continuity=fixture; Path=/; HttpOnly" } });
       return new Response(null, { status: 303, headers: { Location: "http://127.0.0.1:3300/auth/resume",
         "Set-Cookie": "ory_kratos_session=fixture; Path=/; HttpOnly" } });
+    }
+    if (new URL(request.url).pathname === "/self-service/registration/flows") {
+      registrationReads++;
+      expect(request.headers.get("cookie")).toContain("ory_kratos_continuity=fixture");
+      return Response.json(nativeRegistration());
     }
     throw new Error("Unexpected fixture request");
   } });
@@ -92,4 +108,42 @@ test("social registration requests real missing traits without requiring passwor
   expect(social.provider).toBe("google");
   expect(social.fields.map((field) => field.name)).toEqual(["csrf_token", "traits.username", "traits.dateOfBirth"]);
   expect(formMethods(nodes.filter((node) => node.group !== "oidc"), "registration").some((method) => method.name === "oidc")).toBe(false);
+});
+
+test("native callback 400 registration form continues missing-trait onboarding in the same bound provider jar", async () => {
+  const state = { csrf: "a".repeat(43), jar: emptyJar(), returnTo: "/account", social: { state: nonce, flow, kind: "login" } };
+  const queries = [];
+  const before = registrationReads;
+  registrationContinuation = nativeRegistration();
+  try {
+    const response = await completeSocialCallback(state, "b".repeat(43),
+      new URLSearchParams({ state: nonce, code: "fixture-code" }),
+      { query: async (sql, values) => { queries.push({ sql, values }); return { rowCount: 1 }; } });
+    const destination = new URL(response.headers.get("location"));
+    expect(destination.pathname).toBe("/register");
+    expect(destination.searchParams.get("flow")).toBe(registrationFlow);
+    expect(destination.searchParams.get("returnTo")).toBe("/account");
+    expect(registrationReads).toBe(before + 1);
+    expect(queries.some(({ sql, values }) => sql.startsWith("INSERT INTO browser_flows") &&
+      values[0] === registrationFlow && values[2] === "registration")).toBe(true);
+    expect(state.social).toBeUndefined();
+    expect(state.jar.includes("ory_kratos_continuity")).toBe(true);
+  } finally { registrationContinuation = undefined; }
+});
+
+test("callback registration continuation cannot bind a malformed or foreign flow action", async () => {
+  const before = registrationReads;
+  const continuation = nativeRegistration();
+  continuation.ui.action = `${server.url.origin}/self-service/registration?flow=${flow}`;
+  registrationContinuation = continuation;
+  let bindings = 0;
+  try {
+    const state = { csrf: "a".repeat(43), jar: emptyJar(), returnTo: "/account", social: { state: nonce, flow, kind: "login" } };
+    await expect(completeSocialCallback(state, "b".repeat(43),
+      new URLSearchParams({ state: nonce, code: "fixture-code" }),
+      { query: async (sql) => { if (sql.startsWith("INSERT")) bindings++; return { rowCount: 1 }; } }))
+      .rejects.toMatchObject({ code: "unavailable" });
+    expect(bindings).toBe(0);
+    expect(registrationReads).toBe(before);
+  } finally { registrationContinuation = undefined; }
 });

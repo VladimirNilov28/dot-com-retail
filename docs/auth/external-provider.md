@@ -13,16 +13,28 @@ Kratos container environment and rendered into an owner-only runtime file; do
 not put credentials in YAML, Jsonnet, browser bundles, commits, or command logs.
 
 The owner has supplied Google credentials in ignored local environment files.
-Google authorization reached the exact BFF callback, but the latest correlated
+Google authorization reached the exact BFF callback. An earlier correlated
 attempt on 11 October at **19:31:04 UTC** failed in Kratos's token exchange with
 `invalid_client`, before claims mapping, registration or bridge provisioning.
 The rendered credentials matched the loaded root environment. A separate
 direct token-endpoint diagnostic also returned HTTP 401 `invalid_client`;
 it used a deliberately unissued code and is **not login evidence**.
-The owner must verify the matching active secret for the same Google web client.
-**Real storefront Google login, consent/cancellation completion, new/returning
-customers and email-conflict behavior remain BLOCKED**, not verified by offline
-tests or the authorization redirect.
+After the owner supplied the matching secret, fresh callbacks at **19:45:18
+and 19:45:32 UTC** passed token exchange and reached registration schema
+validation. Kratos returned HTTP 400 with its native registration flow because
+the verified Google email did not supply the required username/date of birth.
+The BFF previously treated every non-redirect callback as a failed login,
+discarding this continuation and returning the owner to sign-in.
+It now validates and rereads the provider-issued registration flow using the
+same jar, binds it to the existing browser and shows the required fields and
+fresh CAPTCHA. A schema-validation form is not a completed authentication.
+Real storefront Google login, consent/cancellation completion, new/returning
+customers and email-conflict behavior remain **pending real owner verification**,
+not verified by offline tests or the authorization redirect.
+The continuation fix passed 27 focused social/flow/form-projection tests,
+TypeScript checking and an isolated production build. Lint reported no errors
+and one unchanged homepage warning. The owner was unavailable for a fresh
+Google retry after this fix; end-to-end session creation is not yet confirmed.
 
 The deployment must pass these optional environment variables to Kratos:
 
@@ -188,6 +200,13 @@ rejection of RSC/prefetch without replacing a bound flow, and stale-cookie
 removal followed by anonymous polling with preauth preserved. The login 422
 `browser_location_change_required` remains an expected, validated Google
 authorization redirect, not an outage. No owner browser state was cleared.
+
+Native callback HTTP 400 registration forms are a supported continuation, not
+an outage: Kratos validates Google state/claims before producing them. The BFF
+accepts only browser flows with the exact configured registration action/ID,
+rereads that persisted flow using the current encrypted provider jar and binds
+the ID before routing to `/register`. It does not synthesize traits, accept
+arbitrary flow IDs, suppress CAPTCHA or infer session success from a form.
 
 Contract sources, pinned to the installed version:
 
