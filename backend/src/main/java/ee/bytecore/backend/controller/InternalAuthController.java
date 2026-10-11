@@ -74,6 +74,16 @@ public class InternalAuthController {
         return new RegistrationReservationResponse(claim.getId(), claim.getFlowId(), claim.getKratosIdentityId());
     }
 
+    public record RegistrationAvailabilityRequest(String username, String email) {}
+
+    @PostMapping("/registration-availability")
+    @PreAuthorize(
+            "hasAuthority('SCOPE_internal:provision-user') and @internalAuthController.isMachineCaller(authentication)")
+    public UserService.RegistrationAvailability registrationAvailability(
+            @RequestBody RegistrationAvailabilityRequest request) {
+        return userService.registrationAvailability(request.username(), request.email());
+    }
+
     @PostMapping("/registration-bind")
     @PreAuthorize(
             "hasAuthority('SCOPE_internal:provision-user') and @internalAuthController.isMachineCaller(authentication)")

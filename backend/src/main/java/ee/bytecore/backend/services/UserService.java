@@ -120,6 +120,20 @@ public class UserService {
         }
     }
 
+    public record RegistrationAvailability(boolean emailAvailable, boolean usernameAvailable) {}
+
+    /** Mirrors reservation conflict rules without claiming identifiers. */
+    @Transactional(readOnly = true)
+    public RegistrationAvailability registrationAvailability(String username, String email) {
+        validateRegistrationFields(username == null ? "unchecked" : username, email);
+        boolean emailAvailable =
+                registrationRepository.findByEmail(email).isEmpty() && !userRepository.existsByEmail(email);
+        boolean usernameAvailable = username == null
+                || (registrationRepository.findByUsername(username).isEmpty()
+                        && !userRepository.existsByUsername(username));
+        return new RegistrationAvailability(emailAvailable, usernameAvailable);
+    }
+
     @Transactional
     public UserRegistrationReservation reserveRegistration(
             UUID flowId, String username, String email, LocalDate dateOfBirth, Instant expiresAt) {

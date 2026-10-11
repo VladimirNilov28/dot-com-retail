@@ -123,6 +123,7 @@ class InternalAuthControllerTest {
     @ValueSource(
             strings = {
                 "registration-reservations",
+                "registration-availability",
                 "registration-bind",
                 "registration-finalize",
                 "registration-maintenance"
@@ -166,5 +167,20 @@ class InternalAuthControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id", is(claim.getId().toString())))
                 .andExpect(jsonPath("$.flowId", is(flow.toString())));
+    }
+
+    @Test
+    void shouldReportRegistrationAvailabilityOnlyForAuthorizedMachineTest() throws Exception {
+        when(userService.registrationAvailability("customer", "customer@example.com"))
+                .thenReturn(new ee.bytecore.backend.services.UserService.RegistrationAvailability(false, true));
+        mockMvc.perform(post("/internal/users/registration-availability")
+                        .with(jwt().jwt(jwt -> jwt.subject("oauth-service-internal")
+                                        .claim("client_id", "oauth-service-internal"))
+                                .authorities(new SimpleGrantedAuthority("SCOPE_internal:provision-user")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"customer\",\"email\":\"customer@example.com\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.emailAvailable", is(false)))
+                .andExpect(jsonPath("$.usernameAvailable", is(true)));
     }
 }

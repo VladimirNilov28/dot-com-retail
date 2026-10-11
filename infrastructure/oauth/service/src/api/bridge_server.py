@@ -116,6 +116,17 @@ def make_bridge_handler(
                 elif path == "/internal/registration/bind":
                     spring_auth_client.bind_registration(body["identity_id"])
                     self._dictionary(200, {})
+                elif path == "/internal/registration/availability":
+                    email, username = body["email"], body.get("username")
+                    if (set(body) - {"email", "username"} or not isinstance(email, str) or not 3 <= len(email) <= 255
+                            or (username is not None and (not isinstance(username, str)
+                                or not username.strip() or len(username) > 255))):
+                        raise ValueError("Invalid availability request")
+                    available = spring_auth_client.registration_availability(email, username)
+                    if not all(isinstance(available.get(key), bool) for key in ("emailAvailable", "usernameAvailable")):
+                        raise login_consent.BridgeError("Invalid availability response")
+                    self._dictionary(200, {"email_available": available["emailAvailable"],
+                        "username_available": available["usernameAvailable"]})
                 elif path == "/internal/login":
                     self._dictionary(200, login_consent.bff_login(
                         config, hydra_client, kratos_client, spring_auth_client,

@@ -393,6 +393,25 @@ class UserServiceTest {
     }
 
     @Test
+    void shouldReportReservedOrCanonicalIdentifiersAsUnavailableWithoutReservingTest() {
+        var reserved = UserRegistrationReservation.create(
+                UUID.randomUUID(),
+                "other",
+                "taken@example.com",
+                LocalDate.of(1998, 3, 20),
+                Instant.now().plusSeconds(600));
+        when(registrationRepository.findByEmail("taken@example.com")).thenReturn(Optional.of(reserved));
+        when(userRepository.existsByUsername("canonical")).thenReturn(true);
+
+        assertThat(userService.registrationAvailability("canonical", "taken@example.com"))
+                .isEqualTo(new UserService.RegistrationAvailability(false, false));
+        assertThat(userService.registrationAvailability(null, "free@example.com"))
+                .isEqualTo(new UserService.RegistrationAvailability(true, true));
+        verify(registrationRepository, never()).saveAndFlush(any());
+        verify(registrationRepository, never()).lockClaim(any());
+    }
+
+    @Test
     void shouldRejectRetiredDirectRegistrationWithoutProcessingCredentialsTest() {
         assertThatThrownBy(() -> userService.registerCustomer(
                         "new-customer", "new-customer@example.com", "   ", LocalDate.of(1998, 3, 20)))

@@ -46,6 +46,32 @@ class AuthHttpErrorsTest(unittest.TestCase):
                 self.assertEqual(payload, {"session": canonical, "connected": True})
                 kratos.google_connected.assert_called_once_with("verified-customer")
 
+    def test_registration_availability_requires_bridge_auth_and_returns_booleans_only(self):
+        config = make_config(auth_bridge_secret="fixture-bridge-secret-not-issued-32")
+        spring = Mock()
+        spring.registration_availability.return_value = {"emailAvailable": False, "usernameAvailable": True,
+            "reservationId": "private-reservation"}
+        connection = self.start_server(make_bridge_handler(config, Mock(), Mock(), spring))
+        auth = {"Authorization": "Bearer " + config.auth_bridge_secret}
+        body = json.dumps({"email": "google@example.com", "username": "chosen"})
+        connection.request("POST", "/internal/registration/availability", body=body)
+        response = connection.getresponse()
+        response.read()
+        self.assertEqual(response.status, 403)
+        spring.registration_availability.assert_not_called()
+        for invalid in [{"email": 5}, {"email": "google@example.com", "username": " "},
+                        {"email": "google@example.com", "role": "ADMIN"}]:
+            connection.request("POST", "/internal/registration/availability", body=json.dumps(invalid), headers=auth)
+            response = connection.getresponse()
+            response.read()
+            self.assertEqual(response.status, 400)
+        spring.registration_availability.assert_not_called()
+        connection.request("POST", "/internal/registration/availability", body=body, headers=auth)
+        response = connection.getresponse()
+        self.assertEqual(response.status, 200)
+        self.assertEqual(json.loads(response.read()), {"email_available": False, "username_available": True})
+        spring.registration_availability.assert_called_once_with("google@example.com", "chosen")
+
     def start_server(self, handler):
         server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)

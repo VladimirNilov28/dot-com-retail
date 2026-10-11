@@ -85,6 +85,9 @@ class SpringAuthClient:
     def bind_registration(self, identity_id: str) -> dict:
         return self._registration_request("registration-bind", {"identityId": identity_id})
 
+    def registration_availability(self, email: str, username: Optional[str] = None) -> dict:
+        return self._registration_request("registration-availability", {"username": username, "email": email})
+
     def finalize_registration(self, identity_id: str) -> dict:
         return self._registration_request("registration-finalize", {"identityId": identity_id})
 
