@@ -168,3 +168,7 @@ A notification failure never reverses an applied change.
 - The second-factor attempt limit is per browser. A per-identity limit needs Kratos
   hook support and is tracked in #90.
 - Session device and location details are not available, as explained above.
+
+## Kratos state after unlinking Google
+
+Unlinking the last Google connection leaves an `oidc` credential with no identifiers and one blank placeholder provider entry (empty `provider` and `subject`). The bridge status projection treats that placeholder as "Google not connected". Partially blank or otherwise malformed provider entries are still rejected, and the bridge logs the static reason (never provider data) for each rejected private request.

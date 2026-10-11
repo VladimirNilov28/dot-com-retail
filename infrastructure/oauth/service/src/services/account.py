@@ -87,6 +87,10 @@ def _google_connected(credentials: dict) -> bool:
         return False
     config = oidc.get("config") if isinstance(oidc, dict) else None
     providers = config.get("providers") if isinstance(config, dict) else None
+    if isinstance(providers, list):
+        # Kratos leaves a blank placeholder entry after the last provider is unlinked.
+        providers = [provider for provider in providers if not (
+            isinstance(provider, dict) and provider.get("provider") == "" and provider.get("subject") == "")]
     if not isinstance(providers, list) or any(
             not isinstance(provider, dict) or not isinstance(provider.get("provider"), str)
             or not provider["provider"] or not isinstance(provider.get("subject"), str)

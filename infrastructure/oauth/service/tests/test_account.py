@@ -139,6 +139,24 @@ class AccountRoutesTest(unittest.TestCase):
         self.assertEqual(payload["recovery_codes_remaining"], 0)
         self.assertIs(payload["profile"]["email_verified"], False)
 
+    def test_status_after_google_unlink_reports_disconnected_with_password_kept(self):
+        # Kratos leaves a blank placeholder provider and no identifiers after unlinking.
+        blank = {"initial_id_token": "", "initial_access_token": "", "initial_refresh_token": "",
+                 "subject": "", "provider": ""}
+        self.kratos.get_identity_with_credentials.return_value = identity(credentials={
+            "password": {"identifiers": ["old@example.com"], "config": {"hashed_password": SECRETS[0]}},
+            "oidc": {"identifiers": [], "config": {"providers": [blank]}},
+        })
+        status, payload = self.post("/internal/account/status", {"cookie": "c"})
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["credentials"], {"password": True, "google": False, "totp": False,
+                                                  "lookup_secret": False})
+
+    def test_status_after_unlink_of_other_provider_entries_still_rejects_partial_blanks(self):
+        self.kratos.get_identity_with_credentials.return_value = identity(credentials={
+            "oidc": {"config": {"providers": [{"provider": "google", "subject": ""}]}}})
+        self.assertEqual(self.post("/internal/account/status", {"cookie": "c"})[0], 502)
+
     def test_status_malformed_upstream_is_bad_gateway(self):
         self.kratos.get_identity_with_credentials.return_value = identity(credentials={
             "lookup_secret": {"config": {"recovery_codes": "invalid"}}})

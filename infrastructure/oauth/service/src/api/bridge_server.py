@@ -185,7 +185,8 @@ def make_bridge_handler(
                     logger.error("private authentication request failed (%s)", type(error).__name__)
                     self._hook_error(502, "Authentication is unavailable. Try again.")
             except (CaptchaUnavailable, psycopg.Error, requests.RequestException, login_consent.BridgeError) as error:
-                logger.error("private authentication request failed (%s)", type(error).__name__)
+                reason = str(error) if isinstance(error, login_consent.BridgeError) else "-"
+                logger.error("private authentication request failed (%s: %s)", type(error).__name__, reason)
                 self._hook_error(502, "Authentication is unavailable. Try again.")
             except Exception as error:  # noqa: BLE001 - request boundary, never logs credentials
                 logger.error("private authentication request failed (%s)", type(error).__name__)
