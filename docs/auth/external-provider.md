@@ -205,7 +205,7 @@ Validated `returnTo` is retained server-side through this handoff.
 
 ### Existing-account linking and disconnecting
 
-The customer **Account security** page includes a compact Google section with
+The customer **Connected accounts** page (`/account/connections`) includes a compact Google section with
 connection status and provider-issued Connect/Disconnect controls. Kratos
 v26.2.0's self-hosted OIDC settings strategy supports `method: oidc`,
 `link: google` and `unlink: google`; it is independent of the Network-only
@@ -213,7 +213,10 @@ v26.2.0's self-hosted OIDC settings strategy supports `method: oidc`,
 
 Both initiation and callback require the same authenticated customer identity,
 canonical Spring user, role and provider session. Mutations require authentication
-less than 15 minutes old and AAL2 when an authenticator/backup factor is enabled.
+less than 15 minutes old plus step-up verification (a recent TOTP proof when an
+authenticator is enrolled, otherwise an emailed code; see
+[`account-management.md`](account-management.md)). Disconnecting is refused
+while Google is the only sign-in method; create a password first.
 Google account selection uses the provider's `select_account` prompt.
 The encrypted jar, outer state and expiring browser/settings-flow binding remain
 mandatory. Duplicate initiation is rejected while authorization is pending;
@@ -226,12 +229,13 @@ control, and the BFF rejects forged actions absent from the current flow.
 Kratos also enforces its active-first-factor count during mutation, so an
 authenticator or backup code alone cannot make the last Google credential
 removable. Public identities omit credential configuration: the private
-`/internal/google-connection` endpoint resolves the authenticated canonical
-customer and returns only connection status plus the existing safe session
-coordinates. Credential configuration, provider subjects and tokens never reach
+`/internal/account/status` endpoint resolves the authenticated canonical
+customer and returns only boolean credential status (including Google
+connection), the unused recovery-code count and profile fields plus the existing
+safe session coordinates. Credential configuration, provider subjects and tokens never reach
 the UI. This check identifies Google-only connections even without an unlink node.
 
-Cancellation/rejection returns to security settings without a success claim;
+Cancellation/rejection returns to connected accounts without a success claim;
 expired or insufficient-assurance sessions require fresh authentication.
 Matching-email registration conflicts offer existing-account sign-in followed
 by an explicit Connect Google action from settings. Provider duplicate-credential

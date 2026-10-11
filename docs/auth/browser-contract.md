@@ -460,18 +460,26 @@ docker compose -f infrastructure/compose.yml exec -T postgres \
 ```
 
 The dedicated database migrations are
-`infrastructure/oauth/auth-store/001_initial.sql` and `002_flow_kinds.sql`.
-The second migration expands the bound-flow allowlist for recovery, reset and
-settings; fresh-volume provisioning applies both. For an already provisioned
-volume, apply only the second migration using its existing owner role:
+`infrastructure/oauth/auth-store/001_initial.sql`, `002_flow_kinds.sql` and
+`003_attempt_limits.sql`. The second expands the bound-flow allowlist for
+recovery, reset and settings; the third adds the HMAC-keyed `attempt_limits`
+table used by account/MFA rate limits and grants DML on it to the BFF role.
+Fresh-volume provisioning applies all of them. For an already provisioned
+volume, apply only the missing migrations (each is idempotent) with the existing
+owner role; `runtime_user` is required by 003:
 
 ```bash
 docker exec postgres sh -c 'psql --username "$POSTGRES_USER" --dbname storefront_auth \
-  --set=ON_ERROR_STOP=1 --set=migration_user="$AUTH_MIGRATION_USER" <<EOF
+  --set=ON_ERROR_STOP=1 --set=migration_user="$AUTH_MIGRATION_USER" \
+  --set=runtime_user="$AUTH_DB_USER" <<EOF
 SET ROLE :"migration_user";
 \i /auth-store/002_flow_kinds.sql
+\i /auth-store/003_attempt_limits.sql
 EOF'
 ```
+
+Without 003 the BFF fails closed: second-factor login, recovery email and
+account step-up requests return `unavailable` instead of skipping the limit.
 
 Its owner/migration role is
 separate from the BFF role (session/transaction/flow DML only) and CAPTCHA role
@@ -506,8 +514,9 @@ login. Other BFF sessions fail their next provider check and enter the existing
 durable revocation path. Previously issued direct JWTs retain their bounded
 lifetime; this is not a claim of instantaneous global JWT invalidation.
 
-Customer `/account/security` uses authenticated, identity/session-bound Kratos
-settings. TOTP enrollment presents only the validated provider PNG/manual key,
+Customer account settings (`/account/*`; policy, step-up, recovery and limits in
+[`account-management.md`](account-management.md)) use authenticated,
+identity/session-bound Kratos settings. TOTP enrollment presents only the validated provider PNG/manual key,
 requires a real authenticator code, and updates the session's actual assurance.
 Backup codes are generated, displayed/downloaded, activated and consumed by
 Kratos. No external QR service or custom credential storage is introduced.
@@ -516,8 +525,8 @@ strongest available assurance plus explicit confirmation where destructive.
 The dedicated reauthentication action carries the current assurance into a
 fresh provider login: enrolled sessions explicitly refresh AAL2, rather than
 refreshing only a password while retaining an older second-factor assurance.
-Email password recovery does not silently remove TOTP; use an activated backup
-code if the authenticator is unavailable.
+Email password recovery does not silently remove TOTP; use an activated recovery
+code on the second-factor step if the authenticator is unavailable.
 
 Kratos can return a successful settings flow with its old ID and a new action
 ID. The BFF validates the completed identity, then creates and binds a fresh
