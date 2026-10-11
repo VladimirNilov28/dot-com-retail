@@ -56,7 +56,7 @@ export function StoreNavigation({
   useEffect(() => {
     const controller = new AbortController();
     async function updateAccount() {
-      const route = ["/login", "/register", "/verify", "/auth/error", "/dev/foundation"].includes(pathname) ? "/account" :
+      const route = ["/login", "/register", "/verify", "/recover", "/reset", "/auth/error", "/dev/foundation"].includes(pathname) ? "/account" :
         window.location.pathname + window.location.search;
       try {
         setReturnTo(safeReturnTo(route));
@@ -225,8 +225,8 @@ export function StoreNavigation({
             <div className={catalog ? "store-category-entry" : undefined}>{catalog ? allProductsLink() : navigationLink(destination)}</div>
             {!catalog && account.kind === "authenticated" ? <div className="mt-3"><LogoutForm csrf={account.csrf} /></div> : null}
             {!catalog && (account.kind === "anonymous" || account.kind === "expired") ? <div className="mt-3 grid gap-2">
-              <Link prefetch={false} className="store-cta" href={`/login?returnTo=${encodeURIComponent(returnTo)}`} onClick={() => setOverlay(null)}>Sign in</Link>
-              <Link prefetch={false} className="store-link" href={`/register?returnTo=${encodeURIComponent(returnTo)}`} onClick={() => setOverlay(null)}>Create an account</Link>
+              <a className="store-cta" href={`/login?returnTo=${encodeURIComponent(returnTo)}`} onClick={() => setOverlay(null)}>Sign in</a>
+              <a className="store-link" href={`/register?returnTo=${encodeURIComponent(returnTo)}`} onClick={() => setOverlay(null)}>Create an account</a>
             </div> : null}
             {catalog && categoryNavigation("panel")}
             {catalog && categoryError && <CatalogRetry />}

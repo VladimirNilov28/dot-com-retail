@@ -12,9 +12,17 @@ Configuration is disabled when both `GOOGLE_CLIENT_ID` and
 Kratos container environment and rendered into an owner-only runtime file; do
 not put credentials in YAML, Jsonnet, browser bundles, commits, or command logs.
 
-The checked local environment has no Google/OIDC credentials. **Real Google
-login, account linking, consent, cancellation, and new-customer completion are
-BLOCKED**, not verified by the offline tests below.
+The owner has supplied Google credentials in ignored local environment files.
+Google authorization reached the exact BFF callback, but the latest correlated
+attempt on 11 October at **19:31:04 UTC** failed in Kratos's token exchange with
+`invalid_client`, before claims mapping, registration or bridge provisioning.
+The rendered credentials matched the loaded root environment. A separate
+direct token-endpoint diagnostic also returned HTTP 401 `invalid_client`;
+it used a deliberately unissued code and is **not login evidence**.
+The owner must verify the matching active secret for the same Google web client.
+**Real storefront Google login, consent/cancellation completion, new/returning
+customers and email-conflict behavior remain BLOCKED**, not verified by offline
+tests or the authorization redirect.
 
 The deployment must pass these optional environment variables to Kratos:
 
@@ -157,6 +165,29 @@ its health endpoints were responsive, its login flow exposed the Google provider
 node, and its rendered secret-bearing configuration was owned by UID 1000 with
 mode `600`. The isolated container was removed; no owner identities, databases,
 volumes, or credentials were changed.
+
+### Callback incident hardening
+
+The BFF retains generic public errors and logs only a bounded callback stage,
+HTTP status and allowlisted provider reason (`token_exchange_invalid_client`,
+`token_exchange_invalid_grant`, `token_exchange_redirect_uri_mismatch`, or a
+generic rejection). Raw provider bodies and credential-bearing callback URLs
+are not application diagnostics. Next development request logging excludes
+`/auth/*` and the OIDC callback because its default URL logging includes codes.
+
+Authentication-entry links use native anchors: disabling Next prefetch alone
+does not stop RSC/client-router interception. Initiation rejects RSC/prefetch/
+fetch requests before creating a transaction; the native provider POST already
+disables repeated submissions. Expired `/auth/session` polls clear only the
+authenticated cookie, leaving an ongoing preauthentication cookie/jar intact;
+subsequent polls are anonymous rather than repeatedly expired. Durable server
+revocation is unchanged, and provider outages do not erase usable cookies.
+
+Focused real-browser checks passed one document initiation per Sign in/Retry,
+rejection of RSC/prefetch without replacing a bound flow, and stale-cookie
+removal followed by anonymous polling with preauth preserved. The login 422
+`browser_location_change_required` remains an expected, validated Google
+authorization redirect, not an outage. No owner browser state was cleared.
 
 Contract sources, pinned to the installed version:
 

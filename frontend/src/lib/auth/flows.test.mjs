@@ -21,11 +21,20 @@ beforeAll(() => {
       const verification = new URL(request.url).pathname.includes("verification");
       const recovery = new URL(request.url).pathname.includes("recovery");
       const reset = new URL(request.url).pathname.includes("settings");
+      const login = new URL(request.url).pathname.includes("login");
       if (request.method === "POST") {
         posts++;
         const body = await request.json();
         if (body.method === "oidc") {
           postedSocial = body;
+          if (login) {
+            const destination = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+            destination.searchParams.set("redirect_uri", "http://127.0.0.1:3300/self-service/methods/oidc/callback/google");
+            destination.searchParams.set("state", "opaque-provider-state-not-issued-32");
+            return Response.json({ error: { id: "browser_location_change_required" },
+              redirect_browser_to: destination.href }, { status: 422,
+              headers: { "Set-Cookie": "ory_kratos_continuity=fixture; Path=/; HttpOnly" } });
+          }
           return Response.json({});
         }
         if (reset) {
@@ -41,7 +50,7 @@ beforeAll(() => {
       return Response.json({
         id, type: "browser", expires_at: new Date(Date.now() + 600000).toISOString(),
         ...(verification || recovery ? { state: "sent_email" } : reset ? { state: request.method === "POST" ? "success" : "show_form" } : {}),
-        ui: { action: `${server.url.origin}/self-service/${verification ? "verification" : recovery ? "recovery" : reset ? "settings" : "registration"}?flow=${id}`, method: "POST", nodes: [
+        ui: { action: `${server.url.origin}/self-service/${verification ? "verification" : recovery ? "recovery" : reset ? "settings" : login ? "login" : "registration"}?flow=${id}`, method: "POST", nodes: [
           { type: "input", group: "password", attributes: { name: "method", type: "submit", value: verification || recovery ? "code" : "password" } },
           ...(verification || recovery ? [{ type: "input", group: "code", attributes: { name: "email", type: "submit", value: "fixture@bytecore.example" } }] : []),
           { type: "input", group: "default", attributes: { name: "csrf_token", type: "hidden", value: "fixture-csrf" } },
@@ -122,6 +131,16 @@ test("provider-authenticated registration continuation completes through canonic
   expect(postedSocial.transient_payload.altcha).toBe("fixture-proof");
   expect(postedSocial.password).toBeUndefined();
   expect(postedSocial.traits.email).toBeUndefined();
+});
+
+test("native Google login 422 is a validated browser-location change with bound state and encrypted continuity", async () => {
+  const submitted = new URLSearchParams({ method: "oidc", provider: "google", csrf_token: "fixture-csrf" });
+  const browserState = state();
+  const result = await submitFlow(browserState, browser, id, "login", submitted, client);
+  expect(result.complete).toBe(true);
+  expect(new URL(result.socialRedirect).origin).toBe("https://accounts.google.com");
+  expect(browserState.social).toEqual({ state: "opaque-provider-state-not-issued-32", flow: id, kind: "login" });
+  expect(browserState.jar.includes("ory_kratos_continuity")).toBe(true);
 });
 
 test("already-consumed recovery flows cannot be resubmitted or mislabeled as an outage", () => {

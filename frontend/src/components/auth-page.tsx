@@ -112,11 +112,11 @@ export async function AuthPage({ kind, searchParams }: { kind: FormKind; searchP
         ))}
       </div>
       <div className="auth-secondary text-sm">
-        {kind === "registration" ? <>Already have an account? <Link prefetch={false} className="store-link" href={`/login?returnTo=${encodeURIComponent(view.returnTo)}`}>Sign in</Link></> :
-          kind === "login" ? <>New to ByteCore? <Link prefetch={false} className="store-link" href={`/register?returnTo=${encodeURIComponent(view.returnTo)}`}>Create an account</Link></> :
-            kind === "recovery" || kind === "reset" ? <Link prefetch={false} className="store-link" href="/recover">Request a new recovery code</Link> :
-            <Link prefetch={false} className="store-link" href={`/auth/flow?kind=verification&returnTo=${encodeURIComponent(view.returnTo)}`}>Request a new verification code</Link>}
-        {kind === "login" && !secondFactor ? <Link prefetch={false} className="store-link" href="/recover">Forgot your password?</Link> : null}
+        {kind === "registration" ? <>Already have an account? <a className="store-link" href={`/login?returnTo=${encodeURIComponent(view.returnTo)}`}>Sign in</a></> :
+          kind === "login" ? <>New to ByteCore? <a className="store-link" href={`/register?returnTo=${encodeURIComponent(view.returnTo)}`}>Create an account</a></> :
+            kind === "recovery" || kind === "reset" ? <a className="store-link" href="/recover">Request a new recovery code</a> :
+            <a className="store-link" href={`/auth/flow?kind=verification&returnTo=${encodeURIComponent(view.returnTo)}`}>Request a new verification code</a>}
+        {kind === "login" && !secondFactor ? <a className="store-link" href="/recover">Forgot your password?</a> : null}
         <Link href="/catalog/all-products" className="store-link">Continue browsing</Link>
       </div>
     </section>
@@ -139,9 +139,9 @@ export function AuthProblem({ code, kind = "login", returnTo = "/" }: {
           kind === "verification" ? "Return to the browser where you registered and use its latest email. If that form expired, start again and request a new code." :
             kind === "recovery" || kind === "reset" ? "Return to the browser where you requested recovery and use its latest email, or request a new code." :
           "Start a new secure flow to continue."}</p>
-      <Link prefetch={false} className="store-cta" href={kind === "login" ? `/auth/start?returnTo=${encodeURIComponent(returnTo)}` :
+      <a className="store-cta" href={kind === "login" ? `/auth/start?returnTo=${encodeURIComponent(returnTo)}` :
         kind === "reset" ? "/recover" :
-        `/auth/flow?kind=${kind}&returnTo=${encodeURIComponent(returnTo)}`}>{unavailable ? "Retry" : "Start again"}</Link>
+        `/auth/flow?kind=${kind}&returnTo=${encodeURIComponent(returnTo)}`}>{unavailable ? "Retry" : "Start again"}</a>
       <Link className="store-link" href="/catalog/all-products">Continue browsing</Link>
     </section>
   );

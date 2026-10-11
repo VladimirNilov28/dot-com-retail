@@ -1,6 +1,7 @@
 import "server-only";
 import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { object } from "@/lib/graphql/scalars";
 import { authConfig } from "./config";
 import { AuthError, flowIdentifier, oneParameter, type BrowserState } from "./model";
 import { authBoundary, authHeaders, browserCookie, redirectResponse } from "./http";
@@ -9,6 +10,18 @@ import { assertFlow, bindFlow, withBrowser } from "./store";
 import { initializeFlow, validateFlow } from "./flows";
 
 export const googleCallbackPath = "/self-service/methods/oidc/callback/google";
+
+export function socialFailureReason(value: unknown): string {
+  if (!value || typeof value !== "object" || !("error" in value) ||
+      !value.error || typeof value.error !== "object") return "provider_callback_rejected";
+  const error = object(value.error);
+  const diagnostic = ["debug", "reason", "message"].flatMap((key) =>
+    typeof error[key] === "string" ? [error[key]] : []).join(" ");
+  for (const reason of ["invalid_client", "invalid_grant", "redirect_uri_mismatch"]) {
+    if (new RegExp(`\\b${reason}\\b`).test(diagnostic)) return `token_exchange_${reason}`;
+  }
+  return "provider_callback_rejected";
+}
 
 export function googleAuthorization(value: unknown): URL {
   if (typeof value !== "string") throw new AuthError("unavailable");
@@ -46,6 +59,7 @@ export async function completeSocialCallback(state: BrowserState, browser: strin
   await assertFlow(client, browser, pending.flow, pending.kind);
   delete state.social;
   const provider = providerClient(state);
+  let stage = "provider_callback";
   let restarted = false;
   async function restart(notice: "cancelled" | "failed") {
     provider.save();
@@ -55,9 +69,13 @@ export async function completeSocialCallback(state: BrowserState, browser: strin
   }
   try {
     const response = await provider.http.get(`${authConfig().kratos}${googleCallbackPath}?${query}`, {
-      validateStatus: (status) => status >= 200 && status < 500,
+      validateStatus: (status) => status >= 200 && status < 600,
     });
     provider.save();
+    if (response.status >= 500) {
+      console.error("authentication social stage", stage, socialFailureReason(response.data), response.status);
+      throw new AuthError("unavailable");
+    }
     if (query.has("error")) {
       // Kratos must consume/verify its own state before cancellation recovery.
       return restart([302, 303].includes(response.status) ? "cancelled" : "failed");
@@ -67,6 +85,7 @@ export async function completeSocialCallback(state: BrowserState, browser: strin
       return restart("failed");
     }
     const target = new URL(response.headers.location);
+    stage = "callback_destination";
     const config = authConfig();
     if (target.origin !== config.origin || target.username || target.password || target.hash) {
       throw new AuthError("unavailable");
@@ -75,6 +94,7 @@ export async function completeSocialCallback(state: BrowserState, browser: strin
     if (["/login", "/register"].includes(target.pathname) &&
         Array.from(target.searchParams.keys()).every((key) => key === "flow")) {
       const kind = target.pathname === "/register" ? "registration" : "login";
+      stage = kind === "registration" ? "registration_continuation" : "login_continuation";
       const id = flowIdentifier(oneParameter(target.searchParams, "flow"));
       const result = kind === "login" ? (await provider.api.getLoginFlow({ id })).data
         : (await provider.api.getRegistrationFlow({ id })).data;
@@ -89,6 +109,9 @@ export async function completeSocialCallback(state: BrowserState, browser: strin
       return restart("failed");
     }
     throw new AuthError("unavailable");
+  } catch (error) {
+    console.error("authentication social stage", stage, error instanceof AuthError ? error.code : "transport_or_invalid_response");
+    throw error;
   } finally { if (!restarted) provider.save(); }
 }
 

@@ -38,6 +38,16 @@ export function clearBrowserCookies(response: NextResponse, authenticated = true
   }
 }
 
+export function assertBrowserNavigation(request: Request): void {
+  const headers = request.headers;
+  if (["rsc", "next-router-prefetch", "next-router-segment-prefetch", "next-router-state-tree"].some((name) => headers.has(name)) ||
+      [headers.get("purpose"), headers.get("sec-purpose")].some((value) => value?.includes("prefetch")) ||
+      (headers.has("sec-fetch-dest") && headers.get("sec-fetch-dest") !== "document") ||
+      (headers.has("sec-fetch-mode") && headers.get("sec-fetch-mode") !== "navigate")) {
+    throw new AuthError("invalid_request", 400);
+  }
+}
+
 export async function boundedForm(request: Request): Promise<URLSearchParams> {
   const declaredLength = request.headers.get("content-length");
   if (request.headers.get("content-type")?.split(";", 1)[0] !== "application/x-www-form-urlencoded" ||
@@ -111,8 +121,16 @@ export async function authBoundary(
         console.error("authentication public origin unavailable");
       }
     }
-    return NextResponse.json({ error: code }, {
+    const response = NextResponse.json({ error: code }, {
       status: error instanceof AuthError ? error.status : 503, headers: authHeaders,
     });
+    if (operation === "session" && error instanceof AuthError &&
+        ["expired", "reauthentication_required"].includes(code)) {
+      const config = authConfig();
+      response.cookies.set(config.sessionCookie, "", {
+        httpOnly: true, secure: config.secure, sameSite: "lax", path: "/", maxAge: 0,
+      });
+    }
+    return response;
   }
 }

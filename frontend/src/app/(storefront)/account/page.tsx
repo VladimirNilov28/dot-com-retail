@@ -16,8 +16,8 @@ export default async function AccountPage() {
     <section className="auth-page">
       <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Your account</h1>
       <p className="text-muted">Sign in to access your ByteCore account.</p>
-      <Link prefetch={false} className="store-cta" href="/login?returnTo=%2Faccount">Sign in</Link>
-      <p className="text-sm text-muted">New to ByteCore? <Link prefetch={false} className="store-link" href="/register?returnTo=%2Faccount">Create an account</Link></p>
+      <a className="store-cta" href="/login?returnTo=%2Faccount">Sign in</a>
+      <p className="text-sm text-muted">New to ByteCore? <a className="store-link" href="/register?returnTo=%2Faccount">Create an account</a></p>
     </section>
   );
   let result;

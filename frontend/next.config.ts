@@ -3,6 +3,9 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
   reactCompiler: true,
+  logging: {
+    incomingRequests: { ignore: [/^\/auth(?:\/|$)/, /^\/self-service\/methods\/oidc\/callback(?:\/|$)/] },
+  },
   async headers() {
     return ["/auth/:path*", "/login", "/register", "/verify", "/account"].map((source) => ({
       source,

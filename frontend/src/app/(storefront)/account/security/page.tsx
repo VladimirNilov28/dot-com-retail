@@ -18,7 +18,7 @@ export default async function SecurityPage({ searchParams }: {
     <section className="auth-page">
       <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Account security</h1>
       <p className="text-muted">Sign in to manage your authenticator and backup codes.</p>
-      <Link prefetch={false} className="store-cta" href="/login?returnTo=%2Faccount%2Fsecurity">Sign in</Link>
+      <a className="store-cta" href="/login?returnTo=%2Faccount%2Fsecurity">Sign in</a>
     </section>
   );
   let settings;
@@ -37,8 +37,10 @@ export default async function SecurityPage({ searchParams }: {
       <section className="auth-page">
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Confirm it&apos;s you</h1>
         <p className="text-muted">Security changes need a recent sign-in using your strongest available method. No settings have been changed.</p>
-        <Link prefetch={false} className="store-cta"
-          href="/auth/security-reauth">Confirm sign-in</Link>
+        {/* Auth endpoints require full navigation, not RSC fetches. */}
+        {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+        <a className="store-cta"
+          href="/auth/security-reauth">Confirm sign-in</a>
         <Link className="store-link" href="/account">Back to account</Link>
       </section>
     );
@@ -50,7 +52,8 @@ export default async function SecurityPage({ searchParams }: {
       <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Account security</h1>
       <p className="text-muted">Two-step sign-in is optional for customers. Changes require a recent, fully authenticated session.</p>
       <SecuritySettings key={settings.id} settings={settings} />
-      <Link prefetch={false} className="store-link" href="/auth/security">Start a fresh security form</Link>
+      {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+      <a className="store-link" href="/auth/security">Start a fresh security form</a>
       <Link className="store-link" href="/account">Back to account</Link>
     </section>
   );

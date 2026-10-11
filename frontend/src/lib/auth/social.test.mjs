@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { completeSocialCallback, googleAuthorization, socialCallbackParameters } from "./social";
+import { completeSocialCallback, googleAuthorization, socialCallbackParameters, socialFailureReason } from "./social";
 import { emptyJar } from "./provider";
 import { formMethods } from "./view";
 
@@ -7,11 +7,13 @@ const names = ["STOREFRONT_ORIGIN", "AUTH_OAUTH_ISSUER", "AUTH_KRATOS_URL", "AUT
   "AUTH_CLIENT_ID", "AUTH_CLIENT_SECRET", "AUTH_BRIDGE_SECRET", "AUTH_DATABASE_URL", "AUTH_SEAL_KEYS"];
 const flow = "11111111-1111-4111-8111-111111111111";
 const nonce = "opaque-provider-state-not-issued-32";
-let previous, server, callbacks = 0;
+let previous, server, callbacks = 0, callbackFailure;
 beforeAll(() => {
   server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch(request) {
     if (new URL(request.url).pathname.includes("/callback/")) {
       callbacks++;
+      if (callbackFailure) return Response.json(callbackFailure, { status: 500,
+        headers: { "Set-Cookie": "ory_kratos_continuity=fixture; Path=/; HttpOnly" } });
       return new Response(null, { status: 303, headers: { Location: "http://127.0.0.1:3300/auth/resume",
         "Set-Cookie": "ory_kratos_session=fixture; Path=/; HttpOnly" } });
     }
@@ -29,6 +31,22 @@ beforeAll(() => {
 afterAll(() => {
   server.stop(true);
   for (const name of names) if (previous[name] === undefined) delete process.env[name]; else process.env[name] = previous[name];
+});
+
+test("callback diagnostics classify only allowlisted provider failures, never raw response fields", async () => {
+  const failure = { error: { debug: 'oauth2: cannot fetch token: 401; {"error":"invalid_client","client_secret":"private-value"}',
+    reason: "untrusted provider diagnostic" } };
+  expect(socialFailureReason(failure)).toBe("token_exchange_invalid_client");
+  expect(socialFailureReason({ error: { debug: 'oauth2: "invalid_grant"' } })).toBe("token_exchange_invalid_grant");
+  expect(socialFailureReason({ error: { reason: "private-value" } })).toBe("provider_callback_rejected");
+  const state = { csrf: "a".repeat(43), jar: emptyJar(), returnTo: "/account", social: { state: nonce, flow, kind: "login" } };
+  callbackFailure = failure;
+  try {
+    await expect(completeSocialCallback(state, "b".repeat(43),
+      new URLSearchParams({ state: nonce, code: "fixture-code" }), { query: async () => ({ rowCount: 1 }) }))
+      .rejects.toMatchObject({ code: "unavailable" });
+    expect(state.jar.includes("ory_kratos_continuity")).toBe(true);
+  } finally { callbackFailure = undefined; }
 });
 
 test("Google redirect allows only actual provider origin with exact BFF callback and opaque state", () => {

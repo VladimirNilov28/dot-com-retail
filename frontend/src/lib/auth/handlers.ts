@@ -11,7 +11,7 @@ import { createBrowser, createTransaction, claimTransaction, identifier, identif
   removePreauth, retirePrevious, revokeBrowser, transactionFor, withBrowser, assertFlow } from "./store";
 import { authenticatedState, readCurrentUser, revokeSession } from "./session";
 import { handleSecuritySettings } from "./settings";
-import { assertCsrf, authBoundary, authHeaders, boundedForm, browserCookie,
+import { assertBrowserNavigation, assertCsrf, authBoundary, authHeaders, boundedForm, browserCookie,
   clearBrowserCookies, redirectResponse, setBrowserCookie } from "./http";
 
 function flowRoute(kind: FormKind): string {
@@ -255,6 +255,7 @@ export async function handleAuth(request: NextRequest, action: string): Promise<
       return redirectResponse(`${authConfig().origin}${request.nextUrl.pathname}${request.nextUrl.search}`);
     }
     if (request.method === "GET") {
+      if (["start", "security-reauth", "flow"].includes(action)) assertBrowserNavigation(request);
       if (action === "start") return start(request);
       if (action === "security-reauth") return start(request, true);
       if (action === "challenge") return loginChallenge(request);
