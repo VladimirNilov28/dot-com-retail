@@ -3,6 +3,7 @@ import * as store from "./store";
 import { emptyJar } from "./provider";
 
 let allowAttempt = true;
+let googleEmail = null;
 const attempts = [];
 mock.module("./store", () => ({ ...store, consumeAttempt: async (...args) => { attempts.push(args); return allowAttempt; } }));
 const { accountAction, challengeMatches, challengeUsable, decodeAccountStatus, maskEmail, newChallenge, recoveryMode,
@@ -55,7 +56,7 @@ beforeAll(() => {
     if (path === "/internal/session") return Response.json(canonical());
     if (path === "/internal/account/status") return Response.json({ session: canonical(), credentials,
       recovery_codes_remaining: credentials.lookup_secret ? 7 : 0,
-      profile: { email: "owner@example.test", email_verified: true, username: "fixture", date_of_birth: null } });
+      profile: { email: "owner@example.test", email_verified: true, username: "fixture", date_of_birth: null, google_email: googleEmail } });
     if (path === "/internal/account/notify") { mail.push(await request.json()); return new Response(null, { status: 204 }); }
     if (path === "/internal/account/email") {
       const body = await request.json();
@@ -80,6 +81,7 @@ beforeAll(() => {
 });
 beforeEach(() => {
   allowAttempt = true;
+  googleEmail = null;
   attempts.length = 0;
   mail = []; kratosPosts = []; revoked = []; emailReply = 200;
   credentials = { password: true, google: false, totp: false, lookup_secret: false };
@@ -229,6 +231,32 @@ describe("account actions", () => {
     expect(mail.at(-1)).toEqual({ template: "email_changed", email: "new@example.test" });
     expect(current.emailChange).toBeUndefined();
     expect(await accountAction(current, form({ action: "email_verify", code: request.code }))).toEqual({ email: "expired" });
+  });
+
+  test("Use Google email needs step-up, trusted Google data, and the same verified change flow", async () => {
+    credentials = { ...credentials, google: true };
+    googleEmail = "google@example.test";
+    await expect(accountAction(state(), form({ action: "email_use_google" }))).rejects.toMatchObject({ code: "step_up_required" });
+    const current = await verified();
+    expect(await accountAction(current, form({ action: "email_use_google", email: "attacker@example.test" })))
+      .toEqual({ email: "sent" });
+    const request = mail.find((item) => item.template === "email_change_code");
+    expect(request.new_email).toBe("google@example.test");
+    expect(mail.some((item) => item.template === "email_changed")).toBe(false);
+    expect(await accountAction(current, form({ action: "email_verify", code: request.code }))).toEqual({ email: "changed" });
+    expect(mail.at(-1)).toEqual({ template: "email_changed", email: "google@example.test" });
+  });
+
+  test("Use Google email is refused when Google is disconnected, unknown or already the profile email", async () => {
+    const current = await verified();
+    googleEmail = "google@example.test";
+    expect(await accountAction(current, form({ action: "email_use_google" }))).toEqual({ email: "invalid" });
+    credentials = { ...credentials, google: true };
+    googleEmail = null;
+    expect(await accountAction(current, form({ action: "email_use_google" }))).toEqual({ email: "invalid" });
+    googleEmail = "OWNER@example.test";
+    expect(await accountAction(current, form({ action: "email_use_google" }))).toEqual({ email: "same" });
+    expect(mail.some((item) => item.template === "email_change_code")).toBe(false);
   });
 
   test("an email conflict is reported without applying or retaining the change", async () => {

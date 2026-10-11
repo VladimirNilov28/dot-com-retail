@@ -3,6 +3,8 @@
 Every function takes an already-resolved, active USER bff_session. Responses
 are projections: credential hashes, backup codes, provider subjects and TOTP
 URLs never leave this module."""
+import base64
+import json
 import logging
 import re
 import unicodedata
@@ -99,6 +101,38 @@ def _google_connected(credentials: dict) -> bool:
     return any(provider["provider"] == "google" for provider in providers)
 
 
+def _google_email(identity: dict):
+    """Verified email Google supplied, from server-side Kratos data only; None when unknown."""
+    credentials = identity.get("credentials")
+    oidc = credentials.get("oidc") if isinstance(credentials, dict) else None
+    config = oidc.get("config") if isinstance(oidc, dict) else None
+    providers = config.get("providers") if isinstance(config, dict) else None
+    google = [p for p in providers if isinstance(p, dict) and p.get("provider") == "google" and p.get("subject")] \
+        if isinstance(providers, list) else []
+    if not google:
+        return None
+    candidates = []
+    token = google[0].get("initial_id_token")
+    if isinstance(token, str) and token.count(".") == 2:
+        try:
+            payload = token.split(".")[1]
+            claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+            if isinstance(claims, dict) and claims.get("email_verified") is True:
+                candidates.append(claims.get("email"))
+        except (ValueError, TypeError):
+            pass
+    metadata = (identity.get("metadata_admin") or {}).get("bytecore_oidc")
+    if isinstance(metadata, dict) and metadata.get("provider") == "google" and metadata.get("subject") == google[0]["subject"]:
+        candidates.append(metadata.get("email"))
+    for candidate in candidates:
+        if isinstance(candidate, str):
+            try:
+                return validate_email(candidate)
+            except ValueError:
+                continue
+    return None
+
+
 def _credential_config(credentials: dict, kind: str):
     credential = credentials.get(kind)
     if credential is None:
@@ -167,7 +201,8 @@ def account_status(kratos_client: KratosClient, session: dict) -> dict:
         "credentials": credentials,
         "recovery_codes_remaining": remaining,
         "profile": {"email": traits["email"], "email_verified": _email_verified(identity, traits["email"]),
-                    "username": traits["username"], "date_of_birth": traits.get("dateOfBirth")},
+                    "username": traits["username"], "date_of_birth": traits.get("dateOfBirth"),
+                    "google_email": _google_email(identity) if credentials["google"] else None},
     }
 
 

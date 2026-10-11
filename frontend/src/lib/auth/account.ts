@@ -17,7 +17,7 @@ const maxCodeAttempts = 5;
 export interface AccountStatus {
   credentials: { password: boolean; google: boolean; totp: boolean; lookupSecret: boolean };
   recoveryCodesRemaining: number;
-  profile: { email: string; emailVerified: boolean; username: string; dateOfBirth?: string };
+  profile: { email: string; emailVerified: boolean; username: string; dateOfBirth?: string; googleEmail?: string };
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -39,7 +39,8 @@ export function decodeAccountStatus(value: unknown, expected: ProviderSession): 
   if (typeof remaining !== "number" || !Number.isSafeInteger(remaining) || remaining < 0 || remaining > 64 ||
       !validEmail(profile.email) || typeof profile.username !== "string" || !profile.username ||
       profile.username.length > 255 || (profile.date_of_birth !== null && profile.date_of_birth !== undefined &&
-        (typeof profile.date_of_birth !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(profile.date_of_birth)))) {
+        (typeof profile.date_of_birth !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(profile.date_of_birth))) ||
+      (profile.google_email != null && !validEmail(profile.google_email))) {
     throw new AuthError("unavailable");
   }
   return {
@@ -47,7 +48,8 @@ export function decodeAccountStatus(value: unknown, expected: ProviderSession): 
       lookupSecret: flag(credentials.lookup_secret) },
     recoveryCodesRemaining: remaining,
     profile: { email: profile.email, emailVerified: flag(profile.email_verified), username: profile.username,
-      ...(typeof profile.date_of_birth === "string" ? { dateOfBirth: profile.date_of_birth } : {}) },
+      ...(typeof profile.date_of_birth === "string" ? { dateOfBirth: profile.date_of_birth } : {}),
+      ...(typeof profile.google_email === "string" ? { googleEmail: profile.google_email } : {}) },
   };
 }
 
@@ -309,10 +311,14 @@ export async function accountAction(state: BrowserState, form: URLSearchParams, 
       state.stepUp = { ...challenge, digest: randomBytes(32).toString("hex"), verifiedUntil: now + stepUpLifetime };
       return { stepup: "verified" };
     }
-    if (action === "email_request") {
+    if (action === "email_request" || action === "email_use_google") {
       assertStepUp(view);
       if (view.recoveryMode) return { email: "recovery_mode" };
-      const email = oneParameter(form, "email")?.trim() ?? "";
+      // The Google address comes only from trusted server-side provider data, never the form.
+      if (action === "email_use_google" && (!status.credentials.google || !status.profile.googleEmail)) {
+        return { email: "invalid" };
+      }
+      const email = action === "email_use_google" ? status.profile.googleEmail ?? "" : oneParameter(form, "email")?.trim() ?? "";
       if (!validEmail(email)) return { email: "invalid" };
       if (email.toLowerCase() === status.profile.email.toLowerCase()) return { email: "same" };
       if (!await consumeAttempt("email_change_send", session.identityId, 3, 3600)) return { email: "limited" };

@@ -119,7 +119,8 @@ class AccountRoutesTest(unittest.TestCase):
                                                   "lookup_secret": True})
         self.assertEqual(payload["recovery_codes_remaining"], 2)
         self.assertEqual(payload["profile"], {"email": "old@example.com", "email_verified": True,
-                                              "username": "customer", "date_of_birth": "1990-01-01"})
+                                              "username": "customer", "date_of_birth": "1990-01-01",
+                                              "google_email": None})
         text = json.dumps(payload)
         for secret in SECRETS + ["efgh-5678", "ijkl-9012", "hashed_password", "totp_url", "subject"]:
             self.assertNotIn(secret, text)
@@ -138,6 +139,24 @@ class AccountRoutesTest(unittest.TestCase):
                                                   "lookup_secret": False})
         self.assertEqual(payload["recovery_codes_remaining"], 0)
         self.assertIs(payload["profile"]["email_verified"], False)
+
+    def test_status_exposes_trusted_google_email_only_when_connected(self):
+        import base64, json as j
+        claims = base64.urlsafe_b64encode(j.dumps({"email": "g@example.com", "email_verified": True}).encode()).decode().rstrip("=")
+        unverified = base64.urlsafe_b64encode(j.dumps({"email": "x@example.com", "email_verified": False}).encode()).decode().rstrip("=")
+        for token, expected in ((f"h.{claims}.s", "g@example.com"), (f"h.{unverified}.s", None), ("", None)):
+            self.kratos.get_identity_with_credentials.return_value = identity(credentials={
+                "oidc": {"config": {"providers": [{"provider": "google", "subject": "sub", "initial_id_token": token}]}}})
+            payload = self.post("/internal/account/status", {"cookie": "c"})[1]
+            self.assertEqual(payload["profile"]["google_email"], expected)
+            self.assertNotIn(token or "-none-", json.dumps(payload))
+
+    def test_status_google_email_falls_back_to_bound_mapper_metadata(self):
+        base = identity(credentials={"oidc": {"config": {"providers": [{"provider": "google", "subject": "sub"}]}}})
+        for meta, expected in (({"provider": "google", "subject": "sub", "email": "m@example.com"}, "m@example.com"),
+                               ({"provider": "google", "subject": "other", "email": "m@example.com"}, None)):
+            self.kratos.get_identity_with_credentials.return_value = {**base, "metadata_admin": {"bytecore_oidc": meta}}
+            self.assertEqual(self.post("/internal/account/status", {"cookie": "c"})[1]["profile"]["google_email"], expected)
 
     def test_status_after_google_unlink_reports_disconnected_with_password_kept(self):
         # Kratos leaves a blank placeholder provider and no identifiers after unlinking.

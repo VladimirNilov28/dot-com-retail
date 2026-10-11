@@ -172,3 +172,7 @@ A notification failure never reverses an applied change.
 ## Kratos state after unlinking Google
 
 Unlinking the last Google connection leaves an `oidc` credential with no identifiers and one blank placeholder provider entry (empty `provider` and `subject`). The bridge status projection treats that placeholder as "Google not connected". Partially blank or otherwise malformed provider entries are still rejected, and the bridge logs the static reason (never provider data) for each rejected private request.
+
+## Use Google email
+
+Linking or reconnecting Google never changes the profile email. When Google is connected and its verified email differs from the profile email, Connected accounts shows a "Use Google email" button. It runs the normal email change: step-up (authenticator, or email when no TOTP), a code sent to the new address, confirmation, and a notice to the previous address, with the usual conflict checks. The address is read server-side by the bridge (Kratos Google credential ID token claims, falling back to the subject-bound mapper metadata) and is never accepted from the browser. The button is hidden when the emails match.

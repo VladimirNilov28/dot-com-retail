@@ -14,6 +14,8 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
   if ("element" in context) return context.element;
   const { view, settings, query } = context;
   const connected = view.status.credentials.google;
+  const googleEmail = view.status.profile.googleEmail;
+  const showUseGoogleEmail = connected && !!googleEmail && googleEmail.toLowerCase() !== view.status.profile.email.toLowerCase();
   const editable = view.stepUp.ready && !view.stepUp.recoveryMode ? settings : undefined;
   return (
     <div className="account-main">
@@ -29,6 +31,13 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
           </div>
           <span className="account-badge" data-tone={connected ? "ok" : "off"}>{connected ? "Connected" : "Not connected"}</span>
         </div>
+        {showUseGoogleEmail ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+            <p className="text-muted">Google email: <strong className="break-all">{googleEmail}</strong></p>
+            <ActionForm endpoint="/auth/account" csrf={view.csrf} label="Use Google email" variant="secondary"
+              pendingLabel="Sending code…" fields={{ action: "email_use_google", section: "/account/profile" }} />
+          </div>
+        ) : null}
         {editable?.actions.includes("google_connect") ? (
           <ActionForm endpoint="/auth/security" csrf={editable.csrf} label="Connect Google" pendingLabel="Opening Google…"
             fields={{ flow: editable.id, action: "google_connect", section }} />
