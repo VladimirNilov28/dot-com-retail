@@ -1,5 +1,5 @@
 import "server-only";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import { CompactEncrypt, compactDecrypt } from "jose";
 import { Pool, type PoolClient } from "pg";
 import { object } from "@/lib/graphql/scalars";
@@ -181,4 +181,27 @@ export async function assertFlow(client: PoolClient, browser: string, id: string
     [id, identifierHash(browser), kind],
   );
   if (result.rowCount !== 1) throw new AuthError("expired", 401);
+}
+
+/**
+ * Count one attempt in a fixed window, outside the caller's transaction so a
+ * rejected request cannot roll its own attempt back. Subjects are keyed with
+ * the active seal key; no raw identifier is stored.
+ */
+export async function consumeAttempt(scope: string, subject: string, limit: number, windowSeconds: number): Promise<boolean> {
+  const config = authConfig();
+  const key = config.keys.get(config.activeKey);
+  if (!key) throw new AuthError("unavailable");
+  const hash = createHmac("sha256", key).update(`attempt\u0000${scope}\u0000${subject}`).digest("hex");
+  const result = await database().query<{ attempts: number }>(
+    "INSERT INTO attempt_limits(key_hash,window_start,attempts) VALUES($1,now(),1) "
+      + "ON CONFLICT(key_hash) DO UPDATE SET "
+      + "attempts=CASE WHEN attempt_limits.window_start<=now()-make_interval(secs=>$2) THEN 1 ELSE attempt_limits.attempts+1 END,"
+      + "window_start=CASE WHEN attempt_limits.window_start<=now()-make_interval(secs=>$2) THEN now() ELSE attempt_limits.window_start END "
+      + "RETURNING attempts", [hash, windowSeconds],
+  );
+  if (Math.random() < 0.01) {
+    await database().query("DELETE FROM attempt_limits WHERE window_start<now()-interval '1 day'");
+  }
+  return result.rows[0].attempts <= limit;
 }

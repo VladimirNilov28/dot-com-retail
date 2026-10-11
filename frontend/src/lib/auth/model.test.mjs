@@ -5,6 +5,7 @@ import { AuthError, authCookie, decodeBrowserState, flowIdentifier, formKind, gr
 describe("storefront authentication return contract", () => {
   test.each([
     "/", "/catalog", "/catalog/all-products", "/catalog/components", "/account",
+    "/account/security", "/account/profile", "/account/connections", "/account/sessions",
     "/products/actual-product?variant=9007199254740993",
     "/search?q=cpu%20gpu", "/search?q=100%25", "/search?q=%2520",
   ])("preserves supported route and query %s", (route) => {
@@ -33,7 +34,7 @@ describe("storefront authentication return contract", () => {
     "", "https://attacker.invalid/", "//attacker.invalid/", "/\\attacker.invalid/",
     "/%2fattacker.invalid/", "/%252fattacker.invalid/", "/catalog/%2e%2e/api",
     "/products/../api", "/auth/callback", "/graphql", "/_next/static/thing",
-    "/login", "/register", "/verify", "/account#token", "/account?access_token=credential",
+    "/login", "/register", "/verify", "/account/admin", "/account/profile/x", "/account#token", "/account?access_token=credential",
     "/search?q=%0d%0aLocation%3A", "/account?password=credential", " /account",
   ])("rejects unsafe or internal route %s", (route) => {
     expect(() => safeReturnTo(route)).toThrow(AuthError);

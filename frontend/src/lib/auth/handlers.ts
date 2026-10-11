@@ -1,8 +1,8 @@
 import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import { authConfig } from "./config";
-import { AuthError, assertSameProvider, decodeProviderSession, flowIdentifier, formKind, grantTokens, hasSessionCookie,
-  oneParameter, safeReturnTo, type FormKind } from "./model";
+import { AuthError, accountSection, assertSameProvider, decodeProviderSession, flowIdentifier, formKind, grantTokens, hasSessionCookie,
+  oneParameter, safeReturnTo, type BrowserState, type FormKind } from "./model";
 import { object } from "@/lib/graphql/scalars";
 import { bridgeRequest, currentProviderSession, emptyJar, providerClient, providerCookie, providerRedirect } from "./provider";
 import { authorizationUrl, exchangeCode, newTransaction } from "./oauth";
@@ -11,6 +11,7 @@ import { createBrowser, createTransaction, claimTransaction, identifier, identif
   removePreauth, retirePrevious, revokeBrowser, transactionFor, withBrowser, assertFlow } from "./store";
 import { authenticatedState, readCurrentUser, revokeSession } from "./session";
 import { handleSecuritySettings } from "./settings";
+import { handleAccount, notifySecurityEvent, recoveryMode, accountStatus, sessionFacts } from "./account";
 import { assertBrowserNavigation, assertCsrf, authBoundary, authHeaders, boundedForm, browserCookie,
   clearBrowserCookies, redirectResponse, setBrowserCookie } from "./http";
 
@@ -20,7 +21,8 @@ function flowRoute(kind: FormKind): string {
 }
 
 async function start(request: NextRequest, securityReauth = false): Promise<NextResponse> {
-  const returnTo = securityReauth ? "/account/security" : safeReturnTo(oneParameter(request.nextUrl.searchParams, "returnTo"));
+  const returnTo = securityReauth ? accountSection(oneParameter(request.nextUrl.searchParams, "section"))
+    : safeReturnTo(oneParameter(request.nextUrl.searchParams, "returnTo"));
   let jar = emptyJar();
   let previousSessionHash: string | undefined;
   let assurance: "aal1" | "aal2" = "aal1";
@@ -87,10 +89,10 @@ async function loginChallenge(request: NextRequest): Promise<NextResponse> {
       const assurance = state.securityReauth;
       delete state.securityReauth;
       const flow = await initializeFlow(state, browser, "login", client, assurance, true);
-      return flow.id;
+      return { id: flow.id, returnTo: state.returnTo };
     }
   });
-  if (refreshFlow) return redirectResponse(`/login?flow=${refreshFlow}&returnTo=%2Faccount%2Fsecurity`);
+  if (refreshFlow) return redirectResponse(`/login?flow=${refreshFlow.id}&returnTo=${encodeURIComponent(refreshFlow.returnTo)}`);
   return handoff(browser);
 }
 
@@ -105,6 +107,34 @@ async function consent(request: NextRequest): Promise<NextResponse> {
     const result = object(await bridgeRequest("consent", { challenge, state: state.transactionState }));
     return redirectResponse(providerRedirect(result.redirect_to));
   });
+}
+
+/**
+ * A second factor satisfied with a recovery code is an MFA recovery event:
+ * sign out every other session, notify the account email and route the user
+ * to replace the authenticator. Fails closed if other sessions cannot be revoked.
+ */
+async function completeRecoverySignIn(state: BrowserState): Promise<boolean> {
+  if (!state.provider) throw new AuthError("expired", 401);
+  const provider = providerClient(state);
+  try {
+    const facts = sessionFacts((await provider.api.toSession()).data, state.provider);
+    const latest = facts.methods.filter((entry) => entry.method === "lookup_secret")
+      .reduce((max, entry) => Math.max(max, entry.completedAt), 0);
+    if (!recoveryMode(facts) || Date.now() - latest > 10 * 60 * 1000) return false;
+    await provider.api.disableMyOtherSessions();
+    provider.save();
+    const status = await accountStatus(state);
+    await notifySecurityEvent(state, "mfa_recovery_used", status.recoveryCodesRemaining);
+    console.info("authentication mfa recovery sign-in completed");
+    return true;
+  } catch (error) {
+    if (error instanceof AuthError) throw error;
+    console.error("authentication mfa recovery reason", "provider_response");
+    throw new AuthError("unavailable");
+  } finally {
+    provider.save();
+  }
 }
 
 async function callback(request: NextRequest): Promise<NextResponse> {
@@ -130,13 +160,14 @@ async function callback(request: NextRequest): Promise<NextResponse> {
     }
     assertSameProvider(context.provider, await currentProviderSession(context));
     await readCurrentUser(tokens.access_token, context.provider);
+    const recovered = context.provider.role === "USER" && await completeRecoverySignIn(context);
     const authenticated = await createBrowser({
       jar: context.jar, csrf: identifier(), returnTo: transaction.returnTo, provider: context.provider,
       tokens: grantTokens(tokens),
     }, true, client);
     if (context.previousSessionHash) await retirePrevious(context.previousSessionHash, context.provider.sessionId, client);
     await removePreauth(browser, client);
-    const response = redirectResponse(transaction.returnTo);
+    const response = redirectResponse(recovered ? "/account/security?recovery=1" : transaction.returnTo);
     setBrowserCookie(response, authenticated.id, authenticated.expiresAt, true);
     clearBrowserCookies(response, false);
     return response;
@@ -246,6 +277,7 @@ async function logout(request: NextRequest): Promise<NextResponse> {
 
 export async function handleAuth(request: NextRequest, action: string): Promise<NextResponse> {
   if (action === "security") return handleSecuritySettings(request);
+  if (action === "account") return handleAccount(request);
   return authBoundary(async () => {
     if (request.method === "GET" && action === "session") {
       if (!hasSessionCookie(request.headers.get("cookie"))) {

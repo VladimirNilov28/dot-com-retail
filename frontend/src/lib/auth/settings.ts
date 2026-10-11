@@ -5,14 +5,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { object, text } from "@/lib/graphql/scalars";
 import { authConfig } from "./config";
 import { assertCsrf, authBoundary, authHeaders, boundedForm, browserCookie, redirectResponse } from "./http";
-import { AuthError, assertSameProvider, decodeProviderSession, flowIdentifier, oneParameter, type BrowserState, type ProviderSession } from "./model";
-import { bridgeRequest, currentProviderSession, providerClient, providerCookie, providerFailure } from "./provider";
+import { AuthError, accountSection, assertSameProvider, flowIdentifier, oneParameter, type AccountSection, type BrowserState,
+  type ProviderSession } from "./model";
+import { currentProviderSession, providerClient, providerFailure } from "./provider";
+import { accountStatus, assertStepUp, notifySecurityEvent, privilegedAge, sessionFacts, stepUpView,
+  type SecurityEvent } from "./account";
+import { registrationPasswordError, type PasswordErrorCode } from "./password";
 import { authenticatedState } from "./session";
 import { assertFlow, bindFlow, withBrowser } from "./store";
 import { googleAuthorization } from "./social";
 
 export type SecurityAction = "totp_confirm" | "totp_disable" | "backup_generate" |
-  "backup_reveal" | "backup_confirm" | "backup_disable" | "google_connect" | "google_disconnect";
+  "backup_confirm" | "backup_disable" | "google_connect" | "google_disconnect" | "password";
 export interface SecuritySettings {
   id: string;
   expiresAt: string;
@@ -27,17 +31,17 @@ export interface SecuritySettings {
   invalid: boolean;
   google: "unavailable" | "disconnected" | "connected";
   socialRedirect?: string;
+  savedAction?: SecurityAction;
+  notice?: "last_method" | "totp_required" | "password_mismatch" | "recovery_mode" | PasswordErrorCode;
 }
 
 const backupFields = {
   backup_generate: "lookup_secret_regenerate",
-  backup_reveal: "lookup_secret_reveal",
   backup_confirm: "lookup_secret_confirm",
   backup_disable: "lookup_secret_disable",
 } as const;
 const securityActions: SecurityAction[] = ["totp_confirm", "totp_disable", ...Object.keys(backupFields) as (keyof typeof backupFields)[],
-  "google_connect", "google_disconnect"];
-const privilegedAge = 15 * 60 * 1000;
+  "google_connect", "google_disconnect", "password"];
 
 function record(value: unknown): Record<string, unknown> {
   try { return object(value); } catch { throw new AuthError("unavailable"); }
@@ -61,7 +65,7 @@ function pngDataUri(value: unknown): string {
   return value;
 }
 
-/** Project only MFA and Google controls, never traits, credential configurations, HTML or provider URLs. */
+/** Project only password, MFA and Google controls, never traits, credential configurations, HTML or provider URLs. */
 export function projectSecuritySettings(value: unknown, state: BrowserState): SecuritySettings {
   const flow = record(value);
   const ui = record(flow.ui);
@@ -95,6 +99,13 @@ export function projectSecuritySettings(value: unknown, state: BrowserState): Se
       if (Array.isArray(node.messages) && node.messages.some((message) => record(message).type === "error")) result.invalid = true;
       continue;
     }
+    if (node.group === "password") {
+      const attributes = record(node.attributes);
+      if (node.type === "input" && attributes.name === "password" && attributes.disabled !== true) names.add("password");
+      assertProviderMessages(node.messages);
+      if (Array.isArray(node.messages) && node.messages.some((message) => record(message).type === "error")) result.invalid = true;
+      continue;
+    }
     if (node.group !== "totp" && node.group !== "lookup_secret") continue;
     const attributes = record(node.attributes);
     if (attributes.disabled === true) continue;
@@ -123,11 +134,17 @@ export function projectSecuritySettings(value: unknown, state: BrowserState): Se
     assertProviderMessages(node.messages);
     if (Array.isArray(node.messages) && node.messages.some((message) => record(message).type === "error")) result.invalid = true;
   }
+  // Stored codes are shown only once, while a freshly generated set awaits confirmation.
+  if (!names.has("lookup_secret_confirm")) result.codes = [];
+  if (names.has("password")) result.actions.push("password");
   if (names.has("totp_code")) result.actions.push("totp_confirm");
   if (result.totpEnabled) result.actions.push("totp_disable");
   for (const [action, field] of Object.entries(backupFields)) {
     if (names.has(field)) result.actions.push(action as SecurityAction);
   }
+  // Kratos offers only "reveal" while codes exist; regenerating is accepted directly, so the
+  // stored codes are replaced without ever being revealed again.
+  if (names.has("lookup_secret_reveal") && !result.actions.includes("backup_generate")) result.actions.push("backup_generate");
   if (ui.messages !== undefined) {
     assertProviderMessages(ui.messages);
     result.invalid ||= ui.messages.some((message) => record(message).type === "error");
@@ -149,7 +166,7 @@ function providerCsrf(value: unknown): string {
 
 export function securityPayload(form: URLSearchParams, settings: SecuritySettings, csrf: string): UpdateSettingsFlowBody & { csrf_token: string } {
   for (const name of form.keys()) {
-    if (!["_csrf", "flow", "action", "totp_code", "acknowledge"].includes(name) ||
+    if (!["_csrf", "flow", "action", "totp_code", "acknowledge", "section", "password", "password_confirm"].includes(name) ||
         form.getAll(name).length !== 1) throw new AuthError("invalid_request", 400);
   }
   const action = oneParameter(form, "action") as SecurityAction;
@@ -164,6 +181,12 @@ export function securityPayload(form: URLSearchParams, settings: SecuritySetting
     return { method: "totp", csrf_token: csrf, totp_code: code };
   }
   if (form.has("totp_code")) throw new AuthError("invalid_request", 400);
+  if (action === "password") {
+    const password = oneParameter(form, "password");
+    if (!password || password.length > 4096) throw new AuthError("invalid_request", 400);
+    return { method: "password", csrf_token: csrf, password };
+  }
+  if (form.has("password") || form.has("password_confirm")) throw new AuthError("invalid_request", 400);
   if (action === "google_connect") return { method: "oidc", csrf_token: csrf, link: "google",
     upstream_parameters: { prompt: "select_account" } };
   if (action === "google_disconnect") return { method: "oidc", csrf_token: csrf, unlink: "google" };
@@ -197,6 +220,23 @@ function settingsFailure(error: unknown): never {
   throw new AuthError("unavailable");
 }
 
+const recoveryActions: SecurityAction[] = ["totp_confirm", "totp_disable", "backup_generate", "backup_confirm", "backup_disable"];
+
+const securityEvents: Partial<Record<SecurityAction, SecurityEvent>> = {
+  totp_confirm: "totp_enabled", totp_disable: "totp_disabled", backup_confirm: "recovery_codes_regenerated",
+  backup_disable: "recovery_codes_disabled", google_disconnect: "google_disconnected",
+};
+
+async function freshSettingsFlow(provider: ReturnType<typeof providerClient>, state: BrowserState, browser: string,
+  client: PoolClient): Promise<SecuritySettings> {
+  const next = (await provider.api.createBrowserSettingsFlow({
+    returnTo: `${authConfig().origin}/account/security`,
+  })).data;
+  const projected = projectSecuritySettings(next, state);
+  await bindFlow(browser, projected.id, "settings", projected.expiresAt, client);
+  return projected;
+}
+
 export async function securitySettingsFlow(
   state: BrowserState, browser: string, client: PoolClient, id?: string, form?: URLSearchParams,
 ): Promise<SecuritySettings> {
@@ -214,10 +254,27 @@ export async function securitySettingsFlow(
     let projected = projectSecuritySettings(flow, state);
     if (id && projected.id !== id) throw new AuthError("forbidden", 403);
     if (!id) await bindFlow(browser, projected.id, "settings", projected.expiresAt, client);
+    stage = "status";
+    let status = await accountStatus(state);
     if (form) {
       assertSecuritySession(session, state.provider, projected);
       const payload = securityPayload(form, projected, providerCsrf(flow));
+      const action = oneParameter(form, "action") as SecurityAction;
       if (payload.method === "oidc" && state.social) throw new AuthError("invalid_request", 400);
+      // Server-side step-up: TOTP when enrolled, otherwise a proven email code.
+      const view = stepUpView(state, sessionFacts(session, state.provider), projected.totpEnabled);
+      assertStepUp(view);
+      // A recovery-code session may only replace the lost authenticator and its codes.
+      if (view.recoveryMode && !recoveryActions.includes(action)) return { ...projected, notice: "recovery_mode" };
+      if (action === "google_disconnect" && !status.credentials.password) return { ...projected, notice: "last_method" };
+      if (action === "backup_generate" && !projected.totpEnabled) return { ...projected, notice: "totp_required" };
+      if (action === "password") {
+        const password = oneParameter(form, "password") ?? "";
+        if (password !== oneParameter(form, "password_confirm")) return { ...projected, notice: "password_mismatch" };
+        const weak = registrationPasswordError(password);
+        if (weak) return { ...projected, notice: weak };
+      }
+      const hadPassword = status.credentials.password;
       stage = "mutation";
       try {
         flow = (await provider.api.updateSettingsFlow({ flow: projected.id, updateSettingsFlowBody: payload })).data;
@@ -245,25 +302,27 @@ export async function securitySettingsFlow(
         state.provider = fresh;
         // Kratos success responses can carry the old flow ID with a new
         // action ID. Create and bind a fresh flow, never relax action binding.
-        const next = (await provider.api.createBrowserSettingsFlow({
-          returnTo: `${authConfig().origin}/account/security`,
-        })).data;
-        projected = projectSecuritySettings(next, state);
-        await bindFlow(browser, projected.id, "settings", projected.expiresAt, client);
+        projected = await freshSettingsFlow(provider, state, browser, client);
+        if (action === "totp_disable" && projected.actions.includes("backup_disable")) {
+          // Recovery codes only recover an authenticator; never leave them as a lone second factor.
+          stage = "recovery_codes_cleanup";
+          const cleanup = (await provider.api.getSettingsFlow({ id: projected.id })).data;
+          await provider.api.updateSettingsFlow({ flow: projected.id, updateSettingsFlowBody:
+            { method: "lookup_secret", csrf_token: providerCsrf(cleanup), lookup_secret_disable: true } });
+          projected = await freshSettingsFlow(provider, state, browser, client);
+        }
         projected.saved = true;
+        projected.savedAction = action;
+        status = await accountStatus(state);
+        const event = action === "password" ? hadPassword ? "password_changed" : "password_set" : securityEvents[action];
+        if (event) await notifySecurityEvent(state, event);
       } else {
         const updated = projectSecuritySettings(flow, state);
         if (updated.id !== projected.id) throw new AuthError("forbidden", 403);
         projected = updated;
       }
     }
-    if (projected.google === "unavailable") {
-      provider.save();
-      const connection = record(await bridgeRequest("google-connection", { cookie: await providerCookie(state) }));
-      assertSameProvider(state.provider, decodeProviderSession(connection.session));
-      if (typeof connection.connected !== "boolean") throw new AuthError("unavailable");
-      if (connection.connected) projected.google = "connected";
-    }
+    if (projected.google === "unavailable" && status.credentials.google) projected.google = "connected";
     return projected;
   } catch (error) {
     console.error("authentication settings stage", stage,
@@ -282,8 +341,17 @@ export async function loadSecuritySettings(browser: string, id?: string): Promis
   });
 }
 
+const settingsSections: AccountSection[] = ["/account/security", "/account/connections"];
+
+function settingsSection(value: unknown): AccountSection {
+  const section = accountSection(value);
+  if (!settingsSections.includes(section)) throw new AuthError("invalid_request", 400);
+  return section;
+}
+
 /** Wire both GET and POST of /auth/security to this handler. */
 export async function handleSecuritySettings(request: NextRequest): Promise<NextResponse> {
+  let section: AccountSection = "/account/security";
   return authBoundary(async () => {
     try {
       if (request.method !== "GET" && request.method !== "POST") {
@@ -291,10 +359,12 @@ export async function handleSecuritySettings(request: NextRequest): Promise<Next
       }
       const browser = browserCookie(request, true);
       if (request.method === "GET") {
+        section = settingsSection(oneParameter(request.nextUrl.searchParams, "section"));
         const settings = await loadSecuritySettings(browser, oneParameter(request.nextUrl.searchParams, "flow"));
-        return redirectResponse(`/account/security?flow=${settings.id}${settings.saved ? "&saved=1" : ""}`);
+        return redirectResponse(`${section}?flow=${settings.id}${settings.saved ? "&saved=1" : ""}`);
       }
       const form = await boundedForm(request);
+      section = settingsSection(oneParameter(form, "section"));
       await authenticatedState(browser);
       const settings = await withBrowser(browser, async (state, client, row) => {
         if (!row.authenticated) throw new AuthError("expired", 401);
@@ -302,12 +372,19 @@ export async function handleSecuritySettings(request: NextRequest): Promise<Next
         return securitySettingsFlow(state, browser, client, flowIdentifier(oneParameter(form, "flow")), form);
       });
       if (settings.socialRedirect) return redirectResponse(settings.socialRedirect);
-      return redirectResponse(`/account/security?flow=${settings.id}`);
+      const query = new URLSearchParams({ flow: settings.id });
+      if (settings.savedAction) query.set("saved", settings.savedAction);
+      if (settings.notice) query.set("notice", settings.notice);
+      if (settings.invalid) query.set("invalid", "1");
+      return redirectResponse(`${section}?${query}`);
     } catch (error) {
       if (error instanceof AuthError && error.code === "reauthentication_required") {
-        return redirectResponse("/account/security?reauth=required");
+        return redirectResponse(`${section}?reauth=required`);
+      }
+      if (error instanceof AuthError && error.code === "step_up_required") {
+        return redirectResponse(`${section}?stepup=required`);
       }
       throw error;
     }
-  }, "security_settings", request, async () => "/account/security");
+  }, "security_settings", request, async () => section);
 }

@@ -1,6 +1,7 @@
 import { object, text, uuid, type UUID } from "@/lib/graphql/scalars";
 
-export type AuthErrorCode = "invalid_request" | "forbidden" | "expired" | "unavailable" | "reauthentication_required";
+export type AuthErrorCode = "invalid_request" | "forbidden" | "expired" | "unavailable" | "reauthentication_required" | "rate_limited" |
+  "conflict" | "step_up_required";
 
 export class AuthError extends Error {
   constructor(readonly code: AuthErrorCode, readonly status: number = 503) {
@@ -56,6 +57,42 @@ export interface BrowserState {
   securityReauth?: "aal1" | "aal2";
   social?: { state: string; flow: string; kind: "login" | "registration" | "settings" };
   googleRegistration?: { flow: string; email: string; submitted: boolean; providerValidation?: boolean; username?: string; dateOfBirth?: string; usernameUnavailable?: boolean };
+  /** Emailed step-up challenge; `verifiedUntil` is set once the code is proven. */
+  stepUp?: EmailChallenge & { verifiedUntil?: number };
+  /** Pending, not yet applied, email address change. */
+  emailChange?: EmailChallenge & { email: string };
+  securityReturn?: AccountSection;
+}
+
+export interface EmailChallenge {
+  sessionId: string;
+  salt: string;
+  digest: string;
+  expiresAt: number;
+  attempts: number;
+}
+
+export const accountSections = ["/account/security", "/account/connections", "/account/profile", "/account/sessions"] as const;
+export type AccountSection = typeof accountSections[number];
+export function accountSection(value: unknown): AccountSection {
+  if (value === undefined) return "/account/security";
+  if (typeof value === "string" && (accountSections as readonly string[]).includes(value)) return value as AccountSection;
+  throw new AuthError("invalid_request", 400);
+}
+
+export function validEmail(value: unknown): value is string {
+  return typeof value === "string" && value.length >= 3 && value.length <= 254 &&
+    /^[^\s@\u0000-\u001f\u007f]+@[^\s@\u0000-\u001f\u007f]+\.[^\s@\u0000-\u001f\u007f]+$/.test(value);
+}
+
+function decodeChallenge(value: unknown): EmailChallenge {
+  const input = object(value);
+  if (!/^[0-9a-f-]{36}$/i.test(text(input.sessionId)) || !/^[A-Za-z0-9_-]{22,64}$/.test(text(input.salt)) ||
+      !/^[0-9a-f]{64}$/.test(text(input.digest)) || typeof input.expiresAt !== "number" ||
+      !Number.isSafeInteger(input.expiresAt) || typeof input.attempts !== "number" ||
+      !Number.isSafeInteger(input.attempts) || input.attempts < 0 || input.attempts > 100) throw new AuthError("unavailable");
+  return { sessionId: text(input.sessionId), salt: text(input.salt), digest: text(input.digest),
+    expiresAt: input.expiresAt, attempts: input.attempts };
 }
 
 export function grantTokens(response: {
@@ -109,7 +146,7 @@ export function safeReturnTo(value: unknown): string {
   if (path.startsWith("//") || path.split("/").some((part) => part === "." || part === "..")) {
     throw new AuthError("invalid_request", 400);
   }
-  if (url.hash || !/^(?:\/|\/catalog(?:\/[^/]+)?|\/products\/[^/]+|\/search|\/account(?:\/security)?|\/cart)$/.test(path) ||
+  if (url.hash || !/^(?:\/|\/catalog(?:\/[^/]+)?|\/products\/[^/]+|\/search|\/account(?:\/(?:security|connections|profile|sessions))?|\/cart)$/.test(path) ||
       Array.from(url.searchParams).some(([key, item]) => /[\\\u0000-\u001f\u007f]/.test(key + item)) ||
       Array.from(url.searchParams.keys()).some((key) =>
         ["access_token", "refresh_token", "id_token", "client_secret", "password", "code", "csrf_token"].includes(key))) {
@@ -214,6 +251,22 @@ export function decodeBrowserState(value: unknown): BrowserState {
       username: typeof registration.username === "string" ? registration.username : undefined,
       dateOfBirth: typeof registration.dateOfBirth === "string" ? registration.dateOfBirth : undefined,
       ...(registration.usernameUnavailable === true ? { usernameUnavailable: true } : {}) };
+  }
+  if (input.stepUp !== undefined) {
+    const stepUp = object(input.stepUp);
+    state.stepUp = decodeChallenge(stepUp);
+    if (stepUp.verifiedUntil !== undefined) {
+      if (typeof stepUp.verifiedUntil !== "number" || !Number.isSafeInteger(stepUp.verifiedUntil)) throw new AuthError("unavailable");
+      state.stepUp.verifiedUntil = stepUp.verifiedUntil;
+    }
+  }
+  if (input.emailChange !== undefined) {
+    const change = object(input.emailChange);
+    if (!validEmail(change.email)) throw new AuthError("unavailable");
+    state.emailChange = { ...decodeChallenge(change), email: change.email };
+  }
+  if (input.securityReturn !== undefined) {
+    try { state.securityReturn = accountSection(input.securityReturn); } catch { throw new AuthError("unavailable"); }
   }
   if (input.tokens !== undefined) {
     const tokens = object(input.tokens);

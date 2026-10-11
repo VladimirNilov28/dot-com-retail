@@ -61,10 +61,19 @@ export async function AuthPage({ kind, searchParams }: { kind: FormKind; searchP
     redirect(`/auth/start?returnTo=${encodeURIComponent(view.returnTo)}`);
   }
   const passwordError = (kind === "registration" || kind === "reset") && query.validation === "1" ? passwordErrorMessage(query.passwordError) : undefined;
-  const methods = passwordError ? view.methods.map((method) => ({
+  const providerMethods = passwordError ? view.methods.map((method) => ({
     ...method, fields: method.fields.map((field) => field.name === "password" ? { ...field, error: passwordError } : field),
   })) : view.methods;
-  const secondFactor = kind === "login" && methods.every((method) => method.name !== "password" && method.name !== "oidc");
+  const secondFactor = kind === "login" && providerMethods.every((method) => method.name !== "password" && method.name !== "oidc");
+  // Recovery codes are a separate lost-authenticator path, never a peer sign-in option.
+  const recoveryAvailable = secondFactor && providerMethods.some((method) => method.name === "lookup_secret") &&
+    providerMethods.some((method) => method.name !== "lookup_secret");
+  const recoveryCode = secondFactor && providerMethods.some((method) => method.name === "lookup_secret") &&
+    (query.method === "recovery" || !recoveryAvailable);
+  const methods = secondFactor ? providerMethods.filter((method) => (method.name === "lookup_secret") === recoveryCode)
+    : providerMethods;
+  const flowLink = (method?: string) => `/login?flow=${view.flow.id}&returnTo=${encodeURIComponent(view.returnTo)}` +
+    (method ? `&method=${method}` : "");
   const messages = view.messages;
   const fieldErrors = methods.flatMap((method) => method.fields.filter((field) => field.error).map((field) => ({
     id: authFieldId(method.name, field.name), label: field.label, error: field.error,
@@ -72,10 +81,11 @@ export async function AuthPage({ kind, searchParams }: { kind: FormKind; searchP
   const validation = query.validation === "1" || ((!view.google || view.google.providerValidation) &&
     view.flow.messages.some((message) => message.type === "error")) ||
     methods.some((method) => method.fields.some((field) => field.error));
-  const title = secondFactor ? "Two-step verification" : kind === "login" ? "Sign in" :
+  const title = recoveryCode ? "Use a recovery code" : secondFactor ? "Two-step verification" : kind === "login" ? "Sign in" :
     kind === "registration" ? view.google ? "Complete your registration" : "Create your account" : kind === "recovery" ? "Recover your account" :
       kind === "reset" ? "Set a new password" : "Verify your email";
-  const description = secondFactor ? "Confirm it's you using your authenticator or a recovery code." :
+  const description = recoveryCode ? "Lost access to your authenticator? Enter one of your saved recovery codes. Each code works once." :
+    secondFactor ? "Enter the 6-digit code from your authenticator app." :
     kind === "login" ? "Sign in to your ByteCore account." :
       kind === "registration" ? view.google ? "Your Google email is verified. Add your missing account details to continue. No password is needed." :
         "Create your account, verify your email, then sign in." :
@@ -116,6 +126,8 @@ export async function AuthPage({ kind, searchParams }: { kind: FormKind; searchP
             </span>)}.</p> : null}
           </div>
         ) : null}
+        {recoveryCode ? <p className="mb-5 text-sm text-muted">After you continue, your other sessions are signed out and we email you about this
+          recovery. Replace your authenticator from Account security right away.</p> : null}
         {methods.map((method, index) => (
           <div key={method.name} className={index ? "auth-alternative-method" : undefined}>
             {methods.length > 1 ? <h2 className="mb-3 font-semibold">{method.name === "lookup_secret" ? "Recovery" :
@@ -130,6 +142,8 @@ export async function AuthPage({ kind, searchParams }: { kind: FormKind; searchP
             kind === "recovery" || kind === "reset" ? <a className="store-link" href="/recover">Request a new recovery code</a> :
             <a className="store-link" href={`/auth/flow?kind=verification&returnTo=${encodeURIComponent(view.returnTo)}`}>Request a new verification code</a>}
         {kind === "login" && !secondFactor ? <a className="store-link" href="/recover">Forgot your password?</a> : null}
+        {recoveryAvailable && !recoveryCode ? <a className="store-link" href={flowLink("recovery")}>Lost your authenticator? Use a recovery code</a> : null}
+        {recoveryAvailable && recoveryCode ? <a className="store-link" href={flowLink()}>Use your authenticator app instead</a> : null}
         <Link href="/catalog/all-products" className="store-link">Continue browsing</Link>
       </div>
     </section>
@@ -146,9 +160,10 @@ export function AuthProblem({ code, kind = "login", returnTo = "/" }: {
         kind === "registration" ? "Registration is unavailable" : kind === "verification" ? "Verification is unavailable" :
           kind === "recovery" ? "Recovery is unavailable" : kind === "reset" ? "Password reset is unavailable" : "Sign-in is unavailable" :
         code === "provider_logout_pending" ? "Signed out of ByteCore" :
-          code === "expired" ? "This form has expired" : "We couldn't complete this request"}</h1>
+          code === "expired" ? "This form has expired" : code === "rate_limited" ? "Too many attempts" : "We couldn't complete this request"}</h1>
       <p role="alert" className="text-muted">{unavailable ? "The authentication service is temporarily unavailable. This does not mean your password was rejected. Wait a moment, then retry." :
         code === "provider_logout_pending" ? "You're signed out of ByteCore. Provider logout could not be confirmed and will be retried." :
+          code === "rate_limited" ? "For your security, further attempts are paused. Wait 15 minutes, then try again." :
           kind === "verification" ? "Return to the browser where you registered and use its latest email. If that form expired, start again and request a new code." :
             kind === "recovery" || kind === "reset" ? "Return to the browser where you requested recovery and use its latest email, or request a new code." :
           "Start a new secure flow to continue."}</p>

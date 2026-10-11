@@ -12,7 +12,7 @@ const png = `data:image/png;base64,${Buffer.from([137, 80, 78, 71, 13, 10, 26, 1
 const secret = "JBSWY3DPEHPK3PXP";
 let server, previous, posts, readCount, queries, reply, postReply, responseStatus, session, sessionIdentity, denyBinding;
 let callbackReply, callbackStatus, callbackNext, callbackCount;
-let googleConnected;
+let googleConnected, hasPassword, notifications;
 const names = ["STOREFRONT_ORIGIN", "AUTH_OAUTH_ISSUER", "AUTH_KRATOS_URL", "AUTH_BRIDGE_URL",
   "AUTH_CLIENT_ID", "AUTH_CLIENT_SECRET", "AUTH_BRIDGE_SECRET", "AUTH_DATABASE_URL", "AUTH_SEAL_KEYS"];
 const input = (group, name, value = true) => ({ type: "input", group, attributes: { name, type: "submit", value } });
@@ -35,12 +35,16 @@ function setupNodes() {
     input("lookup_secret", "lookup_secret_regenerate"),
   ];
 }
+// Kratos v26.2.0 offers reveal + disable (not regenerate) while codes exist.
 function enabledNodes() {
-  return [input("totp", "totp_unlink"), ...["regenerate", "reveal", "disable"].map((suffix) =>
+  return [input("totp", "totp_unlink"), ...["reveal", "disable"].map((suffix) =>
     input("lookup_secret", `lookup_secret_${suffix}`))];
 }
 function state() {
+  const now = Date.now();
   return { jar: emptyJar(), csrf: "a".repeat(43), returnTo: "/account/security",
+    // A proven email step-up for this provider session; TOTP accounts use the session methods instead.
+    stepUp: { sessionId, salt: "fixture", digest: "0".repeat(64), expiresAt: now + 600000, attempts: 1, verifiedUntil: now + 600000 },
     provider: { ...provider }, tokens: { accessToken: "fixture", refreshToken: "fixture", expiresAt: Date.now() + 3600000 } };
 }
 const client = {
@@ -67,7 +71,14 @@ beforeAll(() => {
         user_id: "42", role: "USER", aal: session.authenticator_assurance_level,
       };
       if (path === "/internal/session") return Response.json(canonical);
-      if (path === "/internal/google-connection") return Response.json({ session: canonical, connected: googleConnected });
+      if (path === "/internal/account/status") return Response.json({ session: canonical,
+        credentials: { password: hasPassword, google: googleConnected, totp: false, lookup_secret: false },
+        recovery_codes_remaining: 0,
+        profile: { email: "private@example.test", email_verified: true, username: "fixture", date_of_birth: null } });
+      if (path === "/internal/account/notify") {
+        notifications.push((await request.json()).event);
+        return new Response(null, { status: 204 });
+      }
       if (request.method === "POST") {
         posts.push(await request.json());
         if (postReply?.state === "success") session.authenticator_assurance_level = "aal2";
@@ -89,10 +100,12 @@ beforeAll(() => {
 beforeEach(() => {
   posts = []; readCount = 0; queries = []; responseStatus = 200; denyBinding = false; postReply = undefined;
   callbackCount = 0; callbackStatus = 200; callbackReply = undefined; callbackNext = undefined;
-  googleConnected = false;
+  googleConnected = false; hasPassword = true; notifications = [];
   sessionIdentity = { id: identityId, schema_id: "customer-v1" };
   session = { active: true, id: sessionId, identity: sessionIdentity,
-    authenticated_at: new Date().toISOString(), expires_at: provider.expiresAt, authenticator_assurance_level: "aal1" };
+    authenticated_at: new Date().toISOString(), expires_at: provider.expiresAt, authenticator_assurance_level: "aal1",
+    authentication_methods: [{ method: "password", completed_at: new Date().toISOString() },
+      { method: "totp", completed_at: new Date().toISOString() }] };
   reply = flow();
 });
 afterAll(() => {
@@ -139,6 +152,14 @@ test("projects generated/revealed backup codes without provider messages or cont
   expect(result.totpEnabled && result.backupEnabled).toBe(true);
   expect(result.actions.includes("backup_confirm")).toBe(true);
   expect(JSON.stringify(result).includes("not rendered")).toBe(false);
+});
+
+test("existing recovery codes can be regenerated without ever being revealed", () => {
+  const settings = projectSecuritySettings(flow(enabledNodes()), state());
+  expect(settings.actions).toEqual(expect.arrayContaining(["backup_generate", "backup_disable"]));
+  expect(settings.codes).toEqual([]);
+  expect(securityPayload(new URLSearchParams({ action: "backup_generate" }), settings, "provider-csrf"))
+    .toEqual({ method: "lookup_secret", csrf_token: "provider-csrf", lookup_secret_regenerate: true });
 });
 
 test("strictly allowlists native TOTP/lookup submissions and never trusts posted provider CSRF", () => {
@@ -300,8 +321,9 @@ test("Google callback completes same-account credential linking without provisio
   const tokens = structuredClone(current.tokens);
   const parameters = new URLSearchParams({ state: current.social.state, code: "fixture-unissued" });
   const response = await completeSocialCallback(current, "b".repeat(43), parameters, client);
-  expect(response.headers.get("location")).toContain("/account/security?flow=");
-  expect(response.headers.get("location")).toContain("saved=1");
+  expect(response.headers.get("location")).toContain("/account/connections?flow=");
+  expect(response.headers.get("location")).toContain("saved=google_connect");
+  expect(notifications).toEqual(["google_connected"]);
   expect(current.provider).toEqual(expected);
   expect(current.tokens).toEqual(tokens);
   expect(current.social).toBeUndefined();
@@ -359,5 +381,7 @@ test("native Google disconnect keeps the canonical account and only submits an a
     new URLSearchParams({ action: "google_disconnect", acknowledge: "yes" }));
   expect(posts[0]).toEqual({ method: "oidc", unlink: "google", csrf_token: "provider-csrf" });
   expect(result.saved).toBe(true);
+  expect(result.savedAction).toBe("google_disconnect");
+  expect(notifications).toEqual(["google_disconnected"]);
   expect(current.provider).toEqual(expected);
 });

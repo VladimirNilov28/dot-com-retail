@@ -208,7 +208,7 @@ export function AuthForm({ kind, flow, csrf, returnTo, method }: {
         <p>Complete the security check, then try again. If it cannot load, use the recovery link above.</p>
         <a className="store-link" href={`#auth-security-check-${method.name}`}>Go to security check</a>
       </div> : null}
-      <Button type="submit" variant={method.name === "lookup_secret" ? "secondary" : "primary"}
+      <Button type="submit" variant="primary"
         isDisabled={pending} className="auth-submit">
         {pending ? <LoaderCircle size={18} className="animate-spin" aria-hidden="true" /> : null}
         {pending ? "Submitting..." : method.label}

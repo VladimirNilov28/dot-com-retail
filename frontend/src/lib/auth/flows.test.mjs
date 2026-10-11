@@ -1,5 +1,11 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { submitFlow, validateFlow } from "./flows";
+import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
+import * as store from "./store";
+
+// Attempt counters live in Postgres; tests decide the limiter outcome explicitly.
+let attempts = [];
+let allowAttempt = true;
+mock.module("./store", () => ({ ...store, consumeAttempt: async (...args) => { attempts.push(args); return allowAttempt; } }));
+const { submitFlow, validateFlow } = await import("./flows");
 import { emptyJar } from "./provider";
 
 const id = "11111111-1111-4111-8111-111111111111";
@@ -11,6 +17,8 @@ let postedVerification;
 let postedRecovery;
 let postedReset;
 let postedSocial;
+let loginAal;
+const secondFactorPosts = [];
 let bridge;
 let availability = { email_available: true, username_available: true };
 const availabilityRequests = [];
@@ -45,6 +53,10 @@ beforeAll(() => {
           }
           return Response.json({});
         }
+        if (login && (body.method === "lookup_secret" || body.method === "totp")) {
+          secondFactorPosts.push(body.method);
+          return Response.json({ session: {} });
+        }
         if (reset) {
           postedReset = body;
         } else if (recovery) {
@@ -57,11 +69,14 @@ beforeAll(() => {
       }
       return Response.json({
         id, type: "browser", expires_at: new Date(Date.now() + 600000).toISOString(),
+        ...(login && loginAal ? { requested_aal: loginAal } : {}),
         ...(verification || recovery ? { state: "sent_email" } : reset ? { state: request.method === "POST" ? "success" : "show_form" } : {}),
         ui: { action: `${server.url.origin}/self-service/${verification ? "verification" : recovery ? "recovery" : reset ? "settings" : login ? "login" : "registration"}?flow=${id}`, method: "POST", nodes: [
           { type: "input", group: "password", attributes: { name: "method", type: "submit", value: verification || recovery ? "code" : "password" } },
           ...(verification || recovery ? [{ type: "input", group: "code", attributes: { name: "email", type: "submit", value: "fixture@bytecore.example" } }] : []),
           { type: "input", group: "default", attributes: { name: "csrf_token", type: "hidden", value: "fixture-csrf" } },
+          ...(login && loginAal ? ["totp", "lookup_secret"].map((value) =>
+            ({ type: "input", group: value, attributes: { name: "method", type: "submit", value } })) : []),
           ...(!verification && !recovery && !reset ? [{ type: "input", group: "oidc",
             attributes: { name: "provider", type: "submit", value: "google" } }] : []),
         ] },
@@ -247,5 +262,43 @@ describe("registration BFF validation before provider mutation", () => {
       expect((await submitFlow(state(), browser, id, "registration", submitted, client)).complete).toBe(true);
     }
     expect(posts).toBe(before + 2);
+  });
+});
+
+describe("second factor and recovery abuse limits", () => {
+  const lookup = new URLSearchParams({ method: "lookup_secret", csrf_token: "fixture-csrf", lookup_secret: "fixture-code" });
+  test("a recovery code is never accepted as a first-factor login", async () => {
+    loginAal = "aal1";
+    secondFactorPosts.length = 0;
+    await expect(submitFlow(state(), browser, id, "login", lookup, client)).rejects.toMatchObject({ code: "invalid_request" });
+    expect(secondFactorPosts).toEqual([]);
+    loginAal = undefined;
+  });
+
+  test("second-factor attempts are limited per browser before reaching the provider", async () => {
+    loginAal = "aal2";
+    secondFactorPosts.length = 0;
+    attempts = [];
+    allowAttempt = false;
+    for (const body of [lookup, new URLSearchParams({ method: "totp", csrf_token: "fixture-csrf", totp_code: "123456" })]) {
+      await expect(submitFlow(state(), browser, id, "login", body, client)).rejects.toMatchObject({ code: "rate_limited", status: 429 });
+    }
+    expect(secondFactorPosts).toEqual([]);
+    expect(attempts.map(([scope, subject]) => [scope, subject])).toEqual([["second_factor", browser], ["second_factor", browser]]);
+    allowAttempt = true;
+    await submitFlow(state(), browser, id, "login", lookup, client);
+    expect(secondFactorPosts).toEqual(["lookup_secret"]);
+    loginAal = undefined;
+  });
+
+  test("recovery email requests are limited per normalized address and per browser", async () => {
+    attempts = [];
+    allowAttempt = false;
+    postedRecovery = undefined;
+    await expect(submitFlow(state(), browser, id, "recovery", new URLSearchParams({ method: "code", csrf_token: "fixture-csrf",
+      email: "fixture@bytecore.example" }), client)).rejects.toMatchObject({ code: "rate_limited" });
+    expect(postedRecovery).toBeUndefined();
+    expect(attempts[0].slice(0, 2)).toEqual(["recovery_email", "fixture@bytecore.example"]);
+    allowAttempt = true;
   });
 });

@@ -9,6 +9,7 @@ import { currentProviderSession, providerClient, registrationAvailability } from
 import { assertFlow, bindFlow, withBrowser } from "./store";
 import { initializeFlow, validateFlow } from "./flows";
 import { assertSecuritySession, projectSecuritySettings, securitySettingsFlow } from "./settings";
+import { notifySecurityEvent } from "./account";
 import { authenticatedState } from "./session";
 
 export const googleCallbackPath = "/self-service/methods/oidc/callback/google";
@@ -146,7 +147,8 @@ export async function completeSocialCallback(state: BrowserState, browser: strin
       restarted = true;
       const next = await securitySettingsFlow(state, browser, client);
       if (success && next.google !== "connected") throw new AuthError("unavailable");
-      return redirectResponse(`/account/security?flow=${next.id}&${success ? "saved=1" :
+      if (success) await notifySecurityEvent(state, "google_connected");
+      return redirectResponse(`/account/connections?flow=${next.id}&${success ? "saved=google_connect" :
         `google=${query.has("error") ? "cancelled" : "failed"}`}`);
     }
     if (query.has("error")) {
@@ -241,7 +243,7 @@ export async function handleSocialCallback(request: NextRequest): Promise<NextRe
             completeSocialCallback(state, browser, request.nextUrl.searchParams, client));
         } catch (error) {
           if (error instanceof AuthError && ["reauthentication_required", "expired"].includes(error.code)) {
-            return redirectResponse("/account/security?reauth=required");
+            return redirectResponse("/account/connections?reauth=required");
           }
           throw error;
         }

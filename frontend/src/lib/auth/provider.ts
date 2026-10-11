@@ -48,6 +48,7 @@ export async function bridgeRequest(path: string, body: Record<string, unknown>)
       }
       throw new AuthError("forbidden", 403);
     }
+    if (response.status === 409) throw new AuthError("conflict", 409);
     if (!response.ok) {
       console.error("authentication bridge reason", "upstream_http_failure", response.status);
       throw new AuthError("unavailable");

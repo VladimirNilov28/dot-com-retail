@@ -3,7 +3,7 @@ import type { PoolClient } from "pg";
 import { authConfig } from "./config";
 import { AuthError, type BrowserState, type FormKind } from "./model";
 import { providerClient, providerFailure, registrationAvailability } from "./provider";
-import { assertFlow, bindFlow } from "./store";
+import { assertFlow, bindFlow, consumeAttempt } from "./store";
 import { object, text, uuid } from "@/lib/graphql/scalars";
 import { registrationPasswordError, type PasswordErrorCode } from "./password";
 import { googleAuthorization } from "./social";
@@ -13,6 +13,7 @@ export interface ProviderFlow {
   id: string;
   expiresAt: string;
   state?: string;
+  requestedAal?: "aal1" | "aal2";
   nodes: Record<string, unknown>[];
   messages: Record<string, unknown>[];
 }
@@ -43,6 +44,7 @@ export function validateFlow(value: unknown, kind: FormKind): ProviderFlow {
   return {
     id, expiresAt, nodes: ui.nodes.map(object), messages: (ui.messages ?? []).map(object),
     ...(flow.state !== undefined ? { state: text(flow.state) } : {}),
+    ...(flow.requested_aal === "aal1" || flow.requested_aal === "aal2" ? { requestedAal: flow.requested_aal } : {}),
   };
 }
 
@@ -116,6 +118,10 @@ function field(form: URLSearchParams, name: string, maximum: number, optional = 
   return values[0] ?? "";
 }
 
+async function limitSecondFactor(browser: string): Promise<void> {
+  if (!await consumeAttempt("second_factor", browser, 10, 900)) throw new AuthError("rate_limited", 429);
+}
+
 export async function submitFlow(
   state: BrowserState, browser: string, id: string, kind: FormKind, form: URLSearchParams, client: PoolClient,
 ): Promise<Submission> {
@@ -179,10 +185,14 @@ export async function submitFlow(
           method, csrf_token, identifier: field(form, "identifier", 255), password: field(form, "password", 4096),
         } })).data;
       } else if (method === "totp") {
+        await limitSecondFactor(browser);
         result = (await provider.api.updateLoginFlow({ flow: id, updateLoginFlowBody: {
           method, csrf_token, totp_code: field(form, "totp_code", 64),
         } })).data;
       } else if (method === "lookup_secret") {
+        // Recovery codes are only a second factor after primary sign-in; never a first factor.
+        if (flow.requestedAal !== "aal2") throw new AuthError("invalid_request", 400);
+        await limitSecondFactor(browser);
         result = (await provider.api.updateLoginFlow({ flow: id, updateLoginFlowBody: {
           method, csrf_token, lookup_secret: field(form, "lookup_secret", 128),
         } })).data;
@@ -224,6 +234,8 @@ export async function submitFlow(
           object(node.attributes).value === email) && flow.state === "sent_email") {
         throw new AuthError("invalid_request", 400);
       }
+      if (kind === "recovery" && email && (!await consumeAttempt("recovery_email", email.trim().toLowerCase(), 3, 900) ||
+          !await consumeAttempt("recovery_browser", browser, 6, 900))) throw new AuthError("rate_limited", 429);
       const body: { method: "code"; csrf_token: string; email?: string; code?: string } =
         { method: "code", csrf_token, ...(email ? { email } : { code }) };
       result = kind === "recovery"
