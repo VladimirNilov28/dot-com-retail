@@ -120,8 +120,13 @@ class GoogleMapperTest(unittest.TestCase):
         }
         return json.loads(_jsonnet.evaluate_snippet(
             "google-hook-test",
-            "(import '%s')(%s)" % (KRATOS / "google-registration-hook.jsonnet", json.dumps(context)),
+            "(%s)(%s)" % ((KRATOS / "google-registration-hook.jsonnet").read_text(), json.dumps(context)),
+            import_callback=self.reject_hook_import,
         ))
+
+    @staticmethod
+    def reject_hook_import(directory, path):
+        raise RuntimeError("Kratos webhook imports are unavailable")
 
     def test_onboarding_requires_real_user_fields_and_retains_captcha(self):
         identity = self.map()["identity"]
@@ -172,6 +177,29 @@ class GoogleMapperTest(unittest.TestCase):
         identity["traits"]["email"] = "substituted@example.com"
         with self.assertRaises(RuntimeError):
             self.hook(identity)
+
+    def test_self_contained_google_hook_matches_native_registration_payload_with_imports_disabled(self):
+        identity = self.map()["identity"]
+        identity["schema_id"] = "customer-v1"
+        identity["traits"].update(username="chosen-name", dateOfBirth="2000-01-02")
+        context = {"identity": {"schema_id": identity["schema_id"], "traits": identity["traits"]},
+            "flow": {"id": "flow", "type": "browser", "expires_at": "expiry",
+                "transient_payload": {"altcha": "browser-proof"}}}
+        for payload in [{"altcha": "browser-proof"}, {}, None]:
+            context["flow"]["transient_payload"] = payload
+            native = json.loads(_jsonnet.evaluate_snippet(
+                "native-hook-test",
+                "(%s)(%s)" % ((KRATOS / "registration-hook.jsonnet").read_text(), json.dumps(context)),
+                import_callback=self.reject_hook_import,
+            ))
+            public_identity = {**context["identity"], "verifiable_addresses": [{
+                "via": "email", "value": identity["traits"]["email"], "verified": True, "status": "completed"}]}
+            google = json.loads(_jsonnet.evaluate_snippet(
+                "google-hook-test", "(%s)(%s)" % ((KRATOS / "google-registration-hook.jsonnet").read_text(),
+                    json.dumps({**context, "identity": public_identity})),
+                import_callback=self.reject_hook_import,
+            ))
+            self.assertEqual(google, native)
 
     def test_provider_claims_cannot_supply_canonical_roles_or_adopt_by_email(self):
         kratos = Mock()

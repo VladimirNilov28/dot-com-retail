@@ -294,6 +294,18 @@ rejection. Only Kratos was rebuilt/recreated; its deployed template matches the
 source and Kratos/bridge health are responsive. Post-fix real Google completion
 still requires the owner's fresh browser attempt.
 
+Follow-up callbacks at **20:31:01 and 20:32:04 UTC** passed that address check
+but exposed a second template defect: `import not available
+registration-hook.jsonnet`. Kratos's restricted webhook Jsonnet VM does not
+permit imports; the earlier local evaluator did. The Google hook is now
+self-contained. An imports-disabled regression reproduced the actual failure
+before the fix, and twelve focused tests now pass, including payload parity
+with the native registration hook for valid/missing CAPTCHA payloads. The
+small duplicated payload mapping is intentional because this runtime cannot
+import the native template; the parity test prevents drift. Only Kratos was
+rebuilt/recreated again. This fixes the hook failure, not the documented second
+authorization hop; fresh real storefront session completion remains unverified.
+
 The BFF retains generic public errors and logs only a bounded callback stage,
 HTTP status and allowlisted provider reason (`token_exchange_invalid_client`,
 `token_exchange_invalid_grant`, `token_exchange_redirect_uri_mismatch`, or a
