@@ -9,7 +9,8 @@ const flow = "11111111-1111-4111-8111-111111111111";
 const nonce = "opaque-provider-state-not-issued-32";
 const registrationFlow = "22222222-2222-4222-8222-222222222222";
 let previous, server, callbacks = 0, callbackFailure, registrationContinuation, registrationReads = 0;
-let callbackSuccess, callbackLocation;
+let callbackSuccess, callbackLocation, bridge, availability = { email_available: true, username_available: true };
+const availabilityRequests = [];
 function nativeLogin() {
   return { id: flow, type: "browser", expires_at: new Date(Date.now() + 600000).toISOString(),
     ui: { action: `${server.url.origin}/self-service/login?flow=${flow}`, method: "POST", nodes: [
@@ -27,6 +28,11 @@ function nativeRegistration() {
         { type: "input", group: "oidc", attributes: { name: "provider", type: "submit", value: "google" } }] } };
 }
 beforeAll(() => {
+  bridge = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
+    if (new URL(request.url).pathname !== "/internal/registration/availability") throw new Error("Unexpected bridge request");
+    availabilityRequests.push({ authorization: request.headers.get("authorization"), body: await request.json() });
+    return Response.json(availability);
+  } });
   server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch(request) {
     if (new URL(request.url).pathname.includes("/callback/")) {
       callbacks++;
@@ -51,7 +57,7 @@ beforeAll(() => {
   previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
   Object.assign(process.env, {
     STOREFRONT_ORIGIN: "http://127.0.0.1:3300", AUTH_OAUTH_ISSUER: "http://127.0.0.1:24444",
-    AUTH_KRATOS_URL: server.url.origin, AUTH_BRIDGE_URL: "http://127.0.0.1:24446", AUTH_CLIENT_ID: "fixture-client",
+    AUTH_KRATOS_URL: server.url.origin, AUTH_BRIDGE_URL: bridge.url.origin, AUTH_CLIENT_ID: "fixture-client",
     AUTH_CLIENT_SECRET: "fixture-client-secret-not-issued-32", AUTH_BRIDGE_SECRET: "fixture-bridge-secret-not-issued-32",
     AUTH_DATABASE_URL: "postgres://fixture:fixture@127.0.0.1:25432/fixture",
     AUTH_SEAL_KEYS: JSON.stringify({ active: "fixture", keys: { fixture: Buffer.alloc(32, 1).toString("base64url") } }),
@@ -59,6 +65,7 @@ beforeAll(() => {
 });
 afterAll(() => {
   server.stop(true);
+  bridge.stop(true);
   for (const name of names) if (previous[name] === undefined) delete process.env[name]; else process.env[name] = previous[name];
 });
 
@@ -144,6 +151,49 @@ test("native callback 400 registration form continues missing-trait onboarding i
     expect(state.googleRegistration).toEqual({ flow: registrationFlow, email: "verified@example.test", submitted: false,
       providerValidation: false });
   } finally { registrationContinuation = undefined; }
+});
+
+test("verified Google email owned by another account routes to explicit sign-in before the completion form", async () => {
+  const state = { csrf: "a".repeat(43), jar: emptyJar(), returnTo: "/cart", social: { state: nonce, flow, kind: "login" } };
+  const bindings = [];
+  availability = { email_available: false, username_available: true };
+  registrationContinuation = nativeRegistration();
+  availabilityRequests.length = 0;
+  try {
+    const response = await completeSocialCallback(state, "b".repeat(43),
+      new URLSearchParams({ state: nonce, code: "fixture-code" }),
+      { query: async (sql, values) => { if (sql.startsWith("INSERT")) bindings.push(values); return { rowCount: 1 }; } });
+    const destination = new URL(response.headers.get("location"));
+    expect(destination.pathname).toBe("/login");
+    expect(destination.searchParams.get("social")).toBe("conflict");
+    expect(destination.searchParams.get("returnTo")).toBe("/cart");
+    expect(bindings.some((values) => values[0] === registrationFlow)).toBe(false);
+    expect(state.googleRegistration).toBeUndefined();
+    expect(availabilityRequests).toEqual([{ authorization: "Bearer fixture-bridge-secret-not-issued-32",
+      body: { email: "verified@example.test" } }]);
+  } finally { registrationContinuation = undefined; availability = { email_available: true, username_available: true }; }
+});
+
+test("canonical username conflict after provider round trip becomes a retained field error, not a generic rejection", async () => {
+  const state = { csrf: "a".repeat(43), jar: emptyJar(), returnTo: "/account", social: { state: nonce, flow: registrationFlow, kind: "registration" },
+    googleRegistration: { flow: registrationFlow, email: "verified@example.test", submitted: true, providerValidation: false,
+      username: "taken-name", dateOfBirth: "2000-01-02" } };
+  availability = { email_available: true, username_available: false };
+  registrationContinuation = nativeRegistration();
+  availabilityRequests.length = 0;
+  try {
+    const response = await completeSocialCallback(state, "b".repeat(43),
+      new URLSearchParams({ state: nonce, code: "fixture-code" }), { query: async () => ({ rowCount: 1 }) });
+    expect(new URL(response.headers.get("location")).pathname).toBe("/register");
+    expect(availabilityRequests[0].body).toEqual({ email: "verified@example.test", username: "taken-name" });
+    expect(state.googleRegistration).toEqual({ flow: registrationFlow, email: "verified@example.test", submitted: true,
+      providerValidation: false, username: "taken-name", dateOfBirth: "2000-01-02", usernameUnavailable: true });
+    const google = formMethods(nativeRegistration().ui.nodes, "registration", state.googleRegistration)[0];
+    expect(google.label).toBe("Complete registration");
+    expect(google.fields.find((field) => field.name === "traits.username"))
+      .toMatchObject({ value: "taken-name", error: "This username is already taken. Choose another." });
+    expect(google.fields.find((field) => field.name === "traits.dateOfBirth")).toMatchObject({ value: "2000-01-02", error: undefined });
+  } finally { registrationContinuation = undefined; availability = { email_available: true, username_available: true }; }
 });
 
 test("callback registration continuation cannot bind a malformed or foreign flow action", async () => {

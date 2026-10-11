@@ -181,6 +181,10 @@ export function formMethods(nodes: Record<string, unknown>[], kind: FormKind,
     if (!google) throw new TypeError("Google continuation is missing its provider control");
     const errors = googleRegistration.submitted ?
       googleProfileErrors(googleRegistration.username ?? "", googleRegistration.dateOfBirth ?? "") : {};
+    if (googleRegistration.usernameUnavailable && !errors["traits.username"]) {
+      errors["traits.username"] = "This username is already taken. Choose another.";
+    }
+    google.label = "Complete registration";
     google.fields = google.fields.map((field) => ({
       ...field,
       value: field.name === "traits.username" ? googleRegistration.username ?? field.value :

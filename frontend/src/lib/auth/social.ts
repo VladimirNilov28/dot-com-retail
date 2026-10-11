@@ -5,7 +5,7 @@ import { object } from "@/lib/graphql/scalars";
 import { authConfig } from "./config";
 import { AuthError, assertSameProvider, flowIdentifier, oneParameter, type BrowserState } from "./model";
 import { authBoundary, authHeaders, browserCookie, redirectResponse } from "./http";
-import { currentProviderSession, providerClient } from "./provider";
+import { currentProviderSession, providerClient, registrationAvailability } from "./provider";
 import { assertFlow, bindFlow, withBrowser } from "./store";
 import { initializeFlow, validateFlow } from "./flows";
 import { assertSecuritySession, projectSecuritySettings, securitySettingsFlow } from "./settings";
@@ -79,8 +79,16 @@ export async function completeSocialCallback(state: BrowserState, browser: strin
       }
       const previous = state.googleRegistration;
       if (previous && previous.email !== email) throw new AuthError("forbidden", 403);
-      state.googleRegistration = { ...previous, flow: id, email, submitted: previous?.submitted ?? false,
-        providerValidation: previous?.submitted ?? false };
+      const username = previous?.submitted ? previous.username?.trim() || undefined : undefined;
+      const available = await registrationAvailability(email, username);
+      // A verified Google email already used by another account must be
+      // authenticated with that account and linked explicitly, never registered.
+      if (!available.email) return await recoverConflict();
+      const next: NonNullable<BrowserState["googleRegistration"]> = { ...previous, flow: id, email,
+        submitted: previous?.submitted ?? false, providerValidation: (previous?.submitted ?? false) && available.username };
+      delete next.usernameUnavailable;
+      if (!available.username) next.usernameUnavailable = true;
+      state.googleRegistration = next;
     }
     await bindFlow(browser, id, kind, validated.expiresAt, client);
     return redirectResponse(`${kind === "registration" ? "/register" : "/login"}?flow=${id}` +

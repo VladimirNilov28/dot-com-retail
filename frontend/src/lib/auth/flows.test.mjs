@@ -11,10 +11,18 @@ let postedVerification;
 let postedRecovery;
 let postedReset;
 let postedSocial;
+let bridge;
+let availability = { email_available: true, username_available: true };
+const availabilityRequests = [];
 const names = ["STOREFRONT_ORIGIN", "AUTH_OAUTH_ISSUER", "AUTH_KRATOS_URL", "AUTH_BRIDGE_URL",
   "AUTH_CLIENT_ID", "AUTH_CLIENT_SECRET", "AUTH_BRIDGE_SECRET", "AUTH_DATABASE_URL", "AUTH_SEAL_KEYS"];
 
 beforeAll(() => {
+  bridge = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
+    if (new URL(request.url).pathname !== "/internal/registration/availability") throw new Error("Unexpected bridge request");
+    availabilityRequests.push(await request.json());
+    return Response.json(availability);
+  } });
   server = Bun.serve({
     hostname: "127.0.0.1", port: 0,
     async fetch(request) {
@@ -64,7 +72,7 @@ beforeAll(() => {
   previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
   Object.assign(process.env, {
     STOREFRONT_ORIGIN: "http://127.0.0.1:3300", AUTH_OAUTH_ISSUER: "http://127.0.0.1:24444",
-    AUTH_KRATOS_URL: server.url.origin, AUTH_BRIDGE_URL: "http://127.0.0.1:24446", AUTH_CLIENT_ID: "fixture-client",
+    AUTH_KRATOS_URL: server.url.origin, AUTH_BRIDGE_URL: bridge.url.origin, AUTH_CLIENT_ID: "fixture-client",
     AUTH_CLIENT_SECRET: "fixture-client-secret-not-issued-32", AUTH_BRIDGE_SECRET: "fixture-bridge-secret-not-issued-32",
     AUTH_DATABASE_URL: "postgres://fixture:fixture@127.0.0.1:25432/fixture",
     AUTH_SEAL_KEYS: JSON.stringify({ active: "fixture", keys: { fixture: Buffer.alloc(32, 1).toString("base64url") } }),
@@ -72,6 +80,7 @@ beforeAll(() => {
 });
 afterAll(() => {
   server.stop(true);
+  bridge.stop(true);
   for (const name of names) {
     if (previous[name] === undefined) delete process.env[name];
     else process.env[name] = previous[name];
@@ -150,6 +159,40 @@ test("Google registration rejects posted identity claims and preserves missing p
     await expect(submitFlow(current, browser, id, "registration", injected, client)).rejects.toMatchObject({ code: "invalid_request" });
   }
   expect(posts).toBe(before);
+});
+
+test("bound Google completion checks canonical conflicts before the second provider authorization", async () => {
+  const submitted = new URLSearchParams({ method: "oidc", provider: "google", csrf_token: "fixture-csrf",
+    "traits.username": "taken-name", "traits.dateOfBirth": "2000-01-02", altcha: "fixture-proof" });
+  const bound = () => ({ ...state(), googleRegistration: { flow: id, email: "verified@example.test", submitted: false } });
+  try {
+    availability = { email_available: true, username_available: false };
+    let current = bound();
+    const before = posts;
+    expect(await submitFlow(current, browser, id, "registration", submitted, client))
+      .toMatchObject({ complete: false, validation: true });
+    expect(posts).toBe(before);
+    expect(current.googleRegistration).toMatchObject({ username: "taken-name", dateOfBirth: "2000-01-02",
+      submitted: true, providerValidation: false, usernameUnavailable: true });
+    expect(availabilityRequests.at(-1)).toEqual({ email: "verified@example.test", username: "taken-name" });
+
+    availability = { email_available: false, username_available: true };
+    current = bound();
+    expect(await submitFlow(current, browser, id, "registration", submitted, client))
+      .toEqual({ complete: true, socialConflict: true });
+    expect(posts).toBe(before);
+    expect(current.googleRegistration).toBeUndefined();
+
+    availability = { email_available: true, username_available: true };
+    current = bound();
+    current.googleRegistration.usernameUnavailable = true;
+    submitted.set("traits.username", "free-name");
+    await submitFlow(current, browser, id, "registration", submitted, client);
+    expect(posts).toBe(before + 1);
+    expect(current.googleRegistration.usernameUnavailable).toBeUndefined();
+    expect(postedSocial.upstream_parameters).toEqual({ login_hint: "verified@example.test" });
+    expect(postedSocial.traits).toEqual({ username: "free-name", dateOfBirth: "2000-01-02" });
+  } finally { availability = { email_available: true, username_available: true }; }
 });
 
 test("duplicate OAuth initiation is rejected before another provider submission", async () => {

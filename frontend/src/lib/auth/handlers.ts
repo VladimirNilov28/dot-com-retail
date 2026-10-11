@@ -189,6 +189,11 @@ async function submit(request: NextRequest): Promise<NextResponse> {
     `&returnTo=${encodeURIComponent(submission.returnTo)}`);
   if (submission.settingsFlow) return redirectResponse(`/reset?flow=${submission.settingsFlow}`);
   if (submission.socialRedirect) return redirectResponse(submission.socialRedirect);
+  if (submission.socialConflict) {
+    const login = await withBrowser(browser, async (state, client) =>
+      ({ id: (await initializeFlow(state, browser, "login", client)).id, returnTo: state.returnTo }));
+    return redirectResponse(`/login?flow=${login.id}&social=conflict&returnTo=${encodeURIComponent(login.returnTo)}`);
+  }
   if (submission.socialComplete) return handoff(browser);
   if (kind === "reset") {
     // A recovery session is not a storefront OAuth login. Discard it after

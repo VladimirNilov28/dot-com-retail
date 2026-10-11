@@ -60,6 +60,16 @@ export async function bridgeRequest(path: string, body: Record<string, unknown>)
   }
 }
 
+/** Mirrors canonical reservation conflicts for a provider-verified email only. */
+export async function registrationAvailability(email: string, username?: string):
+  Promise<{ email: boolean; username: boolean }> {
+  const result = object(await bridgeRequest("registration/availability", { email, ...(username ? { username } : {}) }));
+  if (typeof result.email_available !== "boolean" || typeof result.username_available !== "boolean") {
+    throw new AuthError("unavailable");
+  }
+  return { email: result.email_available, username: result.username_available };
+}
+
 export async function providerCookie(state: BrowserState): Promise<string> {
   return CookieJar.deserializeSync(state.jar).getCookieString(authConfig().kratos);
 }

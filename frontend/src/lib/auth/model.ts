@@ -55,7 +55,7 @@ export interface BrowserState {
   revokeProvider?: boolean;
   securityReauth?: "aal1" | "aal2";
   social?: { state: string; flow: string; kind: "login" | "registration" | "settings" };
-  googleRegistration?: { flow: string; email: string; submitted: boolean; providerValidation?: boolean; username?: string; dateOfBirth?: string };
+  googleRegistration?: { flow: string; email: string; submitted: boolean; providerValidation?: boolean; username?: string; dateOfBirth?: string; usernameUnavailable?: boolean };
 }
 
 export function grantTokens(response: {
@@ -202,7 +202,8 @@ export function decodeBrowserState(value: unknown): BrowserState {
     if (typeof registration.email !== "string" || registration.email.length > 255 ||
         !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(registration.email) ||
         typeof registration.submitted !== "boolean" || (registration.providerValidation !== undefined &&
-          typeof registration.providerValidation !== "boolean")) throw new AuthError("unavailable");
+          typeof registration.providerValidation !== "boolean") || (registration.usernameUnavailable !== undefined &&
+          typeof registration.usernameUnavailable !== "boolean")) throw new AuthError("unavailable");
     for (const [key, limit] of [["username", 255], ["dateOfBirth", 10]] as const) {
       if (registration[key] !== undefined && (typeof registration[key] !== "string" ||
           registration[key].length > limit || /[\u0000\r\n]/.test(registration[key]))) throw new AuthError("unavailable");
@@ -211,7 +212,8 @@ export function decodeBrowserState(value: unknown): BrowserState {
       submitted: registration.submitted,
       providerValidation: typeof registration.providerValidation === "boolean" ? registration.providerValidation : undefined,
       username: typeof registration.username === "string" ? registration.username : undefined,
-      dateOfBirth: typeof registration.dateOfBirth === "string" ? registration.dateOfBirth : undefined };
+      dateOfBirth: typeof registration.dateOfBirth === "string" ? registration.dateOfBirth : undefined,
+      ...(registration.usernameUnavailable === true ? { usernameUnavailable: true } : {}) };
   }
   if (input.tokens !== undefined) {
     const tokens = object(input.tokens);

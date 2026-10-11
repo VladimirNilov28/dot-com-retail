@@ -2,7 +2,7 @@ import "server-only";
 import type { PoolClient } from "pg";
 import { authConfig } from "./config";
 import { AuthError, type BrowserState, type FormKind } from "./model";
-import { providerClient, providerFailure } from "./provider";
+import { providerClient, providerFailure, registrationAvailability } from "./provider";
 import { assertFlow, bindFlow } from "./store";
 import { object, text, uuid } from "@/lib/graphql/scalars";
 import { registrationPasswordError, type PasswordErrorCode } from "./password";
@@ -104,7 +104,7 @@ export async function readFlow(
   }
 }
 
-export type Submission = { complete: true; verificationFlow?: string; settingsFlow?: string; socialRedirect?: string; socialComplete?: true } |
+export type Submission = { complete: true; verificationFlow?: string; settingsFlow?: string; socialRedirect?: string; socialComplete?: true; socialConflict?: true } |
   { complete: false; validation: boolean; flow: ProviderFlow; passwordError?: PasswordErrorCode };
 
 function field(form: URLSearchParams, name: string, maximum: number, optional = false): string {
@@ -143,16 +143,34 @@ export async function submitFlow(
         }
         const username = field(form, "traits.username", 255, true);
         const dateOfBirth = field(form, "traits.dateOfBirth", 10, true);
-        if (state.googleRegistration?.flow === id) {
-          state.googleRegistration = { ...state.googleRegistration, submitted: true, providerValidation: false, username, dateOfBirth };
+        const bound = state.googleRegistration?.flow === id ? state.googleRegistration : undefined;
+        if (bound) {
+          state.googleRegistration = { ...bound, submitted: true, providerValidation: false, username, dateOfBirth };
+          delete state.googleRegistration.usernameUnavailable;
         }
         if (Object.keys(googleProfileErrors(username, dateOfBirth)).length) {
           return { complete: false, validation: true, flow };
+        }
+        let upstream: { login_hint: string } | undefined;
+        if (bound && state.googleRegistration) {
+          // Check canonical conflicts before the provider's required second
+          // authorization, so a known conflict cannot surface only afterward.
+          const available = await registrationAvailability(bound.email, username.trim());
+          if (!available.email) {
+            delete state.googleRegistration;
+            return { complete: true, socialConflict: true };
+          }
+          if (!available.username) {
+            state.googleRegistration.usernameUnavailable = true;
+            return { complete: false, validation: true, flow };
+          }
+          upstream = { login_hint: bound.email };
         }
         result = (await provider.api.updateRegistrationFlow({ flow: id, updateRegistrationFlowBody: {
           method: "oidc", provider: "google", csrf_token,
           traits: { username, dateOfBirth },
           transient_payload: { altcha: field(form, "altcha", 16384) },
+          ...(upstream ? { upstream_parameters: upstream } : {}),
         } })).data;
       } else throw new AuthError("invalid_request", 400);
     } else if (kind === "login") {
