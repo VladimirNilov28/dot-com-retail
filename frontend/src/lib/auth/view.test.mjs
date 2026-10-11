@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { authFieldId, captchaFailure, formMessages, formMethods, googleProfileErrors, temporaryAuthMessage } from "./view";
+import { authFieldId, captchaFailure, formMessages, formMethods, googleProfileErrors, methodNeedsCaptcha, temporaryAuthMessage } from "./view";
 
 const input = (name, value, group = "default", type = "text", messages = []) => ({
   type: "input", group, attributes: { name, value, type, required: true }, messages,
@@ -25,6 +25,22 @@ test("verified Google onboarding is passwordless, immutable-email and error-free
   expect(googleProfileErrors("chosen-name", "1990-02-28")).toEqual({});
   expect(googleProfileErrors(" ", "1990-02-30")["traits.dateOfBirth"]).toBeTruthy();
   expect(googleProfileErrors("chosen-name", "2990-02-28")["traits.dateOfBirth"]).toBeTruthy();
+});
+
+test("initial registration: Google entry has no profile fields or CAPTCHA, ordinary form has one of each field", () => {
+  const nodes = [csrf, password, input("provider", "google", "oidc", "submit"), input("password", "", "password", "password"),
+    input("traits.dateOfBirth", "", "default"), input("traits.username", "", "default"), input("traits.email", "", "default", "email")];
+  const methods = formMethods(nodes, "registration");
+  expect(methods.map((method) => method.name)).toEqual(["oidc", "password"]);
+  expect(methods[0].fields.map((field) => field.name)).toEqual(["csrf_token"]);
+  expect(methodNeedsCaptcha("registration", methods[0])).toBe(false);
+  expect(methods[1].fields.filter((field) => field.type !== "hidden").map((field) => field.name))
+    .toEqual(["traits.email", "traits.username", "traits.dateOfBirth", "password"]);
+  expect(methodNeedsCaptcha("registration", methods[1])).toBe(true);
+  const completion = formMethods(nodes, "registration", { flow: "f", email: "v@example.test", submitted: false });
+  expect(completion).toHaveLength(1);
+  expect(methodNeedsCaptcha("registration", completion[0])).toBe(true);
+  expect(completion[0].fields.some((field) => field.name === "password")).toBe(false);
 });
 
 describe("safe provider form projection", () => {

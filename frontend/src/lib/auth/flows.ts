@@ -150,15 +150,18 @@ export async function submitFlow(
         const username = field(form, "traits.username", 255, true);
         const dateOfBirth = field(form, "traits.dateOfBirth", 10, true);
         const bound = state.googleRegistration?.flow === id ? state.googleRegistration : undefined;
-        if (bound) {
+        if (!bound) {
+          // Entry button: starts Google authorization only; profile fields and CAPTCHA belong to the completion step.
+          if (username || dateOfBirth || form.has("altcha")) throw new AuthError("invalid_request", 400);
+          result = (await provider.api.updateRegistrationFlow({ flow: id, updateRegistrationFlowBody: {
+            method: "oidc", provider: "google", csrf_token, traits: {},
+          } })).data;
+        } else {
           state.googleRegistration = { ...bound, submitted: true, providerValidation: false, username, dateOfBirth };
           delete state.googleRegistration.usernameUnavailable;
-        }
-        if (Object.keys(googleProfileErrors(username, dateOfBirth)).length) {
-          return { complete: false, validation: true, flow };
-        }
-        let upstream: { login_hint: string } | undefined;
-        if (bound && state.googleRegistration) {
+          if (Object.keys(googleProfileErrors(username, dateOfBirth)).length) {
+            return { complete: false, validation: true, flow };
+          }
           // Check canonical conflicts before the provider's required second
           // authorization, so a known conflict cannot surface only afterward.
           const available = await registrationAvailability(bound.email, username.trim());
@@ -170,14 +173,13 @@ export async function submitFlow(
             state.googleRegistration.usernameUnavailable = true;
             return { complete: false, validation: true, flow };
           }
-          upstream = { login_hint: bound.email };
+          result = (await provider.api.updateRegistrationFlow({ flow: id, updateRegistrationFlowBody: {
+            method: "oidc", provider: "google", csrf_token,
+            traits: { username, dateOfBirth },
+            transient_payload: { altcha: field(form, "altcha", 16384) },
+            upstream_parameters: { login_hint: bound.email },
+          } })).data;
         }
-        result = (await provider.api.updateRegistrationFlow({ flow: id, updateRegistrationFlowBody: {
-          method: "oidc", provider: "google", csrf_token,
-          traits: { username, dateOfBirth },
-          transient_payload: { altcha: field(form, "altcha", 16384) },
-          ...(upstream ? { upstream_parameters: upstream } : {}),
-        } })).data;
       } else throw new AuthError("invalid_request", 400);
     } else if (kind === "login") {
       if (method === "password") {

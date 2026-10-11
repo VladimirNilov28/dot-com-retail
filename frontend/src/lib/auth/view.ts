@@ -21,6 +21,11 @@ export interface AuthMethod {
   provider?: "google";
 }
 
+/** Only the password form and the Google completion step carry a CAPTCHA; the Google entry button does not. */
+export function methodNeedsCaptcha(kind: string, method: AuthMethod): boolean {
+  return kind === "registration" && (method.name !== "oidc" || method.fields.some((field) => field.name === "traits.username"));
+}
+
 const labels: Record<string, string> = {
   csrf_token: "", identifier: "Email", "traits.email": "Email",
   "traits.username": "Username", "traits.dateOfBirth": "Date of birth",
@@ -136,10 +141,11 @@ export function formMethods(nodes: Record<string, unknown>[], kind: FormKind,
     const fields: AuthField[] = [];
     for (const candidate of nodes) {
       if (candidate.type !== "input" || (candidate.group !== "default" && candidate.group !== node.group &&
-          !(google && ["traits.username", "traits.dateOfBirth"].includes(String(object(candidate.attributes).name))))) continue;
+          !(google && googleRegistration && ["traits.username", "traits.dateOfBirth"].includes(String(object(candidate.attributes).name))))) continue;
       const input = object(candidate.attributes);
       if (input.name === "method" || input.type === "submit") continue;
-      if (google && !["csrf_token", "traits.username", "traits.dateOfBirth"].includes(String(input.name))) continue;
+      if (google && !(googleRegistration ? ["csrf_token", "traits.username", "traits.dateOfBirth"] : ["csrf_token"])
+        .includes(String(input.name))) continue;
       if (typeof input.name !== "string" || !(input.name in labels)) {
         if (input.required === true) throw new TypeError("Unsupported required provider field");
         continue;
@@ -195,6 +201,14 @@ export function formMethods(nodes: Record<string, unknown>[], kind: FormKind,
     google.fields.splice(1, 0, { name: "traits.email", label: "Google email", type: "email",
       required: false, value: googleRegistration.email, readOnly: true });
     return [google];
+  }
+  if (kind === "registration") {
+    // One entry point per method: Google first, then the ordinary form with a stable field order.
+    const order = ["csrf_token", "traits.email", "traits.username", "traits.dateOfBirth", "password"];
+    for (const method of methods) {
+      if (method.name === "password") method.fields.sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name));
+    }
+    methods.sort((a, b) => Number(b.name === "oidc") - Number(a.name === "oidc"));
   }
   if (!methods.length || methods.length > 3 || new Set(methods.map((method) => method.name)).size !== methods.length) {
     throw new TypeError("Unsupported provider methods");

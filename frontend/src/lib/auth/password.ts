@@ -1,6 +1,6 @@
 // Must match the Kratos minimum and deployed bcrypt byte limit.
 export const registrationPasswordPolicy = { minBytes: 8, maxBytes: 72 } as const;
-export const passwordGuidance = `Recommended: Use lowercase and uppercase letters, numbers and symbols. Minimum ${registrationPasswordPolicy.minBytes} UTF-8 bytes.`;
+export const passwordGuidance = `At least ${registrationPasswordPolicy.minBytes} characters; longer is stronger.`;
 
 export type PasswordErrorCode = "minimum" | "maximum";
 

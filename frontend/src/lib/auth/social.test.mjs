@@ -117,7 +117,7 @@ test("provider callback preserves encrypted jar continuity and refuses replay be
   await expect(completeSocialCallback(state, "b".repeat(43), query, client)).rejects.toThrow();
   expect(callbacks).toBe(before);
 });
-test("social registration requests real missing traits without requiring password/email or privileged fields", () => {
+test("Google entry carries no profile fields; the bound completion requests real missing traits without password/email or privileged fields", () => {
   const input = (name, group, type, value = "") => ({ type: "input", group, attributes: { name, type, value, required: true } });
   const nodes = [input("csrf_token", "default", "hidden", "fixture"),
     input("traits.username", "password", "text"), input("traits.dateOfBirth", "password", "date"),
@@ -126,7 +126,11 @@ test("social registration requests real missing traits without requiring passwor
   const methods = formMethods(nodes, "registration");
   const social = methods.find((method) => method.name === "oidc");
   expect(social.provider).toBe("google");
-  expect(social.fields.map((field) => field.name)).toEqual(["csrf_token", "traits.username", "traits.dateOfBirth"]);
+  expect(social.fields.map((field) => field.name)).toEqual(["csrf_token"]);
+  const completion = formMethods(nodes, "registration", { flow, email: "verified@example.test", submitted: false });
+  expect(completion.map((method) => method.name)).toEqual(["oidc"]);
+  expect(completion[0].fields.filter((field) => !field.readOnly).map((field) => field.name))
+    .toEqual(["csrf_token", "traits.username", "traits.dateOfBirth"]);
   expect(formMethods(nodes.filter((node) => node.group !== "oidc"), "registration").some((method) => method.name === "oidc")).toBe(false);
 });
 

@@ -88,7 +88,7 @@ export async function AuthPage({ kind, searchParams }: { kind: FormKind; searchP
     secondFactor ? "Enter the 6-digit code from your authenticator app." :
     kind === "login" ? "Sign in to your ByteCore account." :
       kind === "registration" ? view.google ? "Your Google email is verified. Add your missing account details to continue. No password is needed." :
-        "Create your account, verify your email, then sign in." :
+        "" :
         kind === "recovery" ? "Request a secure email code to reset your password." :
           kind === "reset" ? "Choose a new password, then sign in again. Other sessions will be invalidated." :
         "Complete email verification before signing in.";
@@ -99,7 +99,7 @@ export async function AuthPage({ kind, searchParams }: { kind: FormKind; searchP
           ? <ShieldCheck size={24} className="text-accent" aria-hidden="true" />
           : <KeyRound size={24} className="text-accent" aria-hidden="true" />}
         <h1 id="auth-title" className="text-2xl font-semibold tracking-tight sm:text-3xl">{title}</h1>
-        <p className="text-muted">{description}</p>
+        {description ? <p className="text-muted">{description}</p> : null}
       </div>
       <div className="auth-panel">
         {kind === "login" && query.social === "conflict" ? <p role="alert" className="mb-5 text-sm text-muted">
@@ -130,7 +130,8 @@ export async function AuthPage({ kind, searchParams }: { kind: FormKind; searchP
           recovery. Replace your authenticator from Account security right away.</p> : null}
         {methods.map((method, index) => (
           <div key={method.name} className={index ? "auth-alternative-method" : undefined}>
-            {methods.length > 1 ? <h2 className="mb-3 font-semibold">{method.name === "lookup_secret" ? "Recovery" :
+            {index && kind === "registration" ? <p className="auth-divider" aria-hidden="true"><span>or</span></p> : null}
+            {methods.length > 1 && kind !== "registration" ? <h2 className="mb-3 font-semibold">{method.name === "lookup_secret" ? "Recovery" :
               method.name === "oidc" ? "Google" : method.name === "password" ? "Email and password" : "Authenticator"}</h2> : null}
             <AuthForm kind={kind} flow={view.flow.id} csrf={view.csrf} returnTo={view.returnTo} method={method} />
           </div>

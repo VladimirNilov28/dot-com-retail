@@ -145,13 +145,26 @@ test("reset enforces shared byte policy before provider mutation and forwards no
   expect(Object.keys(postedReset).sort()).toEqual(["csrf_token", "method", "password"]);
 });
 
+test("Google entry starts authorization with an empty form: no profile fields, CAPTCHA or traits", async () => {
+  const entry = new URLSearchParams({ method: "oidc", provider: "google", csrf_token: "fixture-csrf" });
+  expect(await submitFlow(state(), browser, id, "registration", entry, client)).toEqual({ complete: true, socialComplete: true });
+  expect(postedSocial.traits).toEqual({});
+  expect(postedSocial.transient_payload).toBeUndefined();
+  for (const extra of [{ "traits.username": "x" }, { altcha: "x" }]) {
+    await expect(submitFlow(state(), browser, id, "registration", new URLSearchParams({ ...Object.fromEntries(entry), ...extra }), client))
+      .rejects.toMatchObject({ code: "invalid_request" });
+  }
+});
+
 test("provider-authenticated registration continuation completes through canonical handoff, not a second redirect", async () => {
+  availability = { email_available: true, username_available: true };
   const submitted = form("must-not-forward");
   submitted.set("method", "oidc");
   submitted.set("provider", "google");
   submitted.delete("password");
   submitted.delete("traits.email");
-  const result = await submitFlow(state(), browser, id, "registration", submitted, client);
+  const bound = { ...state(), googleRegistration: { flow: id, email: "verified@example.test", submitted: false } };
+  const result = await submitFlow(bound, browser, id, "registration", submitted, client);
   expect(result).toEqual({ complete: true, socialComplete: true });
   expect(postedSocial.traits).toEqual({ username: "fixture", dateOfBirth: "1990-06-01" });
   expect(postedSocial.transient_payload.altcha).toBe("fixture-proof");

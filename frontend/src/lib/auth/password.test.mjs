@@ -30,6 +30,6 @@ describe("deployed Kratos password guidance", () => {
     expect(passwordErrorMessage("maximum")).toBe("Use no more than 72 UTF-8 bytes.");
     expect(passwordErrorMessage("http://private/exception")).toBeUndefined();
     expect(passwordErrorMessage(["minimum"])).toBeUndefined();
-    expect(passwordGuidance).toBe("Recommended: Use lowercase and uppercase letters, numbers and symbols. Minimum 8 UTF-8 bytes.");
+    expect(passwordGuidance).toBe("At least 8 characters; longer is stronger.");
   });
 });

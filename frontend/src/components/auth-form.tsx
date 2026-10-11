@@ -4,7 +4,7 @@ import { Button, FieldError, Input, Label, TextField } from "@heroui/react";
 import { Eye, EyeOff, LoaderCircle, RotateCcw } from "lucide-react";
 import { createElement, useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import { flushSync } from "react-dom";
-import { authFieldId, captchaFailure, type AuthMethod } from "@/lib/auth/view";
+import { authFieldId, captchaFailure, methodNeedsCaptcha, type AuthMethod } from "@/lib/auth/view";
 import type { FormKind } from "@/lib/auth/model";
 import { passwordGuidance, passwordErrorMessage, registrationPasswordError } from "@/lib/auth/password";
 import { verificationLinkCode } from "@/lib/auth/verification";
@@ -16,7 +16,7 @@ const serverSnapshot = () => false;
 function PasswordGuidance({ inputId }: { inputId: string }) {
   const [lengthError, setLengthError] = useState<string>();
   const [score, setScore] = useState<number>();
-  const [strengthState, setStrengthState] = useState("Not measured");
+  const [strengthState, setStrengthState] = useState("");
   useEffect(() => {
     const input = document.getElementById(inputId);
     if (!(input instanceof HTMLInputElement)) return;
@@ -29,7 +29,7 @@ function PasswordGuidance({ inputId }: { inputId: string }) {
       clearTimeout(timer);
       setLengthError(input.value ? passwordErrorMessage(registrationPasswordError(input.value)) : undefined);
       setScore(undefined);
-      setStrengthState(input.value ? "Measuring..." : "Not measured");
+      setStrengthState("");
       if (!input.value) return;
       timer = setTimeout(() => {
         import("@/lib/auth/password-strength").then(({ passwordStrength, strengthLabels }) => {
@@ -40,7 +40,6 @@ function PasswordGuidance({ inputId }: { inputId: string }) {
           setStrengthState(strengthLabels[result]);
         }).catch(() => {
           console.error("authentication guidance reason", "strength_module_unavailable");
-          if (active && current === revision) setStrengthState("Unavailable");
         });
       }, 200);
     }
@@ -53,11 +52,10 @@ function PasswordGuidance({ inputId }: { inputId: string }) {
     <div id={`${inputId}-guidance`} className="auth-password-guidance text-sm text-muted">
       <p>{passwordGuidance}</p>
       {lengthError ? <p className="text-danger" role="status">{lengthError}</p> : null}
-      <div className="auth-strength">
-        <p role="status">Estimated strength: {strengthState}</p>
-        {score !== undefined ? <meter min={0} max={4} value={score} aria-label={`Estimated password strength: ${strengthState}`} /> : null}
-      </div>
-      <noscript><style>{".auth-strength { display: none; }"}</style></noscript>
+      {score !== undefined ? <div className="auth-strength">
+        <meter min={0} max={4} value={score} aria-label={`Estimated password strength: ${strengthState}`} />
+        <p role="status">Strength: {strengthState}</p>
+      </div> : null}
     </div>
   );
 }
@@ -144,7 +142,7 @@ export function AuthForm({ kind, flow, csrf, returnTo, method }: {
   }, [kind]);
   function submit(event: FormEvent<HTMLFormElement>) {
     if (pending) { event.preventDefault(); return; }
-    if (kind === "registration" && !new FormData(event.currentTarget).get("altcha")) {
+    if (methodNeedsCaptcha(kind, method) && !new FormData(event.currentTarget).get("altcha")) {
       event.preventDefault();
       flushSync(() => setCaptchaError(true));
       document.getElementById(`auth-client-error-summary-${method.name}`)?.focus();
@@ -203,7 +201,7 @@ export function AuthForm({ kind, flow, csrf, returnTo, method }: {
               ? <PasswordGuidance inputId={authFieldId(method.name, field.name)} /> : null}
           </TextField>
         ))}
-      {kind === "registration" ? <Captcha flow={flow} returnTo={returnTo} method={method.name} /> : null}
+      {methodNeedsCaptcha(kind, method) ? <Captcha flow={flow} returnTo={returnTo} method={method.name} /> : null}
       {captchaError ? <div id={`auth-client-error-summary-${method.name}`} className="auth-summary" role="alert" tabIndex={-1}>
         <p>Complete the security check, then try again. If it cannot load, use the recovery link above.</p>
         <a className="store-link" href={`#auth-security-check-${method.name}`}>Go to security check</a>

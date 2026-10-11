@@ -378,3 +378,9 @@ Contract sources, pinned to the installed version:
 - [Existing provider-subject lookup and account conflicts](https://github.com/ory/kratos/blob/v26.2.0/selfservice/strategy/oidc/strategy_login.go)
 - [Self-hosted linking, privileged sessions and last-first-factor unlink protection](https://github.com/ory/kratos/blob/v26.2.0/selfservice/strategy/oidc/strategy_settings.go)
 - [Native registration JSON completion](https://github.com/ory/kratos/blob/v26.2.0/selfservice/flow/registration/hook.go)
+
+## Registration page composition (#67, #70)
+
+The initial registration page is one card: "Continue with Google", an "or" divider, and a single email/password form (email, username, date of birth, password, one CAPTCHA). The Google entry button posts only the flow CSRF token and starts Google authorization with no profile fields and no CAPTCHA; the server rejects username, date of birth or CAPTCHA values on that entry request.
+
+The separate "Complete your registration" state appears only when the validated server-side flow is bound to a verified Google identity that is not yet linked (`googleRegistration` in the encrypted browser state, never a query flag). It shows the read-only verified email, username, date of birth and exactly one CAPTCHA, with a "Complete registration" button and no password form. Linked Google users sign in directly; matching-email conflicts still route to explicit sign-in and linking. Real Google consent and the completion form with a fresh Google identity remain owner-assisted checks.
