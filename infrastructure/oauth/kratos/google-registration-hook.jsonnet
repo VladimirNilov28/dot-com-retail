@@ -1,8 +1,15 @@
 local native = import 'registration-hook.jsonnet';
 function(ctx)
-  local proof = ctx.identity.metadata_admin.bytecore_oidc;
-  assert proof.provider == 'google' &&
-         std.type(proof.subject) == 'string' && std.length(proof.subject) > 0 &&
-         proof.email == ctx.identity.traits.email
-    : 'Google account proof does not match the registration.';
+  // Kratos omits private metadata from webhook identities. The OIDC mapper
+  // validates subject/email; Kratos applies its verified-address evidence here.
+  local addresses = if std.objectHas(ctx.identity, 'verifiable_addresses') &&
+                       std.type(ctx.identity.verifiable_addresses) == 'array'
+                    then ctx.identity.verifiable_addresses else [];
+  assert std.length(std.filter(function(address)
+    std.objectHas(address, 'via') && address.via == 'email' &&
+    std.objectHas(address, 'value') && address.value == ctx.identity.traits.email &&
+    std.objectHas(address, 'verified') && address.verified == true &&
+    std.objectHas(address, 'status') && address.status == 'completed',
+    addresses)) == 1
+    : 'Google verified email does not match the registration.';
   native(ctx)

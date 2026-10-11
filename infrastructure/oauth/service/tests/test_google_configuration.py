@@ -101,8 +101,18 @@ class GoogleMapperTest(unittest.TestCase):
                 self.map(**overrides)
 
     def hook(self, identity):
+        # Match Identity.MarshalJSON and the verified-address application in
+        # Kratos v26.2.0, not the raw mapper result (which includes private metadata).
+        public_identity = {
+            "schema_id": identity["schema_id"],
+            "traits": identity["traits"],
+            "verifiable_addresses": identity.get("verifiable_addresses", [
+                {**address, "verified": True, "status": "completed"}
+                for address in identity.get("verified_addresses", [])
+            ]),
+        }
         context = {
-            "identity": identity,
+            "identity": public_identity,
             "flow": {
                 "id": "flow", "type": "browser", "expires_at": "expiry",
                 "transient_payload": {"altcha": "browser-proof"},
@@ -138,13 +148,30 @@ class GoogleMapperTest(unittest.TestCase):
             registration.pre_persist(body, str(uuid4()))
         spring.reserve_registration.assert_not_called()
 
-    def test_registration_rejects_email_substitution_or_wrong_provider(self):
-        for field, value in (("email", "other@example.com"), ("provider", "other"), ("subject", "")):
+    def test_public_hook_context_rejects_unverified_missing_duplicate_or_substituted_email(self):
+        for addresses in (
+            [],
+            [{"via": "email", "value": "customer@example.com", "verified": False, "status": "pending"}],
+            [{"via": "email", "value": "other@example.com", "verified": True, "status": "completed"}],
+            [{"via": "email", "value": "customer@example.com", "verified": True, "status": "completed"}] * 2,
+        ):
             identity = self.map()["identity"]
             identity["schema_id"] = "customer-v1"
-            identity["metadata_admin"]["bytecore_oidc"][field] = value
-            with self.subTest(field=field), self.assertRaises(RuntimeError):
+            identity["verifiable_addresses"] = addresses
+            with self.subTest(addresses=addresses), self.assertRaises(RuntimeError):
                 self.hook(identity)
+
+    def test_real_webhook_projection_needs_no_private_metadata_and_preserves_profile_and_captcha(self):
+        identity = self.map()["identity"]
+        identity["schema_id"] = "customer-v1"
+        identity["traits"].update(username="chosen-name", dateOfBirth="2000-01-02")
+        identity.pop("metadata_admin")
+        body = self.hook(identity)
+        self.assertEqual(body["traits"], identity["traits"])
+        self.assertEqual(body["altcha"], "browser-proof")
+        identity["traits"]["email"] = "substituted@example.com"
+        with self.assertRaises(RuntimeError):
+            self.hook(identity)
 
     def test_provider_claims_cannot_supply_canonical_roles_or_adopt_by_email(self):
         kratos = Mock()

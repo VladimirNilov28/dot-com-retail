@@ -142,11 +142,24 @@ provider flow. An expired flow still requires an explicit fresh initiation.
 Only supported trusted values are prefilled; no username or birthday is invented.
 
 Google's mapper supplies the verified email. A changed email cannot pass the
-Google-specific pre-persist hook's provenance check. Kratos retains registration
+Google-specific pre-persist hook's verified-address check. The mapper still
+requires Google's verified email and stable subject and records private
+provenance; Kratos applies matching verified-address evidence before invoking
+the hook. The hook requires exactly one completed, verified email address
+matching the registration traits. It must not read `metadata_admin` from its
+context: v26.2.0's public `Identity.MarshalJSON` intentionally omits that field
+even in the pre-persist webhook template. Kratos retains registration
 traits and transient payload in its provider continuity container. If login
 discovers an unknown provider subject and converts to registration, the UI must
 resume the registration flow and collect the missing fields/proof; do not silently
 finalize the original login flow.
+
+After this missing-trait form is submitted, Kratos's native OIDC registration
+strategy initiates another Google authorization with fresh state/continuity,
+carrying the entered profile and CAPTCHA proof. This second Google hop is
+expected, not another ByteCore login or duplicate customer creation. It normally
+uses the already-authenticated Google session. Returning connected users do not
+need registration completion.
 
 The OIDC registration hooks reuse the existing private, authenticated
 pre-persist endpoint (including CAPTCHA consumption and canonical reservation)
@@ -267,6 +280,19 @@ mode `600`. The isolated container was removed; no owner identities, databases,
 volumes, or credentials were changed.
 
 ### Callback incident hardening
+
+An owner attempt on 11 October at **20:26:34 UTC** confirmed a separate
+registration-hook defect: Google exchange/profile mapping succeeded, but
+Jsonnet failed with `Field does not exist: metadata_admin` before the bridge
+pre-persist request. The old regression fixture passed the raw mapper output
+instead of Kratos's public webhook identity, masking this failure. The corrected
+hook uses the provider-applied verified-address evidence described above, with
+subject/verified-email checks still enforced by the mapper and CAPTCHA/canonical
+reservation unchanged. Eleven focused renderer/mapper/hook tests pass, including
+the real public projection and missing/unverified/mismatched/duplicate-address
+rejection. Only Kratos was rebuilt/recreated; its deployed template matches the
+source and Kratos/bridge health are responsive. Post-fix real Google completion
+still requires the owner's fresh browser attempt.
 
 The BFF retains generic public errors and logs only a bounded callback stage,
 HTTP status and allowlisted provider reason (`token_exchange_invalid_client`,
