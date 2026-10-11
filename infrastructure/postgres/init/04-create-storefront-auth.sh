@@ -19,6 +19,7 @@ psql --username "$POSTGRES_USER" --dbname storefront_auth \
 SET ROLE :"migration_user";
 \i /auth-store/001_initial.sql
 \i /auth-store/002_flow_kinds.sql
+\i /auth-store/003_attempt_limits.sql
 REVOKE ALL ON SCHEMA public FROM PUBLIC;
 GRANT USAGE ON SCHEMA public TO :"runtime_user", :"captcha_user";
 GRANT SELECT, INSERT, UPDATE, DELETE ON browser_sessions, oauth_transactions, browser_flows TO :"runtime_user";

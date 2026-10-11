@@ -301,6 +301,42 @@ public class UserService {
         return user;
     }
 
+    /**
+     * Changes the canonical email of a native identity's user. The caller (the
+     * auth bridge) has already proven possession of the address and updates
+     * Kratos itself; this only owns Spring's canonical record.
+     */
+    @Transactional
+    public User changeEmail(UUID kratosIdentityId, String email) {
+        if (kratosIdentityId == null) {
+            throw new IllegalArgumentException("Identity is required");
+        }
+        validateRegistrationFields("unchecked", email);
+        User linked = userRepository
+                .findByKratosIdentityId(kratosIdentityId)
+                .orElseThrow(() -> new UserNotFoundException("User for identity not found"));
+        User user = userRepository
+                .findLockedById(linked.getId())
+                .orElseThrow(() -> new UserNotFoundException("User for identity not found"));
+        requireActive(user);
+        if (user.getEmail().equals(email)) {
+            return user;
+        }
+        registrationRepository.lockClaim("email:" + email);
+        if (registrationRepository.findByEmail(email).isPresent()) {
+            throw new UserAlreadyExistsException("Account identifiers are reserved by a registration.");
+        }
+        if (userRepository.existsByEmail(email)) {
+            throw new UserAlreadyExistsException("Account identifiers are already in use.");
+        }
+        user.setEmail(email);
+        try {
+            return userRepository.saveAndFlush(user);
+        } catch (DataIntegrityViolationException e) {
+            throw new UserAlreadyExistsException("Account identifiers are already in use.");
+        }
+    }
+
     public void deleteById(Long id) {
         UUID identityId = deletionTransaction.execute(status -> {
             User user = userRepository

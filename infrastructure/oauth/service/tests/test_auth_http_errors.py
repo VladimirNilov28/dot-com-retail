@@ -20,13 +20,18 @@ from test_login_consent import make_config  # noqa: E402
 
 class AuthHttpErrorsTest(unittest.TestCase):
     @patch("api.bridge_server.login_consent.bff_session")
-    def test_google_status_requires_bridge_auth_and_canonical_customer_session(self, session):
+    def test_account_status_requires_bridge_auth_and_canonical_customer_session(self, session):
         config = make_config(auth_bridge_secret="fixture-bridge-secret-not-issued-32")
         kratos = Mock()
-        kratos.google_connected.return_value = True
+        kratos.get_identity_with_credentials.return_value = {
+            "id": "verified-customer",
+            "traits": {"email": "c@example.com", "username": "c", "dateOfBirth": "1990-01-01"},
+            "verifiable_addresses": [{"via": "email", "value": "c@example.com", "verified": True}],
+            "credentials": {"oidc": {"config": {"providers": [{"provider": "google", "subject": "s"}]}}},
+        }
         connection = self.start_server(make_bridge_handler(config, Mock(), kratos, Mock()))
         body = json.dumps({"cookie": "private-fixture-cookie"})
-        connection.request("POST", "/internal/google-connection", body=body)
+        connection.request("POST", "/internal/account/status", body=body)
         response = connection.getresponse()
         response.read()
         self.assertEqual(response.status, 403)
@@ -37,14 +42,20 @@ class AuthHttpErrorsTest(unittest.TestCase):
             ({"active": True, "role": "USER", "identity_id": "verified-customer"}, 200),
         ]:
             session.return_value = canonical
-            connection.request("POST", "/internal/google-connection", body=body,
+            connection.request("POST", "/internal/account/status", body=body,
                 headers={"Authorization": "Bearer " + config.auth_bridge_secret})
             response = connection.getresponse()
             payload = json.loads(response.read())
             self.assertEqual(response.status, status)
             if status == 200:
-                self.assertEqual(payload, {"session": canonical, "connected": True})
-                kratos.google_connected.assert_called_once_with("verified-customer")
+                self.assertEqual(payload["session"], canonical)
+                self.assertIs(payload["credentials"]["google"], True)
+                kratos.get_identity_with_credentials.assert_called_once_with("verified-customer")
+        connection.request("POST", "/internal/google-connection", body=body,
+            headers={"Authorization": "Bearer " + config.auth_bridge_secret})
+        response = connection.getresponse()
+        response.read()
+        self.assertEqual(response.status, 404)
 
     def test_registration_availability_requires_bridge_auth_and_returns_booleans_only(self):
         config = make_config(auth_bridge_secret="fixture-bridge-secret-not-issued-32")

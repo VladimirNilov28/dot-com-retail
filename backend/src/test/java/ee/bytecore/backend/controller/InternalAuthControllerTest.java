@@ -126,7 +126,8 @@ class InternalAuthControllerTest {
                 "registration-availability",
                 "registration-bind",
                 "registration-finalize",
-                "registration-maintenance"
+                "registration-maintenance",
+                "email"
             })
     void shouldRejectHumanAndWrongMachineCallerOnNativeEndpointsTest(String endpoint) throws Exception {
         for (String subject : new String[] {"42", "another-machine"}) {
@@ -182,5 +183,37 @@ class InternalAuthControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.emailAvailable", is(false)))
                 .andExpect(jsonPath("$.usernameAvailable", is(true)));
+    }
+
+    @Test
+    void shouldChangeCanonicalEmailOnlyForAuthorizedMachineTest() throws Exception {
+        var identityId = UUID.randomUUID();
+        user.setEmail("changed@example.com");
+        when(userService.changeEmail(identityId, "changed@example.com")).thenReturn(user);
+        var request = new InternalAuthController.EmailChangeRequest(identityId, "changed@example.com");
+        mockMvc.perform(post("/internal/users/email")
+                        .with(jwt().jwt(jwt -> jwt.subject("oauth-service-internal")
+                                        .claim("client_id", "oauth-service-internal"))
+                                .authorities(new SimpleGrantedAuthority("SCOPE_internal:provision-user")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id", is(1)))
+                .andExpect(jsonPath("$.email", is("changed@example.com")));
+    }
+
+    @Test
+    void shouldReportEmailChangeConflictTest() throws Exception {
+        var identityId = UUID.randomUUID();
+        when(userService.changeEmail(identityId, "taken@example.com"))
+                .thenThrow(new ee.bytecore.backend.exceptions.UserAlreadyExistsException("in use"));
+        mockMvc.perform(post("/internal/users/email")
+                        .with(jwt().jwt(jwt -> jwt.subject("oauth-service-internal")
+                                        .claim("client_id", "oauth-service-internal"))
+                                .authorities(new SimpleGrantedAuthority("SCOPE_internal:provision-user")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new InternalAuthController.EmailChangeRequest(identityId, "taken@example.com"))))
+                .andExpect(status().isConflict());
     }
 }

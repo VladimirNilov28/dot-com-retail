@@ -502,4 +502,68 @@ class UserServiceTest {
         verify(userRepository, never()).save(any());
         verify(registrationRepository, never()).delete(any());
     }
+
+    @Test
+    void shouldChangeCanonicalEmailForLinkedIdentityTest() {
+        var identityId = UUID.randomUUID();
+        user.setKratosIdentityId(identityId);
+        when(userRepository.findByKratosIdentityId(identityId)).thenReturn(Optional.of(user));
+        when(userRepository.findLockedById(1L)).thenReturn(Optional.of(user));
+        when(userRepository.saveAndFlush(user)).thenReturn(user);
+
+        User changed = userService.changeEmail(identityId, "changed@example.com");
+
+        assertThat(changed.getEmail()).isEqualTo("changed@example.com");
+        verify(registrationRepository).lockClaim("email:changed@example.com");
+        org.mockito.Mockito.verifyNoInteractions(kratosClient);
+    }
+
+    @Test
+    void shouldRejectEmailChangeToAnotherUsersEmailTest() {
+        var identityId = UUID.randomUUID();
+        when(userRepository.findByKratosIdentityId(identityId)).thenReturn(Optional.of(user));
+        when(userRepository.findLockedById(1L)).thenReturn(Optional.of(user));
+        when(userRepository.existsByEmail("taken@example.com")).thenReturn(true);
+
+        assertThatThrownBy(() -> userService.changeEmail(identityId, "taken@example.com"))
+                .isInstanceOf(UserAlreadyExistsException.class);
+        assertThat(user.getEmail()).isEqualTo("test@example.com");
+        verify(userRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void shouldRejectEmailChangeToReservedEmailTest() {
+        var identityId = UUID.randomUUID();
+        var reserved = UserRegistrationReservation.create(
+                UUID.randomUUID(),
+                "other",
+                "reserved@example.com",
+                LocalDate.of(1998, 3, 20),
+                Instant.now().plusSeconds(600));
+        when(userRepository.findByKratosIdentityId(identityId)).thenReturn(Optional.of(user));
+        when(userRepository.findLockedById(1L)).thenReturn(Optional.of(user));
+        when(registrationRepository.findByEmail("reserved@example.com")).thenReturn(Optional.of(reserved));
+
+        assertThatThrownBy(() -> userService.changeEmail(identityId, "reserved@example.com"))
+                .isInstanceOf(UserAlreadyExistsException.class);
+        assertThat(user.getEmail()).isEqualTo("test@example.com");
+        verify(userRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void shouldRejectEmailChangeForUnknownIdentityTest() {
+        var identityId = UUID.randomUUID();
+        when(userRepository.findByKratosIdentityId(identityId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> userService.changeEmail(identityId, "changed@example.com"))
+                .isInstanceOf(UserNotFoundException.class);
+        verify(userRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void shouldRejectInvalidEmailChangeBeforeLookupTest() {
+        assertThatThrownBy(() -> userService.changeEmail(UUID.randomUUID(), "not an email"))
+                .isInstanceOf(IllegalArgumentException.class);
+        org.mockito.Mockito.verifyNoInteractions(userRepository, registrationRepository);
+    }
 }

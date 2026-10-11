@@ -1,9 +1,11 @@
 import time
 import urllib.parse
 from typing import Optional
+from uuid import UUID
 
 import requests
 
+ACCOUNT_CREDENTIAL_TYPES = ("oidc", "password", "totp", "lookup_secret")
 
 class KratosNotReadyError(RuntimeError):
     pass
@@ -86,32 +88,77 @@ class KratosClient:
         response.raise_for_status()
         return response.json()
 
-    def google_connected(self, identity_id: str) -> bool:
-        from uuid import UUID
+    def get_identity_with_credentials(self, identity_id: str) -> dict:
+        """Admin identity including credential configuration. Callers must
+        project it; hashes, codes, subjects and TOTP URLs never leave the bridge."""
         identity_id = str(UUID(identity_id))
         response = requests.get(
             f"{self._admin_url}/admin/identities/{identity_id}",
-            params={"include_credential": "oidc"}, timeout=10,
+            params=[("include_credential", kind) for kind in ACCOUNT_CREDENTIAL_TYPES], timeout=10,
         )
         response.raise_for_status()
         identity = response.json()
         if not isinstance(identity, dict) or identity.get("id") != identity_id:
-            raise KratosUpstreamError("Invalid Google credential status")
-        credentials = identity.get("credentials", {})
-        if not isinstance(credentials, dict):
-            raise KratosUpstreamError("Invalid Google credential status")
-        oidc = credentials.get("oidc")
-        if oidc is None:
-            return False
-        config = oidc.get("config") if isinstance(oidc, dict) else None
-        providers = config.get("providers") if isinstance(config, dict) else None
-        if not isinstance(providers, list):
-            raise KratosUpstreamError("Invalid Google credential status")
-        if any(not isinstance(provider, dict) or not isinstance(provider.get("provider"), str) or
-               not provider["provider"] or not isinstance(provider.get("subject"), str) or
-               not provider["subject"] for provider in providers):
-            raise KratosUpstreamError("Invalid Google credential status")
-        return any(provider["provider"] == "google" for provider in providers)
+            raise KratosUpstreamError("Invalid identity response")
+        return identity
+
+    def identity_ids_by_identifier(self, identifier: str) -> list:
+        response = requests.get(
+            f"{self._admin_url}/admin/identities",
+            params={"credentials_identifier": identifier}, timeout=10,
+        )
+        response.raise_for_status()
+        identities = response.json()
+        if not isinstance(identities, list) or any(
+                not isinstance(identity, dict) or not isinstance(identity.get("id"), str) for identity in identities):
+            raise KratosUpstreamError("Invalid identity lookup response")
+        return [identity["id"] for identity in identities]
+
+    def update_identity_email(self, identity_id: str, email: str) -> dict:
+        """Replaces traits.email (other traits, state and metadata preserved).
+        Kratos v26.2.0 recomputes the password identifier, verifiable and
+        recovery addresses from the schema on admin PUT but ignores submitted
+        verifiable_addresses, so the new address is then marked verified with
+        a JSON Patch. Credentials (including OIDC) are not submitted."""
+        identity_id = str(UUID(identity_id))
+        identity = self.get_identity(identity_id)
+        if not isinstance(identity, dict) or identity.get("id") != identity_id \
+                or not isinstance(identity.get("traits"), dict):
+            raise KratosUpstreamError("Invalid identity response")
+        if identity["traits"].get("email") != email:
+            response = requests.put(f"{self._admin_url}/admin/identities/{identity_id}", json={
+                "schema_id": identity["schema_id"], "state": identity["state"],
+                "traits": {**identity["traits"], "email": email},
+                "metadata_public": identity.get("metadata_public"),
+                "metadata_admin": identity.get("metadata_admin"),
+            }, timeout=10)
+            response.raise_for_status()
+            identity = response.json()
+        index = self._verifiable_email_index(identity, identity_id, email)
+        if identity["verifiable_addresses"][index].get("verified") is not True:
+            response = requests.patch(f"{self._admin_url}/admin/identities/{identity_id}", json=[
+                {"op": "replace", "path": f"/verifiable_addresses/{index}/verified", "value": True},
+                {"op": "replace", "path": f"/verifiable_addresses/{index}/status", "value": "completed"},
+            ], timeout=10)
+            response.raise_for_status()
+            identity = response.json()
+            index = self._verifiable_email_index(identity, identity_id, email)
+            if identity["verifiable_addresses"][index].get("verified") is not True:
+                raise KratosUpstreamError("Kratos did not verify the new address")
+        return identity
+
+    @staticmethod
+    def _verifiable_email_index(identity, identity_id: str, email: str) -> int:
+        if not isinstance(identity, dict) or identity.get("id") != identity_id \
+                or (identity.get("traits") or {}).get("email") != email \
+                or not isinstance(identity.get("verifiable_addresses"), list):
+            raise KratosUpstreamError("Invalid identity update response")
+        matches = [index for index, address in enumerate(identity["verifiable_addresses"])
+                   if isinstance(address, dict) and address.get("via") == "email"
+                   and str(address.get("value", "")).casefold() == email.casefold()]
+        if len(matches) != 1:
+            raise KratosUpstreamError("Invalid identity update response")
+        return matches[0]
 
     def set_identity_metadata_admin(self, identity_id: str, metadata_admin: dict) -> dict:
         patch = [{"op": "add", "path": "/metadata_admin", "value": metadata_admin}]

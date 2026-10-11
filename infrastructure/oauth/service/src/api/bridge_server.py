@@ -6,10 +6,11 @@ from urllib.parse import parse_qs, urlparse
 
 from clients.hydra import HydraClient
 from clients.kratos import KratosClient
+from clients.mailer import SmtpMailer
 from clients.spring_auth import SpringAuthClient
 from config import Config
 from models import ErrorResponse, InvalidRequestError, LogoutRequest
-from services import login_consent
+from services import account, login_consent
 from services.logout import perform_logout
 from services.registration import RegistrationService, RegistrationRejected, CaptchaUnavailable
 from clients.kratos import KratosSecondFactorRequiredError
@@ -23,6 +24,7 @@ def make_bridge_handler(
     config: Config, hydra_client: HydraClient, kratos_client: KratosClient, spring_auth_client: SpringAuthClient
 ):
     registration = RegistrationService(config, spring_auth_client)
+    mailer = SmtpMailer(config.smtp_host, config.smtp_port, config.smtp_from)
 
     class BridgeRequestHandler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):  # noqa: A002 - matches BaseHTTPRequestHandler signature
@@ -141,18 +143,33 @@ def make_bridge_handler(
                     self._dictionary(200, login_consent.bff_session(
                         kratos_client, spring_auth_client, body["cookie"],
                     ))
-                elif path == "/internal/google-connection":
-                    session = login_consent.bff_session(kratos_client, spring_auth_client, body["cookie"])
-                    if not session["active"] or session["role"] != "USER":
-                        self._dictionary(403, {"error": "forbidden"})
-                        return
-                    self._dictionary(200, {"session": session,
-                        "connected": kratos_client.google_connected(session["identity_id"])})
+                elif path == "/internal/account/status":
+                    if set(body) != {"cookie"}:
+                        raise ValueError("Invalid account request")
+                    session = self._customer_session(body)
+                    if session is not None:
+                        self._dictionary(200, account.account_status(kratos_client, session))
+                elif path == "/internal/account/notify":
+                    notification = account.validate_notification(body)
+                    session = self._customer_session(body)
+                    if session is not None:
+                        account.notify(kratos_client, mailer, session, notification)
+                        self._respond(204, b"")
+                elif path == "/internal/account/email":
+                    if set(body) != {"cookie", "email"}:
+                        raise ValueError("Invalid account request")
+                    email = account.validate_email(body["email"])
+                    session = self._customer_session(body)
+                    if session is not None:
+                        self._dictionary(200, account.change_email(
+                            kratos_client, spring_auth_client, mailer, session, email))
                 elif path == "/internal/logout":
                     kratos_client.revoke_browser_session(body["session_id"])
                     self._respond(204, b"")
                 else:
                     self._dictionary(404, {"error": "not_found"})
+            except account.AccountConflict:
+                self._dictionary(409, {"error": "conflict"})
             except RegistrationRejected as error:
                 self._hook_error(400, str(error))
             except (ValueError, TypeError, KeyError):
@@ -173,6 +190,14 @@ def make_bridge_handler(
             except Exception as error:  # noqa: BLE001 - request boundary, never logs credentials
                 logger.error("private authentication request failed (%s)", type(error).__name__)
                 self._hook_error(502, "Authentication is unavailable. Try again.")
+
+        def _customer_session(self, body):
+            """Active USER session for account routes; otherwise responds 403."""
+            session = login_consent.bff_session(kratos_client, spring_auth_client, account.require_cookie(body))
+            if not session.get("active") or session.get("role") != "USER":
+                self._dictionary(403, {"error": "forbidden"})
+                return None
+            return session
 
         def _hook_error(self, status, message):
             self._dictionary(status, {"error": "authentication_rejected", "messages": [{

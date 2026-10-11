@@ -99,6 +99,15 @@ public class InternalAuthController {
         return CanonicalUserResponse.from(userService.finalizeRegistration(request.identityId()));
     }
 
+    public record EmailChangeRequest(UUID identityId, String email) {}
+
+    @PostMapping("/email")
+    @PreAuthorize(
+            "hasAuthority('SCOPE_internal:provision-user') and @internalAuthController.isMachineCaller(authentication)")
+    public CanonicalUserResponse changeEmail(@RequestBody EmailChangeRequest request) {
+        return CanonicalUserResponse.from(userService.changeEmail(request.identityId(), request.email()));
+    }
+
     @PostMapping("/registration-maintenance")
     @PreAuthorize(
             "hasAuthority('SCOPE_internal:provision-user') and @internalAuthController.isMachineCaller(authentication)")

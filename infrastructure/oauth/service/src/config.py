@@ -36,6 +36,9 @@ class Config:
     auth_bridge_secret: str = ""
     auth_database_url: str = ""
     captcha_secret: str = ""
+    smtp_host: str = "mailpit"
+    smtp_port: int = 1025
+    smtp_from: str = "no-reply@bytecore.ee"
 
 
 def load_config() -> Config:
@@ -116,4 +119,7 @@ def load_config() -> Config:
         auth_bridge_secret=os.environ.get("AUTH_BRIDGE_SECRET", "").strip(),
         auth_database_url=os.environ.get("AUTH_DATABASE_URL", "").strip(),
         captcha_secret=os.environ.get("CAPTCHA_SECRET", "").strip(),
+        smtp_host=os.environ.get("SMTP_HOST", "mailpit").strip(),
+        smtp_port=int(os.environ.get("SMTP_PORT", "1025")),
+        smtp_from=os.environ.get("SMTP_FROM", "no-reply@bytecore.ee").strip(),
     )

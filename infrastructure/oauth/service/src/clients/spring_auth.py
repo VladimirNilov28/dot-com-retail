@@ -94,6 +94,9 @@ class SpringAuthClient:
     def maintain_registration(self) -> dict:
         return self._registration_request("registration-maintenance", {})
 
+    def change_email(self, identity_id: str, email: str) -> dict:
+        return self._registration_request("email", {"identityId": identity_id, "email": email})
+
     def _registration_request(self, path: str, body: dict) -> dict:
         response = requests.post(
             f"{self._base_url}/internal/users/{path}", json=body,
