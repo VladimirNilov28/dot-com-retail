@@ -157,9 +157,29 @@ finalize the original login flow.
 After this missing-trait form is submitted, Kratos's native OIDC registration
 strategy initiates another Google authorization with fresh state/continuity,
 carrying the entered profile and CAPTCHA proof. This second Google hop is
-expected, not another ByteCore login or duplicate customer creation. It normally
-uses the already-authenticated Google session. Returning connected users do not
-need registration completion.
+expected, not another ByteCore login or duplicate customer creation. Kratos
+v26.2.0's browser OIDC registration cannot complete the stored first callback
+without it (the `id_token` shortcut exists only for native SDK clients). The BFF
+sends `upstream_parameters.login_hint` with the trusted verified email so the
+second hop normally reuses the same Google session without account re-selection.
+The final action is labelled **Complete registration**. Returning connected
+users are resolved by provider subject and never see registration completion.
+
+Before showing the completion form, and again before the second Google hop, the
+BFF asks the bridge's private `/internal/registration/availability` route
+(Spring `POST /internal/users/registration-availability`, machine-caller only,
+read-only, no locks or reservations). It checks the **trusted bound verified
+email** — never a browser-supplied value — and, only on submit, the chosen
+username against canonical users and live reservations:
+
+- Email already owned by another account → the Google continuation is discarded
+  and the user is sent to existing-account sign-in (`social=conflict`), then
+  Connect Google from Account security. No registration, merge or link occurs.
+- Username taken → a field error ("This username is already taken. Choose
+  another.") with entered values preserved, and no provider mutation.
+
+The pre-persist reservation remains the authoritative race-safe check; the
+availability gate only moves known conflicts ahead of user effort.
 
 The OIDC registration hooks reuse the existing private, authenticated
 pre-persist endpoint (including CAPTCHA consumption and canonical reservation)
@@ -305,6 +325,18 @@ small duplicated payload mapping is intentional because this runtime cannot
 import the native template; the parity test prevents drift. Only Kratos was
 rebuilt/recreated again. This fixes the hook failure, not the documented second
 authorization hop; fresh real storefront session completion remains unverified.
+
+Owner attempts at **20:35–20:40 UTC** reached the completion form, submitted
+it, passed the second Google hop, then saw "This email or username cannot be
+registered". Sanitized bridge/Kratos logs and record inspection (booleans and
+timestamps only) showed this was a **genuine canonical conflict**, not a lost
+continuation, wrong form action or duplicate provisioning: one Google email
+already belongs to an existing password identity (not Google-linked), and the
+other attempt chose a username held by an existing account's reservation. The
+pre-persist reservation correctly returned 409; no reservation, OIDC credential
+or Spring user was created, so there are no partial records to recover. The
+defect was detecting the conflict only after profile entry and the second hop
+and surfacing it generically. The availability gate above fixes this.
 
 The BFF retains generic public errors and logs only a bounded callback stage,
 HTTP status and allowlisted provider reason (`token_exchange_invalid_client`,
