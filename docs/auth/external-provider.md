@@ -31,10 +31,13 @@ fresh CAPTCHA. A schema-validation form is not a completed authentication.
 Real storefront Google login, consent/cancellation completion, new/returning
 customers and email-conflict behavior remain **pending real owner verification**,
 not verified by offline tests or the authorization redirect.
-The continuation fix passed 27 focused social/flow/form-projection tests,
-TypeScript checking and an isolated production build. Lint reported no errors
-and one unchanged homepage warning. The owner was unavailable for a fresh
-Google retry after this fix; end-to-end session creation is not yet confirmed.
+The latest #70 implementation passed 93 focused BFF regressions, eight private
+bridge/status regressions, TypeScript checking and an isolated production build.
+Lint reported no errors and one unchanged homepage warning. A disposable real
+customer completed native registration/email verification/password login,
+reload persistence and logout; authenticated settings linking reached Google.
+Consent was not completed, so this is **initiation evidence, not Google login
+or completed credential-link evidence**. No owner password or account was reset.
 
 The deployment must pass these optional environment variables to Kratos:
 
@@ -127,6 +130,17 @@ registration flow, submitting:
 }
 ```
 
+The completion page says **Complete your registration** and displays the
+server-trusted Google email read-only, without a submitted email control.
+The BFF rejects posted email, password, role and other unapproved fields rather
+than silently accepting them. Missing username/date of birth on initial arrival
+are not presented as a failed submission. After an actual submission, concise
+field errors and entered values survive through the encrypted browser context;
+stale initial required-field messages are not applied to corrected fields.
+CAPTCHA retry replaces only the widget, retaining entered fields and the bound
+provider flow. An expired flow still requires an explicit fresh initiation.
+Only supported trusted values are prefilled; no username or birthday is invented.
+
 Google's mapper supplies the verified email. A changed email cannot pass the
 Google-specific pre-persist hook's provenance check. Kratos retains registration
 traits and transient payload in its provider continuity container. If login
@@ -149,10 +163,84 @@ option is Ory Network-specific in v26.2.0, so it is **not** a substitute for
 authenticated linking in self-hosted Kratos. A matching Google email is not
 permission to adopt a Spring account.
 
-Infrastructure and BFF/UI now implement proof-backed onboarding and missing-trait
-continuations. Real new/returning-account verification and authenticated account
-linking remain incomplete; no self-service linking management UI is claimed.
-Do not advertise mock callback checks as successful external authentication.
+Successful native registration callbacks can return HTTP 200 identity JSON
+rather than a redirect. The BFF proceeds to `/auth/resume`, where the existing
+bridge verifies the live Kratos session, canonical provisioning, verified
+identity and required assurance before Hydra/BFF session creation. AAL2
+continuations remain real second-factor flows, never successful AAL1 logins.
+Validated `returnTo` is retained server-side through this handoff.
+
+### Existing-account linking and disconnecting
+
+The customer **Account security** page includes a compact Google section with
+connection status and provider-issued Connect/Disconnect controls. Kratos
+v26.2.0's self-hosted OIDC settings strategy supports `method: oidc`,
+`link: google` and `unlink: google`; it is independent of the Network-only
+`account_linking_mode` option.
+
+Both initiation and callback require the same authenticated customer identity,
+canonical Spring user, role and provider session. Mutations require authentication
+less than 15 minutes old and AAL2 when an authenticator/backup factor is enabled.
+Google account selection uses the provider's `select_account` prompt.
+The encrypted jar, outer state and expiring browser/settings-flow binding remain
+mandatory. Duplicate initiation is rejected while authorization is pending;
+consumed callbacks cannot be replayed. No new Hydra grant or canonical user is
+created by linking, and traits/account data are not submitted for modification.
+
+Kratos's credential uniqueness prevents transferring a provider/subject already
+connected elsewhere. The UI offers Disconnect only when Kratos issues an unlink
+control, and the BFF rejects forged actions absent from the current flow.
+Kratos also enforces its active-first-factor count during mutation, so an
+authenticator or backup code alone cannot make the last Google credential
+removable. Public identities omit credential configuration: the private
+`/internal/google-connection` endpoint resolves the authenticated canonical
+customer and returns only connection status plus the existing safe session
+coordinates. Credential configuration, provider subjects and tokens never reach
+the UI. This check identifies Google-only connections even without an unlink node.
+
+Cancellation/rejection returns to security settings without a success claim;
+expired or insufficient-assurance sessions require fresh authentication.
+Matching-email registration conflicts offer existing-account sign-in followed
+by an explicit Connect Google action from settings. Provider duplicate-credential
+login continuations are discarded in favor of a fresh flow; the user is clearly
+asked to restart linking from settings. Matching email never silently merges,
+adopts or links accounts.
+
+### Evidence and remaining owner-assisted checks
+
+Automated regressions cover native 400 onboarding/200 completion, immutable
+email and profile-value retention, conflict recovery, settings mutation payloads,
+same-account callback coordinates, AAL2/privileged-age enforcement, cancellation,
+foreign identities, one-use callback replay and last-method unlink rejection.
+Real self-hosted linking initiation and ordinary customer session regression
+passed. Desktop/mobile production captures of only the Google settings section
+were inspected; 200% text zoom had no horizontal overflow. MFA secrets were not
+captured. The earlier whole-page #69 captures are historical after this section
+was added, not current Google UI evidence.
+
+Still requiring real owner Google consent: new Google customer completion and
+automatic login; actual password-account linking and subsequent Google login to
+the same canonical user; returning login/reload/logout; matching-email and
+already-connected-elsewhere rejection; unlink with another method and Google-only
+last-method rejection; enrolled-account Google login with a real second factor.
+No successful live Google login is claimed. Keep #70 open/In Progress until
+these outcomes are observed; offline fixtures are not provider verification.
+The implementation is local commit `b8fc4bb`; it has not been pushed.
+
+Focused BFF checks (from `frontend/`):
+
+```bash
+bun --conditions=react-server test src/lib/auth/{social,settings,flows,view,http,model}.test.mjs
+bun run typecheck
+bun run lint
+```
+
+Private endpoint/client checks (with the OAuth service test dependencies):
+
+```bash
+PYTHONPATH=infrastructure/oauth/service/src:infrastructure/oauth/service/tests \
+  python3 -m unittest test_google_connection test_auth_http_errors -v
+```
 
 ## Focused offline verification
 
@@ -214,3 +302,5 @@ Contract sources, pinned to the installed version:
 - [Base redirect URI fallback](https://github.com/ory/kratos/blob/v26.2.0/driver/config/config.go)
 - [Registration claims mapping and continuity](https://github.com/ory/kratos/blob/v26.2.0/selfservice/strategy/oidc/strategy_registration.go)
 - [Existing provider-subject lookup and account conflicts](https://github.com/ory/kratos/blob/v26.2.0/selfservice/strategy/oidc/strategy_login.go)
+- [Self-hosted linking, privileged sessions and last-first-factor unlink protection](https://github.com/ory/kratos/blob/v26.2.0/selfservice/strategy/oidc/strategy_settings.go)
+- [Native registration JSON completion](https://github.com/ory/kratos/blob/v26.2.0/selfservice/flow/registration/hook.go)

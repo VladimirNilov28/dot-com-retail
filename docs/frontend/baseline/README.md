@@ -16,6 +16,25 @@ owner's.
 
 ## Status vocabulary
 
+### Google customer settings -- #70, 2026-10-11
+
+Two cropped production captures show the changed Google section, with a real
+disposable password customer, before provider consent. They exclude all MFA
+setup secrets and were opened/inspected. **Model-reviewed -- awaiting owner
+approval**; not completed Google-link or Google-login evidence. Source: the
+local #70 Google settings implementation at `b8fc4bb`. No shell/catalog redesign.
+
+| Asset | Route / viewport / state | Covers | Last updated by |
+|---|---|---|---|
+| `issue-70-security-desktop-1440-google.png` | `/account/security`, 1440px, Google disconnected | #70 | #70 |
+| `issue-70-security-mobile-390-google.png` | `/account/security`, 390px, Google disconnected | #70 | #70 |
+
+The whole-page #69 security captures below are **Stale -- historical MFA
+evidence** after adding the Google section. They are retained as before-evidence,
+not current whole-page screenshots. The recovery capture remains unchanged.
+New Google registration completion screenshots await the real provider handoff;
+no synthetic verified profile is promoted as live evidence.
+
 ### Recovery and customer security follow-up -- 2026-10-11
 
 Three production captures from the owner's existing local provider stack were
