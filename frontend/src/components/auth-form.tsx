@@ -66,6 +66,7 @@ function Captcha({ flow, returnTo, method }: { flow: string; returnTo: string; m
   const widget = useRef<HTMLElement>(null);
   const [status, setStatus] = useState("loading");
   const [failure, setFailure] = useState<ReturnType<typeof captchaFailure>>("captcha");
+  const [retry, setRetry] = useState(0);
   useEffect(() => {
     const element = widget.current;
     if (!element) return;
@@ -90,7 +91,7 @@ function Captcha({ flow, returnTo, method }: { flow: string; returnTo: string; m
       if (active) setStatus("error");
     });
     return () => { active = false; element.removeEventListener("statechange", change); };
-  }, []);
+  }, [retry]);
   const messages: Record<string, string> = {
     loading: "Loading the security check...", unverified: "Complete the security check before creating your account.",
     verifying: "Checking...", verified: "Security check complete.", expired: "Security check expired. Please check again.",
@@ -101,13 +102,14 @@ function Captcha({ flow, returnTo, method }: { flow: string; returnTo: string; m
   return (
     <div className="auth-captcha">
       <p className="font-medium">Security check</p>
-      {createElement("altcha-widget", { ref: widget, id: `auth-security-check-${method}`, tabIndex: -1, challenge: `/auth/captcha?flow=${flow}`, name: "altcha", theme: "dark" })}
+      {createElement("altcha-widget", { key: retry, ref: widget, id: `auth-security-check-${method}`, tabIndex: -1, challenge: `/auth/captcha?flow=${flow}`, name: "altcha", theme: "dark" })}
       <p className="auth-captcha-status text-sm text-muted" role="status">{messages[status] ?? "Complete the security check."}</p>
       {status === "error" || status === "expired" ? (
-        <a href={failure === "expired" ? `/auth/flow?kind=registration&returnTo=${encodeURIComponent(returnTo)}` :
-          `/register?flow=${flow}&returnTo=${encodeURIComponent(returnTo)}`} className="store-link inline-flex items-center gap-2">
-          <RotateCcw size={16} aria-hidden="true" /> {failure === "expired" ? "Start registration again" : "Reload security check"}
-        </a>
+        failure === "expired" ? <a href={`/auth/flow?kind=registration&returnTo=${encodeURIComponent(returnTo)}`}
+          className="store-link inline-flex items-center gap-2"><RotateCcw size={16} aria-hidden="true" /> Start registration again</a> :
+          <Button variant="secondary" onPress={() => { setStatus("loading"); setRetry((value) => value + 1); }}>
+            <RotateCcw size={16} aria-hidden="true" /> Reload security check
+          </Button>
       ) : null}
       <noscript><style>{".auth-captcha-status { display: none; }"}</style>
         <p className="text-sm text-warning">Creating an account requires JavaScript for the self-hosted security check. You can still sign in without JavaScript.</p>
@@ -174,6 +176,12 @@ export function AuthForm({ kind, flow, csrf, returnTo, method }: {
       </p> : null}
       {method.fields.map((field) => field.type === "hidden"
         ? <input key={field.name} type="hidden" name={field.name} value={field.value} />
+        : field.readOnly ? <label key={field.name} className="auth-field block space-y-2">
+          <span>{field.label}</span>
+          <input id={authFieldId(method.name, field.name)} type="email" readOnly value={field.value}
+            className="auth-input w-full px-3" aria-describedby="google-email-guidance" />
+          <span id="google-email-guidance" className="block text-sm text-muted">Verified by Google. To use a different email, restart with another Google account.</span>
+        </label>
         : (
           <TextField key={field.name} id={authFieldId(method.name, field.name)} name={field.name}
             type={field.name === "password" && showPassword ? "text" : field.type} defaultValue={field.value}

@@ -54,7 +54,8 @@ export interface BrowserState {
   previousSessionHash?: string;
   revokeProvider?: boolean;
   securityReauth?: "aal1" | "aal2";
-  social?: { state: string; flow: string; kind: "login" | "registration" };
+  social?: { state: string; flow: string; kind: "login" | "registration" | "settings" };
+  googleRegistration?: { flow: string; email: string; submitted: boolean; providerValidation?: boolean; username?: string; dateOfBirth?: string };
 }
 
 export function grantTokens(response: {
@@ -193,8 +194,24 @@ export function decodeBrowserState(value: unknown): BrowserState {
     const social = object(input.social);
     if (typeof social.state !== "string" || social.state.length < 16 || social.state.length > 4096 ||
         /[\u0000-\u0020\u007f]/.test(social.state) ||
-        (social.kind !== "login" && social.kind !== "registration")) throw new AuthError("unavailable");
+        (social.kind !== "login" && social.kind !== "registration" && social.kind !== "settings")) throw new AuthError("unavailable");
     state.social = { state: social.state, flow: flowIdentifier(social.flow), kind: social.kind };
+  }
+  if (input.googleRegistration !== undefined) {
+    const registration = object(input.googleRegistration);
+    if (typeof registration.email !== "string" || registration.email.length > 255 ||
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(registration.email) ||
+        typeof registration.submitted !== "boolean" || (registration.providerValidation !== undefined &&
+          typeof registration.providerValidation !== "boolean")) throw new AuthError("unavailable");
+    for (const [key, limit] of [["username", 255], ["dateOfBirth", 10]] as const) {
+      if (registration[key] !== undefined && (typeof registration[key] !== "string" ||
+          registration[key].length > limit || /[\u0000\r\n]/.test(registration[key]))) throw new AuthError("unavailable");
+    }
+    state.googleRegistration = { flow: flowIdentifier(registration.flow), email: registration.email,
+      submitted: registration.submitted,
+      providerValidation: typeof registration.providerValidation === "boolean" ? registration.providerValidation : undefined,
+      username: typeof registration.username === "string" ? registration.username : undefined,
+      dateOfBirth: typeof registration.dateOfBirth === "string" ? registration.dateOfBirth : undefined };
   }
   if (input.tokens !== undefined) {
     const tokens = object(input.tokens);

@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, expect, test } from "bun:test";
 import { assertSecuritySession, projectSecuritySettings, securityPayload, securitySettingsFlow } from "./settings";
 import { assertCsrf } from "./http";
 import { emptyJar } from "./provider";
+import { completeSocialCallback } from "./social";
 
 const id = "11111111-1111-4111-8111-111111111111";
 const identityId = "22222222-2222-4222-8222-222222222222";
@@ -10,6 +11,8 @@ const provider = { identityId, sessionId, expiresAt: new Date(Date.now() + 36000
 const png = `data:image/png;base64,${Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).toString("base64")}`;
 const secret = "JBSWY3DPEHPK3PXP";
 let server, previous, posts, readCount, queries, reply, postReply, responseStatus, session, sessionIdentity, denyBinding;
+let callbackReply, callbackStatus, callbackNext, callbackCount;
+let googleConnected;
 const names = ["STOREFRONT_ORIGIN", "AUTH_OAUTH_ISSUER", "AUTH_KRATOS_URL", "AUTH_BRIDGE_URL",
   "AUTH_CLIENT_ID", "AUTH_CLIENT_SECRET", "AUTH_BRIDGE_SECRET", "AUTH_DATABASE_URL", "AUTH_SEAL_KEYS"];
 const input = (group, name, value = true) => ({ type: "input", group, attributes: { name, type: "submit", value } });
@@ -52,11 +55,19 @@ beforeAll(() => {
     hostname: "127.0.0.1", port: 0,
     async fetch(request) {
       const path = new URL(request.url).pathname;
+      if (path.includes("/callback/google")) {
+        callbackCount++;
+        if (callbackNext) reply = callbackNext;
+        return Response.json(callbackReply, { status: callbackStatus,
+          headers: { "Set-Cookie": "ory_kratos_continuity=callback-fixture; Path=/; HttpOnly" } });
+      }
       if (path === "/sessions/whoami") return Response.json(session);
-      if (path === "/internal/session") return Response.json({
+      const canonical = {
         active: true, identity_id: identityId, session_id: sessionId, expires_at: provider.expiresAt,
         user_id: "42", role: "USER", aal: session.authenticator_assurance_level,
-      });
+      };
+      if (path === "/internal/session") return Response.json(canonical);
+      if (path === "/internal/google-connection") return Response.json({ session: canonical, connected: googleConnected });
       if (request.method === "POST") {
         posts.push(await request.json());
         if (postReply?.state === "success") session.authenticator_assurance_level = "aal2";
@@ -77,6 +88,8 @@ beforeAll(() => {
 });
 beforeEach(() => {
   posts = []; readCount = 0; queries = []; responseStatus = 200; denyBinding = false; postReply = undefined;
+  callbackCount = 0; callbackStatus = 200; callbackReply = undefined; callbackNext = undefined;
+  googleConnected = false;
   sessionIdentity = { id: identityId, schema_id: "customer-v1" };
   session = { active: true, id: sessionId, identity: sessionIdentity,
     authenticated_at: new Date().toISOString(), expires_at: provider.expiresAt, authenticator_assurance_level: "aal1" };
@@ -222,4 +235,129 @@ test("provider service diagnostics are unavailable, never incorrect authenticato
   const invalid = flow();
   invalid.ui.messages = [{ id: 5000001, type: "error", text: "private provider failure" }];
   expect(() => projectSecuritySettings(invalid, state())).toThrow();
+});
+
+test("Google settings use only provider-issued link/unlink actions; last-factor removal cannot be forged", () => {
+  const connect = projectSecuritySettings(flow([input("oidc", "link", "google")]), state());
+  expect(connect.google).toBe("disconnected");
+  expect(securityPayload(new URLSearchParams({ action: "google_connect" }), connect, "fixture"))
+    .toEqual({ method: "oidc", csrf_token: "fixture", link: "google", upstream_parameters: { prompt: "select_account" } });
+  const disconnect = projectSecuritySettings(flow([input("oidc", "unlink", "google")]), state());
+  expect(disconnect.google).toBe("connected");
+  expect(() => securityPayload(new URLSearchParams({ action: "google_disconnect" }), disconnect, "fixture")).toThrow();
+  expect(securityPayload(new URLSearchParams({ action: "google_disconnect", acknowledge: "yes" }), disconnect, "fixture"))
+    .toEqual({ method: "oidc", csrf_token: "fixture", unlink: "google" });
+  const last = flow([]);
+  const only = projectSecuritySettings(last, state());
+  expect(only.google).toBe("unavailable");
+  expect(() => securityPayload(new URLSearchParams({ action: "google_disconnect", acknowledge: "yes" }), only, "fixture")).toThrow();
+  for (const extra of ["link=attacker", "traits.email=attacker", "provider=attacker"]) {
+    expect(() => securityPayload(new URLSearchParams(`action=google_connect&${extra}`), connect, "fixture")).toThrow();
+  }
+});
+
+test("last-method connection status uses only an authenticated bridge boolean, not public credential configuration", async () => {
+  reply = flow([]);
+  googleConnected = true;
+  const result = await securitySettingsFlow(state(), "b".repeat(43), client, id);
+  expect(result.google).toBe("connected");
+  expect(result.actions.includes("google_disconnect")).toBe(false);
+  googleConnected = "malformed";
+  await expect(securitySettingsFlow(state(), "b".repeat(43), client, id)).rejects.toMatchObject({ code: "unavailable" });
+});
+
+test("Google link initiation preserves browser/identity and jar, rejects duplicates and requires current AAL2 when enrolled", async () => {
+  reply = flow([...enabledNodes(), input("oidc", "link", "google")]);
+  const destination = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+  destination.searchParams.set("redirect_uri", "http://127.0.0.1:3300/self-service/methods/oidc/callback/google");
+  destination.searchParams.set("state", "fixture-google-settings-state-32");
+  postReply = { redirect_browser_to: destination.href };
+  responseStatus = 422;
+  const current = state();
+  const form = new URLSearchParams({ action: "google_connect" });
+  await expect(securitySettingsFlow(current, "b".repeat(43), client, id, form)).rejects.toMatchObject({ code: "reauthentication_required" });
+  expect(posts.length).toBe(0);
+  session.authenticator_assurance_level = current.provider.aal = "aal2";
+  const result = await securitySettingsFlow(current, "b".repeat(43), client, id, form);
+  expect(result.socialRedirect).toBe(destination.href);
+  expect(current.social).toEqual({ flow: id, kind: "settings", state: "fixture-google-settings-state-32" });
+  expect(posts[0]).toEqual({ method: "oidc", link: "google", csrf_token: "provider-csrf", upstream_parameters: { prompt: "select_account" } });
+  expect(current.provider.identityId).toBe(identityId);
+  expect(current.provider.userId).toBe("42");
+  await expect(securitySettingsFlow(current, "b".repeat(43), client, id, form)).rejects.toMatchObject({ code: "invalid_request" });
+  expect(posts.length).toBe(1);
+});
+
+function linkingState() {
+  return { ...state(), social: { flow: id, kind: "settings", state: "fixture-google-settings-state-32" } };
+}
+test("Google callback completes same-account credential linking without provisioning or token replacement; replay is rejected", async () => {
+  reply = flow([input("oidc", "link", "google")]);
+  callbackReply = { ...flow([input("oidc", "unlink", "google")]), state: "success" };
+  callbackNext = flow([input("oidc", "unlink", "google")]);
+  const current = linkingState();
+  const expected = structuredClone(current.provider);
+  const tokens = structuredClone(current.tokens);
+  const parameters = new URLSearchParams({ state: current.social.state, code: "fixture-unissued" });
+  const response = await completeSocialCallback(current, "b".repeat(43), parameters, client);
+  expect(response.headers.get("location")).toContain("/account/security?flow=");
+  expect(response.headers.get("location")).toContain("saved=1");
+  expect(current.provider).toEqual(expected);
+  expect(current.tokens).toEqual(tokens);
+  expect(current.social).toBeUndefined();
+  expect(current.jar.includes("callback-fixture")).toBe(true);
+  await expect(completeSocialCallback(current, "b".repeat(43), parameters, client)).rejects.toMatchObject({ code: "expired" });
+  expect(callbackCount).toBe(1);
+  expect(posts.length).toBe(0);
+});
+
+test("Google callback cannot mutate from an expired or lower-assurance settings session", async () => {
+  reply = flow([...enabledNodes(), input("oidc", "link", "google")]);
+  for (const expired of [false, true]) {
+    const current = linkingState();
+    session.authenticator_assurance_level = current.provider.aal = expired ? "aal2" : "aal1";
+    session.authenticated_at = new Date(Date.now() - (expired ? 900001 : 0)).toISOString();
+    await expect(completeSocialCallback(current, "b".repeat(43),
+      new URLSearchParams({ state: current.social?.state ?? "fixture-google-settings-state-32", code: "fixture-unissued" }), client))
+      .rejects.toMatchObject({ code: "reauthentication_required" });
+  }
+  expect(callbackCount).toBe(0);
+});
+
+test("cancelled and rejected linking return safely to settings without claiming a successful connection", async () => {
+  for (const cancelled of [true, false]) {
+    reply = flow([input("oidc", "link", "google")]);
+    callbackStatus = 400;
+    callbackReply = reply;
+    const current = linkingState();
+    const response = await completeSocialCallback(current, "b".repeat(43),
+      new URLSearchParams({ state: current.social.state, ...(cancelled ? { error: "access_denied" } : { code: "fixture-unissued" }) }), client);
+    expect(response.headers.get("location")).toContain(`google=${cancelled ? "cancelled" : "failed"}`);
+    expect(current.provider.userId).toBe("42");
+    expect(current.social).toBeUndefined();
+  }
+  expect(posts.length).toBe(0);
+});
+
+test("foreign Google settings callback identity is rejected rather than adopting or transferring an account", async () => {
+  reply = flow([input("oidc", "link", "google")]);
+  callbackReply = { ...flow(), state: "success", identity: { id: sessionId, schema_id: "customer-v1" } };
+  const current = linkingState();
+  await expect(completeSocialCallback(current, "b".repeat(43),
+    new URLSearchParams({ state: current.social.state, code: "fixture-unissued" }), client)).rejects.toMatchObject({ code: "unavailable" });
+  expect(current.provider.userId).toBe("42");
+  expect(current.provider.identityId).toBe(identityId);
+});
+
+test("native Google disconnect keeps the canonical account and only submits an acknowledged provider unlink", async () => {
+  reply = flow([input("oidc", "unlink", "google"), ...enabledNodes()]);
+  const current = state();
+  current.provider.aal = session.authenticator_assurance_level = "aal2";
+  const expected = structuredClone(current.provider);
+  postReply = { ...flow([input("oidc", "link", "google"), ...enabledNodes()]), state: "success" };
+  const result = await securitySettingsFlow(current, "b".repeat(43), client, id,
+    new URLSearchParams({ action: "google_disconnect", acknowledge: "yes" }));
+  expect(posts[0]).toEqual({ method: "oidc", unlink: "google", csrf_token: "provider-csrf" });
+  expect(result.saved).toBe(true);
+  expect(current.provider).toEqual(expected);
 });

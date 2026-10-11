@@ -39,9 +39,12 @@ export async function AuthPage({ kind, searchParams }: { kind: FormKind; searchP
     view = await withBrowser(browser, async (state, client) => {
       try {
         const flow = await readFlow(state, browser, flowIdentifier(flowId), kind, client);
+        const google = kind === "registration" && state.googleRegistration?.flow === flow.id ? state.googleRegistration : undefined;
         return { kind: "flow" as const, flow, csrf: state.csrf, returnTo: state.returnTo,
-          methods: kind === "verification" && flow.state === "passed_challenge" ? [] : formMethods(flow.nodes, kind),
-          messages: [...new Set([...formMessages(flow.messages, kind), ...flow.nodes.flatMap((node) =>
+          google,
+          methods: kind === "verification" && flow.state === "passed_challenge" ? [] : formMethods(flow.nodes, kind, google),
+          messages: [...new Set([...formMessages(google && (!google.submitted || !google.providerValidation) ?
+            flow.messages.filter((message) => Number(message.id) >= 5000000) : flow.messages, kind), ...flow.nodes.flatMap((node) =>
             formMessages(node.messages, kind).filter((message) => message === temporaryAuthMessage))])] };
       } catch (error) {
         if (!(error instanceof AuthError)) throw error;
@@ -66,14 +69,16 @@ export async function AuthPage({ kind, searchParams }: { kind: FormKind; searchP
   const fieldErrors = methods.flatMap((method) => method.fields.filter((field) => field.error).map((field) => ({
     id: authFieldId(method.name, field.name), label: field.label, error: field.error,
   })));
-  const validation = query.validation === "1" || view.flow.messages.some((message) => message.type === "error") ||
+  const validation = query.validation === "1" || ((!view.google || view.google.providerValidation) &&
+    view.flow.messages.some((message) => message.type === "error")) ||
     methods.some((method) => method.fields.some((field) => field.error));
   const title = secondFactor ? "Two-step verification" : kind === "login" ? "Sign in" :
-    kind === "registration" ? "Create your account" : kind === "recovery" ? "Recover your account" :
+    kind === "registration" ? view.google ? "Complete your registration" : "Create your account" : kind === "recovery" ? "Recover your account" :
       kind === "reset" ? "Set a new password" : "Verify your email";
   const description = secondFactor ? "Confirm it's you using your authenticator or a recovery code." :
     kind === "login" ? "Sign in to your ByteCore account." :
-      kind === "registration" ? "Create your account, verify your email, then sign in." :
+      kind === "registration" ? view.google ? "Your Google email is verified. Add your missing account details to continue. No password is needed." :
+        "Create your account, verify your email, then sign in." :
         kind === "recovery" ? "Request a secure email code to reset your password." :
           kind === "reset" ? "Choose a new password, then sign in again. Other sessions will be invalidated." :
         "Complete email verification before signing in.";
@@ -87,6 +92,14 @@ export async function AuthPage({ kind, searchParams }: { kind: FormKind; searchP
         <p className="text-muted">{description}</p>
       </div>
       <div className="auth-panel">
+        {kind === "login" && query.social === "conflict" ? <p role="alert" className="mb-5 text-sm text-muted">
+          This Google email may belong to an existing account. Sign in using that account&apos;s existing method,
+          then open Account security and choose Connect Google. Restart the connection there; no accounts have been merged.
+        </p> : null}
+        {kind === "registration" && messages.some((message) => message.includes("cannot be registered")) ? <p className="mb-5 text-sm text-muted">
+          If this is your existing account, <a className="store-link" href="/login?returnTo=%2Faccount%2Fsecurity">sign in with its existing method</a>,
+          then choose Connect Google in Account security. Restart the connection there; matching emails do not merge accounts.
+        </p> : null}
         {kind === "login" && (query.social === "cancelled" || query.social === "failed") ? <p role="alert" className="mb-5 text-sm text-muted">
           {query.social === "cancelled" ? "Google sign-in was cancelled. Try again or use your password." :
             "Google sign-in could not complete. Start again or use your password."}

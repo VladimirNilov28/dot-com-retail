@@ -86,6 +86,33 @@ class KratosClient:
         response.raise_for_status()
         return response.json()
 
+    def google_connected(self, identity_id: str) -> bool:
+        from uuid import UUID
+        identity_id = str(UUID(identity_id))
+        response = requests.get(
+            f"{self._admin_url}/admin/identities/{identity_id}",
+            params={"include_credential": "oidc"}, timeout=10,
+        )
+        response.raise_for_status()
+        identity = response.json()
+        if not isinstance(identity, dict) or identity.get("id") != identity_id:
+            raise KratosUpstreamError("Invalid Google credential status")
+        credentials = identity.get("credentials", {})
+        if not isinstance(credentials, dict):
+            raise KratosUpstreamError("Invalid Google credential status")
+        oidc = credentials.get("oidc")
+        if oidc is None:
+            return False
+        config = oidc.get("config") if isinstance(oidc, dict) else None
+        providers = config.get("providers") if isinstance(config, dict) else None
+        if not isinstance(providers, list):
+            raise KratosUpstreamError("Invalid Google credential status")
+        if any(not isinstance(provider, dict) or not isinstance(provider.get("provider"), str) or
+               not provider["provider"] or not isinstance(provider.get("subject"), str) or
+               not provider["subject"] for provider in providers):
+            raise KratosUpstreamError("Invalid Google credential status")
+        return any(provider["provider"] == "google" for provider in providers)
+
     def set_identity_metadata_admin(self, identity_id: str, metadata_admin: dict) -> dict:
         patch = [{"op": "add", "path": "/metadata_admin", "value": metadata_admin}]
         response = requests.patch(

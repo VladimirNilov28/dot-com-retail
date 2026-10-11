@@ -1,11 +1,31 @@
 import { describe, expect, test } from "bun:test";
-import { authFieldId, captchaFailure, formMessages, formMethods, temporaryAuthMessage } from "./view";
+import { authFieldId, captchaFailure, formMessages, formMethods, googleProfileErrors, temporaryAuthMessage } from "./view";
 
 const input = (name, value, group = "default", type = "text", messages = []) => ({
   type: "input", group, attributes: { name, value, type, required: true }, messages,
 });
 const csrf = input("csrf_token", "provider-csrf-control", "default", "hidden");
 const password = input("method", "password", "password", "submit");
+
+test("verified Google onboarding is passwordless, immutable-email and error-free until actually submitted", () => {
+  const nodes = [csrf, input("provider", "google", "oidc", "submit"),
+    input("traits.username", "", "default", "text", [{ id: 4000002, type: "error" }]),
+    input("traits.dateOfBirth", "", "default", "text", [{ id: 4000002, type: "error" }]), password];
+  const context = { flow: "fixture", email: "verified@example.test", submitted: false };
+  const initial = formMethods(nodes, "registration", context);
+  expect(initial.map((method) => method.name)).toEqual(["oidc"]);
+  expect(initial[0].fields.some((field) => field.error)).toBe(false);
+  expect(initial[0].fields.find((field) => field.name === "traits.email")).toMatchObject({
+    value: "verified@example.test", readOnly: true });
+  const retry = formMethods(nodes, "registration", { ...context, submitted: true,
+    username: "chosen-name", dateOfBirth: "" })[0];
+  expect(retry.fields.find((field) => field.name === "traits.username").value).toBe("chosen-name");
+  expect(retry.fields.find((field) => field.name === "traits.username").error).toBeUndefined();
+  expect(retry.fields.find((field) => field.name === "traits.dateOfBirth").error).toBeTruthy();
+  expect(googleProfileErrors("chosen-name", "1990-02-28")).toEqual({});
+  expect(googleProfileErrors(" ", "1990-02-30")["traits.dateOfBirth"]).toBeTruthy();
+  expect(googleProfileErrors("chosen-name", "2990-02-28")["traits.dateOfBirth"]).toBeTruthy();
+});
 
 describe("safe provider form projection", () => {
   test("recovery and reset use provider controls without exposing proofs or unrelated settings", () => {

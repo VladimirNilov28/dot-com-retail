@@ -125,12 +125,40 @@ test("provider-authenticated registration continuation completes through canonic
   const submitted = form("must-not-forward");
   submitted.set("method", "oidc");
   submitted.set("provider", "google");
+  submitted.delete("password");
+  submitted.delete("traits.email");
   const result = await submitFlow(state(), browser, id, "registration", submitted, client);
   expect(result).toEqual({ complete: true, socialComplete: true });
   expect(postedSocial.traits).toEqual({ username: "fixture", dateOfBirth: "1990-06-01" });
   expect(postedSocial.transient_payload.altcha).toBe("fixture-proof");
   expect(postedSocial.password).toBeUndefined();
   expect(postedSocial.traits.email).toBeUndefined();
+});
+
+test("Google registration rejects posted identity claims and preserves missing profile values before mutation", async () => {
+  const current = { ...state(), googleRegistration: { flow: id, email: "verified@example.test", submitted: false } };
+  const submitted = new URLSearchParams({ method: "oidc", provider: "google", csrf_token: "fixture-csrf",
+    "traits.username": "chosen-name", "traits.dateOfBirth": "", altcha: "fixture-proof" });
+  const before = posts;
+  expect((await submitFlow(current, browser, id, "registration", submitted, client)).validation).toBe(true);
+  expect(posts).toBe(before);
+  expect(current.googleRegistration).toMatchObject({ email: "verified@example.test", submitted: true,
+    username: "chosen-name", dateOfBirth: "" });
+  for (const name of ["traits.email", "password", "spring_user_id", "role"]) {
+    const injected = new URLSearchParams(submitted);
+    injected.set(name, "attacker@example.test");
+    await expect(submitFlow(current, browser, id, "registration", injected, client)).rejects.toMatchObject({ code: "invalid_request" });
+  }
+  expect(posts).toBe(before);
+});
+
+test("duplicate OAuth initiation is rejected before another provider submission", async () => {
+  const current = { ...state(), social: { flow: id, kind: "login", state: "already-pending-provider-state-32" } };
+  const before = posts;
+  await expect(submitFlow(current, browser, id, "login",
+    new URLSearchParams({ method: "oidc", provider: "google", csrf_token: "fixture-csrf" }), client))
+    .rejects.toMatchObject({ code: "invalid_request" });
+  expect(posts).toBe(before);
 });
 
 test("native Google login 422 is a validated browser-location change with bound state and encrypted continuity", async () => {

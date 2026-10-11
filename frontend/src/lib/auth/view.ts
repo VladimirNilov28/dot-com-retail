@@ -1,5 +1,6 @@
 import { object } from "@/lib/graphql/scalars";
 import type { FormKind } from "./model";
+import type { BrowserState } from "./model";
 
 export interface AuthField {
   name: string;
@@ -9,6 +10,7 @@ export interface AuthField {
   value: string;
   error?: string;
   autocomplete?: string;
+  readOnly?: boolean;
 }
 
 export interface AuthMethod {
@@ -106,7 +108,20 @@ export function formMessages(values: unknown, kind?: FormKind): string[] {
   }).filter(Boolean);
 }
 
-export function formMethods(nodes: Record<string, unknown>[], kind: FormKind): AuthMethod[] {
+export function googleProfileErrors(username: string, dateOfBirth: string): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (!username.trim()) errors["traits.username"] = "Enter a username.";
+  const parsed = new Date(`${dateOfBirth}T00:00:00Z`);
+  if (!dateOfBirth) errors["traits.dateOfBirth"] = "Enter your date of birth.";
+  else if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth) || !Number.isFinite(parsed.getTime()) ||
+      parsed.toISOString().slice(0, 10) !== dateOfBirth || dateOfBirth > new Date().toISOString().slice(0, 10)) {
+    errors["traits.dateOfBirth"] = "Enter a valid date of birth, not a future date.";
+  }
+  return errors;
+}
+
+export function formMethods(nodes: Record<string, unknown>[], kind: FormKind,
+  googleRegistration?: BrowserState["googleRegistration"]): AuthMethod[] {
   const allowed = kind === "login" ? ["password", "totp", "lookup_secret", "oidc"] :
     kind === "registration" ? ["password", "oidc"] : kind === "reset" ? ["password"] : ["code"];
   const methods: AuthMethod[] = [];
@@ -160,6 +175,22 @@ export function formMethods(nodes: Record<string, unknown>[], kind: FormKind): A
           ? "Continue to password reset" : "Send recovery email" : kind === "verification"
         ? fields.some((field) => field.name === "code" && field.type !== "hidden") ? "Verify email" : "Send verification code"
         : "Sign in" });
+  }
+  if (kind === "registration" && googleRegistration) {
+    const google = methods.find((method) => method.name === "oidc");
+    if (!google) throw new TypeError("Google continuation is missing its provider control");
+    const errors = googleRegistration.submitted ?
+      googleProfileErrors(googleRegistration.username ?? "", googleRegistration.dateOfBirth ?? "") : {};
+    google.fields = google.fields.map((field) => ({
+      ...field,
+      value: field.name === "traits.username" ? googleRegistration.username ?? field.value :
+        field.name === "traits.dateOfBirth" ? googleRegistration.dateOfBirth ?? field.value : field.value,
+      error: googleRegistration.submitted ?
+        (googleRegistration.providerValidation ? field.error : undefined) ?? errors[field.name] : undefined,
+    }));
+    google.fields.splice(1, 0, { name: "traits.email", label: "Google email", type: "email",
+      required: false, value: googleRegistration.email, readOnly: true });
+    return [google];
   }
   if (!methods.length || methods.length > 3 || new Set(methods.map((method) => method.name)).size !== methods.length) {
     throw new TypeError("Unsupported provider methods");

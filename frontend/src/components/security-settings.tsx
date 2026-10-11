@@ -1,21 +1,26 @@
 "use client";
 
 import { Button } from "@heroui/react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { SecurityAction, SecuritySettings as Settings } from "@/lib/auth/settings";
 
 function SecurityForm({ settings, action, children, label }: {
   settings: Settings; action: SecurityAction; children?: ReactNode; label: string;
 }) {
   const [pending, setPending] = useState(false);
+  const submitting = useRef(false);
   return (
-    <form action="/auth/security" method="post" className="space-y-4" onSubmit={() => setPending(true)}>
+    <form action="/auth/security" method="post" className="space-y-4" onSubmit={(event) => {
+      if (submitting.current) { event.preventDefault(); return; }
+      submitting.current = true;
+      setPending(true);
+    }}>
       <input type="hidden" name="_csrf" value={settings.csrf} />
       <input type="hidden" name="flow" value={settings.id} />
       <input type="hidden" name="action" value={action} />
       {children}
       <Button type="submit" className="auth-submit" isDisabled={pending}>
-        {pending ? "Saving…" : label}
+        {pending ? action === "google_connect" ? "Opening Google…" : "Saving…" : label}
       </Button>
     </form>
   );
@@ -40,8 +45,23 @@ export function SecuritySettings({ settings }: { settings: Settings }) {
   const available = (action: SecurityAction) => settings.actions.includes(action);
   return (
     <div className="space-y-6">
-      {settings.invalid ? <p role="alert" className="text-danger">The change was not accepted. Check your authenticator code and try again.</p> : null}
+      {settings.invalid ? <p role="alert" className="text-danger">The change was not accepted. Check your details and try again. A Google account connected elsewhere cannot be moved to this account.</p> : null}
       {settings.saved && !settings.invalid ? <p role="status">Your security settings have been updated.</p> : null}
+      <section className="auth-panel space-y-4" aria-labelledby="google-heading">
+        <h2 id="google-heading" className="text-xl font-semibold tracking-tight">Google account</h2>
+        <p className="text-muted">{settings.google === "connected" ? "Connected. Google signs you in to this same ByteCore account." :
+          settings.google === "disconnected" ? "Not connected. Connect Google to sign in without changing your account or data." :
+            "Google connection is not available in this environment."}</p>
+        {available("google_connect") ? <SecurityForm settings={settings} action="google_connect" label="Connect Google" /> : null}
+        {available("google_disconnect") ? <SecurityForm settings={settings} action="google_disconnect" label="Disconnect Google">
+          <label className="flex items-start gap-3 text-sm">
+            <input type="checkbox" name="acknowledge" value="yes" required className="mt-1" />
+            <span>I will use my other sign-in method after disconnecting Google.</span>
+          </label>
+        </SecurityForm> : settings.google === "connected" ?
+          <p className="text-sm text-muted">Google cannot be disconnected unless another usable sign-in method remains. An authenticator or backup code alone is not a replacement.</p> : null}
+        <p className="text-sm text-muted">Connection changes require a recent sign-in, including two-step verification when enabled.</p>
+      </section>
       <section className="auth-panel space-y-4" aria-labelledby="authenticator-heading">
         <h2 id="authenticator-heading" className="text-xl font-semibold tracking-tight">Authenticator app</h2>
         <p className="text-muted">{settings.totpEnabled ? "Enabled. You will need a code when you sign in." :

@@ -5,13 +5,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { object, text } from "@/lib/graphql/scalars";
 import { authConfig } from "./config";
 import { assertCsrf, authBoundary, authHeaders, boundedForm, browserCookie, redirectResponse } from "./http";
-import { AuthError, assertSameProvider, flowIdentifier, oneParameter, type BrowserState, type ProviderSession } from "./model";
-import { currentProviderSession, providerClient, providerFailure } from "./provider";
+import { AuthError, assertSameProvider, decodeProviderSession, flowIdentifier, oneParameter, type BrowserState, type ProviderSession } from "./model";
+import { bridgeRequest, currentProviderSession, providerClient, providerCookie, providerFailure } from "./provider";
 import { authenticatedState } from "./session";
 import { assertFlow, bindFlow, withBrowser } from "./store";
+import { googleAuthorization } from "./social";
 
 export type SecurityAction = "totp_confirm" | "totp_disable" | "backup_generate" |
-  "backup_reveal" | "backup_confirm" | "backup_disable";
+  "backup_reveal" | "backup_confirm" | "backup_disable" | "google_connect" | "google_disconnect";
 export interface SecuritySettings {
   id: string;
   expiresAt: string;
@@ -24,6 +25,8 @@ export interface SecuritySettings {
   codes: { value: string; used: boolean }[];
   saved: boolean;
   invalid: boolean;
+  google: "unavailable" | "disconnected" | "connected";
+  socialRedirect?: string;
 }
 
 const backupFields = {
@@ -32,7 +35,8 @@ const backupFields = {
   backup_confirm: "lookup_secret_confirm",
   backup_disable: "lookup_secret_disable",
 } as const;
-const securityActions: SecurityAction[] = ["totp_confirm", "totp_disable", ...Object.keys(backupFields) as (keyof typeof backupFields)[]];
+const securityActions: SecurityAction[] = ["totp_confirm", "totp_disable", ...Object.keys(backupFields) as (keyof typeof backupFields)[],
+  "google_connect", "google_disconnect"];
 const privilegedAge = 15 * 60 * 1000;
 
 function record(value: unknown): Record<string, unknown> {
@@ -57,7 +61,7 @@ function pngDataUri(value: unknown): string {
   return value;
 }
 
-/** Project only Kratos' MFA nodes, never traits, credential configurations, HTML or provider URLs. */
+/** Project only MFA and Google controls, never traits, credential configurations, HTML or provider URLs. */
 export function projectSecuritySettings(value: unknown, state: BrowserState): SecuritySettings {
   const flow = record(value);
   const ui = record(flow.ui);
@@ -75,11 +79,22 @@ export function projectSecuritySettings(value: unknown, state: BrowserState): Se
   if (Date.parse(expiresAt) <= Date.now()) throw new AuthError("expired", 401);
   const result: SecuritySettings = {
     id, expiresAt, csrf: state.csrf, totpEnabled: false, backupEnabled: false,
-    actions: [], codes: [], saved: flow.state === "success", invalid: false,
+    actions: [], codes: [], saved: flow.state === "success", invalid: false, google: "unavailable",
   };
   const names = new Set<string>();
   for (const raw of ui.nodes) {
     const node = record(raw);
+    if (node.group === "oidc") {
+      const attributes = record(node.attributes);
+      if (node.type === "input" && attributes.type === "submit" && attributes.value === "google" &&
+          attributes.disabled !== true && ["link", "unlink"].includes(String(attributes.name))) {
+        result.google = attributes.name === "link" ? "disconnected" : "connected";
+        result.actions.push(attributes.name === "link" ? "google_connect" : "google_disconnect");
+      }
+      assertProviderMessages(node.messages);
+      if (Array.isArray(node.messages) && node.messages.some((message) => record(message).type === "error")) result.invalid = true;
+      continue;
+    }
     if (node.group !== "totp" && node.group !== "lookup_secret") continue;
     const attributes = record(node.attributes);
     if (attributes.disabled === true) continue;
@@ -132,7 +147,7 @@ function providerCsrf(value: unknown): string {
   return attributes.value;
 }
 
-export function securityPayload(form: URLSearchParams, settings: SecuritySettings, csrf: string): UpdateSettingsFlowBody {
+export function securityPayload(form: URLSearchParams, settings: SecuritySettings, csrf: string): UpdateSettingsFlowBody & { csrf_token: string } {
   for (const name of form.keys()) {
     if (!["_csrf", "flow", "action", "totp_code", "acknowledge"].includes(name) ||
         form.getAll(name).length !== 1) throw new AuthError("invalid_request", 400);
@@ -140,7 +155,7 @@ export function securityPayload(form: URLSearchParams, settings: SecuritySetting
   const action = oneParameter(form, "action") as SecurityAction;
   if (!securityActions.includes(action) || !settings.actions.includes(action)) throw new AuthError("invalid_request", 400);
   const acknowledgement = oneParameter(form, "acknowledge");
-  if (["totp_disable", "backup_disable", "backup_confirm"].includes(action) && acknowledgement !== "yes") {
+  if (["totp_disable", "backup_disable", "backup_confirm", "google_disconnect"].includes(action) && acknowledgement !== "yes") {
     throw new AuthError("invalid_request", 400);
   }
   if (action === "totp_confirm") {
@@ -149,6 +164,9 @@ export function securityPayload(form: URLSearchParams, settings: SecuritySetting
     return { method: "totp", csrf_token: csrf, totp_code: code };
   }
   if (form.has("totp_code")) throw new AuthError("invalid_request", 400);
+  if (action === "google_connect") return { method: "oidc", csrf_token: csrf, link: "google",
+    upstream_parameters: { prompt: "select_account" } };
+  if (action === "google_disconnect") return { method: "oidc", csrf_token: csrf, unlink: "google" };
   if (action === "totp_disable") return { method: "totp", csrf_token: csrf, totp_unlink: true };
   return { method: "lookup_secret", csrf_token: csrf, [backupFields[action]]: true };
 }
@@ -199,11 +217,18 @@ export async function securitySettingsFlow(
     if (form) {
       assertSecuritySession(session, state.provider, projected);
       const payload = securityPayload(form, projected, providerCsrf(flow));
+      if (payload.method === "oidc" && state.social) throw new AuthError("invalid_request", 400);
       stage = "mutation";
       try {
         flow = (await provider.api.updateSettingsFlow({ flow: projected.id, updateSettingsFlowBody: payload })).data;
       } catch (error) {
         const failure = providerFailure(error);
+        if (failure.status === 422 && payload.method === "oidc" && "link" in payload) {
+          const destination = googleAuthorization(record(failure.body).redirect_browser_to);
+          if (state.social) throw new AuthError("invalid_request", 400);
+          state.social = { state: text(oneParameter(destination.searchParams, "state")), flow: projected.id, kind: "settings" };
+          return { ...projected, socialRedirect: destination.href };
+        }
         if (failure.status !== 400) settingsFailure(error);
         flow = failure.body;
       }
@@ -231,6 +256,13 @@ export async function securitySettingsFlow(
         if (updated.id !== projected.id) throw new AuthError("forbidden", 403);
         projected = updated;
       }
+    }
+    if (projected.google === "unavailable") {
+      provider.save();
+      const connection = record(await bridgeRequest("google-connection", { cookie: await providerCookie(state) }));
+      assertSameProvider(state.provider, decodeProviderSession(connection.session));
+      if (typeof connection.connected !== "boolean") throw new AuthError("unavailable");
+      if (connection.connected) projected.google = "connected";
     }
     return projected;
   } catch (error) {
@@ -269,6 +301,7 @@ export async function handleSecuritySettings(request: NextRequest): Promise<Next
         assertCsrf(request, form, state.csrf);
         return securitySettingsFlow(state, browser, client, flowIdentifier(oneParameter(form, "flow")), form);
       });
+      if (settings.socialRedirect) return redirectResponse(settings.socialRedirect);
       return redirectResponse(`/account/security?flow=${settings.id}`);
     } catch (error) {
       if (error instanceof AuthError && error.code === "reauthentication_required") {

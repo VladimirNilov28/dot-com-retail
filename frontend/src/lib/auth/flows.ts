@@ -7,6 +7,7 @@ import { assertFlow, bindFlow } from "./store";
 import { object, text, uuid } from "@/lib/graphql/scalars";
 import { registrationPasswordError, type PasswordErrorCode } from "./password";
 import { googleAuthorization } from "./social";
+import { googleProfileErrors } from "./view";
 
 export interface ProviderFlow {
   id: string;
@@ -51,6 +52,7 @@ export async function initializeFlow(
   const provider = providerClient(state);
   try {
     const config = authConfig();
+    if (kind === "registration") delete state.googleRegistration;
     const flow = kind === "login"
       ? (await provider.api.createBrowserLoginFlow({
         aal, refresh: refresh || aal === "aal2", returnTo: `${config.origin}/auth/resume`,
@@ -118,6 +120,7 @@ export async function submitFlow(
   state: BrowserState, browser: string, id: string, kind: FormKind, form: URLSearchParams, client: PoolClient,
 ): Promise<Submission> {
   const flow = await readFlow(state, browser, id, kind, client);
+  if (state.social) throw new AuthError("invalid_request", 400);
   const method = field(form, "method", 32);
   if (!flow.nodes.some((node) => node.type === "input" &&
       ((object(node.attributes).name === "method" && object(node.attributes).value === method) ||
@@ -134,9 +137,21 @@ export async function submitFlow(
       if (kind === "login") {
         result = (await provider.api.updateLoginFlow({ flow: id, updateLoginFlowBody: { method: "oidc", provider: "google", csrf_token } })).data;
       } else if (kind === "registration") {
+        for (const name of form.keys()) {
+          if (!["flow", "_csrf", "method", "provider", "csrf_token", "traits.username", "traits.dateOfBirth", "altcha"].includes(name) ||
+              form.getAll(name).length !== 1) throw new AuthError("invalid_request", 400);
+        }
+        const username = field(form, "traits.username", 255, true);
+        const dateOfBirth = field(form, "traits.dateOfBirth", 10, true);
+        if (state.googleRegistration?.flow === id) {
+          state.googleRegistration = { ...state.googleRegistration, submitted: true, providerValidation: false, username, dateOfBirth };
+        }
+        if (Object.keys(googleProfileErrors(username, dateOfBirth)).length) {
+          return { complete: false, validation: true, flow };
+        }
         result = (await provider.api.updateRegistrationFlow({ flow: id, updateRegistrationFlowBody: {
           method: "oidc", provider: "google", csrf_token,
-          traits: { username: field(form, "traits.username", 255), dateOfBirth: field(form, "traits.dateOfBirth", 10) },
+          traits: { username, dateOfBirth },
           transient_payload: { altcha: field(form, "altcha", 16384) },
         } })).data;
       } else throw new AuthError("invalid_request", 400);
@@ -235,6 +250,9 @@ export async function submitFlow(
     if (failure.status === 400) {
       const rejected = validateFlow(failure.body, kind);
       if (rejected.id !== flow.id) throw new AuthError("invalid_request", 400);
+      if (kind === "registration" && method === "oidc" && state.googleRegistration?.flow === id) {
+        state.googleRegistration.providerValidation = true;
+      }
       return { complete: false, validation: true, flow: rejected };
     }
     if (failure.status === 410) throw new AuthError("expired", 401);

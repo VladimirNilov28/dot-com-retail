@@ -19,6 +19,33 @@ from test_login_consent import make_config  # noqa: E402
 
 
 class AuthHttpErrorsTest(unittest.TestCase):
+    @patch("api.bridge_server.login_consent.bff_session")
+    def test_google_status_requires_bridge_auth_and_canonical_customer_session(self, session):
+        config = make_config(auth_bridge_secret="fixture-bridge-secret-not-issued-32")
+        kratos = Mock()
+        kratos.google_connected.return_value = True
+        connection = self.start_server(make_bridge_handler(config, Mock(), kratos, Mock()))
+        body = json.dumps({"cookie": "private-fixture-cookie"})
+        connection.request("POST", "/internal/google-connection", body=body)
+        response = connection.getresponse()
+        response.read()
+        self.assertEqual(response.status, 403)
+        session.assert_not_called()
+        for canonical, status in [
+            ({"active": False}, 403),
+            ({"active": True, "role": "ADMIN", "identity_id": "owner-admin"}, 403),
+            ({"active": True, "role": "USER", "identity_id": "verified-customer"}, 200),
+        ]:
+            session.return_value = canonical
+            connection.request("POST", "/internal/google-connection", body=body,
+                headers={"Authorization": "Bearer " + config.auth_bridge_secret})
+            response = connection.getresponse()
+            payload = json.loads(response.read())
+            self.assertEqual(response.status, status)
+            if status == 200:
+                self.assertEqual(payload, {"session": canonical, "connected": True})
+                kratos.google_connected.assert_called_once_with("verified-customer")
+
     def start_server(self, handler):
         server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)

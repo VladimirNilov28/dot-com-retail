@@ -9,10 +9,19 @@ const flow = "11111111-1111-4111-8111-111111111111";
 const nonce = "opaque-provider-state-not-issued-32";
 const registrationFlow = "22222222-2222-4222-8222-222222222222";
 let previous, server, callbacks = 0, callbackFailure, registrationContinuation, registrationReads = 0;
+let callbackSuccess, callbackLocation;
+function nativeLogin() {
+  return { id: flow, type: "browser", expires_at: new Date(Date.now() + 600000).toISOString(),
+    ui: { action: `${server.url.origin}/self-service/login?flow=${flow}`, method: "POST", nodes: [
+      { type: "input", group: "default", attributes: { name: "csrf_token", type: "hidden", value: "fixture-csrf" } },
+      { type: "input", group: "password", attributes: { name: "method", type: "submit", value: "password" } },
+    ] } };
+}
 function nativeRegistration() {
   return { id: registrationFlow, type: "browser", expires_at: new Date(Date.now() + 600000).toISOString(),
     ui: { action: `${server.url.origin}/self-service/registration?flow=${registrationFlow}`, method: "POST",
       nodes: [{ type: "input", group: "default", attributes: { name: "csrf_token", type: "hidden", value: "fixture-csrf" } },
+        { type: "input", group: "default", attributes: { name: "traits.email", type: "email", value: "verified@example.test" } },
         ...["traits.username", "traits.dateOfBirth"].map((name) => ({ type: "input", group: "default",
           attributes: { name, type: "text", required: true }, messages: [{ id: 4000002, type: "error" }] })),
         { type: "input", group: "oidc", attributes: { name: "provider", type: "submit", value: "google" } }] } };
@@ -21,6 +30,9 @@ beforeAll(() => {
   server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch(request) {
     if (new URL(request.url).pathname.includes("/callback/")) {
       callbacks++;
+      if (callbackSuccess) return Response.json(callbackSuccess, {
+        headers: { "Set-Cookie": "ory_kratos_session=fixture; Path=/; HttpOnly" } });
+      if (callbackLocation) return new Response(null, { status: 303, headers: { Location: callbackLocation } });
       if (registrationContinuation) return Response.json(registrationContinuation, { status: 400,
         headers: { "Set-Cookie": "ory_kratos_continuity=fixture; Path=/; HttpOnly" } });
       if (callbackFailure) return Response.json(callbackFailure, { status: 500,
@@ -33,6 +45,7 @@ beforeAll(() => {
       expect(request.headers.get("cookie")).toContain("ory_kratos_continuity=fixture");
       return Response.json(nativeRegistration());
     }
+    if (new URL(request.url).pathname === "/self-service/login/browser") return Response.json(nativeLogin());
     throw new Error("Unexpected fixture request");
   } });
   previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
@@ -128,6 +141,8 @@ test("native callback 400 registration form continues missing-trait onboarding i
       values[0] === registrationFlow && values[2] === "registration")).toBe(true);
     expect(state.social).toBeUndefined();
     expect(state.jar.includes("ory_kratos_continuity")).toBe(true);
+    expect(state.googleRegistration).toEqual({ flow: registrationFlow, email: "verified@example.test", submitted: false,
+      providerValidation: false });
   } finally { registrationContinuation = undefined; }
 });
 
@@ -146,4 +161,48 @@ test("callback registration continuation cannot bind a malformed or foreign flow
     expect(bindings).toBe(0);
     expect(registrationReads).toBe(before);
   } finally { registrationContinuation = undefined; }
+});
+
+test("native completed registration JSON proceeds only to the canonical assurance-checked handoff", async () => {
+  callbackSuccess = { identity: { id: registrationFlow, schema_id: "customer-v1" }, continue_with: [] };
+  const state = { csrf: "a".repeat(43), jar: emptyJar(), returnTo: "/cart", social: { state: nonce, flow, kind: "registration" } };
+  try {
+    const response = await completeSocialCallback(state, "b".repeat(43),
+      new URLSearchParams({ state: nonce, code: "fixture-code" }), { query: async () => ({ rowCount: 1 }) });
+    expect(response.headers.get("location")).toBe("http://127.0.0.1:3300/auth/resume");
+    expect(state.provider).toBeUndefined();
+    expect(state.tokens).toBeUndefined();
+    expect(state.returnTo).toBe("/cart");
+    expect(state.jar.includes("ory_kratos_session")).toBe(true);
+  } finally { callbackSuccess = undefined; }
+});
+
+test("email-conflict continuation is discarded in favor of fresh existing-account authentication and explicit settings linking", async () => {
+  for (const json of [false, true]) {
+    const state = { csrf: "a".repeat(43), jar: emptyJar(), returnTo: "/account",
+      social: { state: nonce, flow, kind: "registration" } };
+    if (json) registrationContinuation = nativeLogin();
+    else callbackLocation = `http://127.0.0.1:3300/login?flow=${registrationFlow}&no_org_ui=true`;
+    try {
+      const response = await completeSocialCallback(state, "b".repeat(43),
+        new URLSearchParams({ state: nonce, code: "fixture-code" }), { query: async () => ({ rowCount: 1 }) });
+      const destination = new URL(response.headers.get("location"));
+      expect(destination.pathname).toBe("/login");
+      expect(destination.searchParams.get("social")).toBe("conflict");
+      expect(destination.searchParams.get("flow")).toBe(flow);
+      expect(state.social).toBeUndefined();
+      expect(state.tokens).toBeUndefined();
+    } finally { registrationContinuation = undefined; callbackLocation = undefined; }
+  }
+});
+
+test("Google's AAL2 continuation creates a bound second-factor flow rather than bypassing assurance", async () => {
+  callbackLocation = `${server.url.origin}/self-service/login/browser?aal=aal2&return_to=${encodeURIComponent("http://127.0.0.1:3300/auth/resume")}`;
+  const state = { csrf: "a".repeat(43), jar: emptyJar(), returnTo: "/cart", social: { state: nonce, flow, kind: "login" } };
+  try {
+    const response = await completeSocialCallback(state, "b".repeat(43),
+      new URLSearchParams({ state: nonce, code: "fixture-code" }), { query: async () => ({ rowCount: 1 }) });
+    expect(new URL(response.headers.get("location")).pathname).toBe("/login");
+    expect(state.tokens).toBeUndefined();
+  } finally { callbackLocation = undefined; }
 });

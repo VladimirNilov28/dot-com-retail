@@ -130,6 +130,13 @@ def make_bridge_handler(
                     self._dictionary(200, login_consent.bff_session(
                         kratos_client, spring_auth_client, body["cookie"],
                     ))
+                elif path == "/internal/google-connection":
+                    session = login_consent.bff_session(kratos_client, spring_auth_client, body["cookie"])
+                    if not session["active"] or session["role"] != "USER":
+                        self._dictionary(403, {"error": "forbidden"})
+                        return
+                    self._dictionary(200, {"session": session,
+                        "connected": kratos_client.google_connected(session["identity_id"])})
                 elif path == "/internal/logout":
                     kratos_client.revoke_browser_session(body["session_id"])
                     self._respond(204, b"")
