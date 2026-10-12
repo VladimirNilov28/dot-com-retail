@@ -21,7 +21,7 @@ const cachedProduct = unstable_cache(async (endpoint: string, origin: string, sl
   if (result.data.product === null) throw new MissingProduct();
   if (result.data.product.slug !== slug) throw new ProductFailure(failure("protocol", true));
   return result.data;
-}, ["product-detail-v1"], { revalidate: 60 });
+}, ["product-detail-v2"], { revalidate: 60 });
 
 export const getProduct = cache(async (slug: string): Promise<Result<ProductDetailQuery>> => {
   try {

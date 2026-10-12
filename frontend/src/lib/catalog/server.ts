@@ -64,11 +64,11 @@ const cachedListing = unstable_cache(async (
     throw new CatalogFailure(failure("protocol", true));
   }
   return data;
-}, ["catalog-listing-v2"], { revalidate: 60 });
+}, ["catalog-listing-v3"], { revalidate: 60 });
 
 const cachedHomeDiscovery = unstable_cache(async (endpoint: string, origin: string) =>
   success((await requestHive(homeDiscovery, {}, { endpoint, origin }, { kind: "public" })).result),
-["home-discovery-v1"], { revalidate: 60 });
+["home-discovery-v2"], { revalidate: 60 });
 
 const cachedHomeProducts = unstable_cache(async (endpoint: string, origin: string, categoryId: string) => {
   const data = success((await requestHive(homeCategoryProducts, { categoryId },
@@ -79,7 +79,7 @@ const cachedHomeProducts = unstable_cache(async (endpoint: string, origin: strin
     throw new CatalogFailure(failure("protocol", true));
   }
   return data;
-}, ["home-products-v1"], { revalidate: 60 });
+}, ["home-products-v2"], { revalidate: 60 });
 
 async function read<Data>(request: (endpoint: string, origin: string) => Promise<Data>): Promise<Result<Data>> {
   try {
