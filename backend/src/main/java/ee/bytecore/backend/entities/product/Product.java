@@ -50,6 +50,10 @@ public class Product {
             inverseJoinColumns = @JoinColumn(name = "category_id"))
     private Set<Category> categories = new HashSet<>();
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "brand_id")
+    private Brand brand;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private Instant createdAt;

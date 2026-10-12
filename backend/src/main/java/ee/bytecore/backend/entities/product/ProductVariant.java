@@ -46,6 +46,15 @@ public class ProductVariant {
     @Column(name = "weight_grams")
     private Integer weightGrams;
 
+    @Column(name = "length_mm")
+    private Integer lengthMm;
+
+    @Column(name = "width_mm")
+    private Integer widthMm;
+
+    @Column(name = "height_mm")
+    private Integer heightMm;
+
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
 

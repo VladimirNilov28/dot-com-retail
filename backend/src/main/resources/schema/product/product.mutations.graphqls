@@ -3,6 +3,7 @@ input CreateProductInput {
   slug: String!
   description: String
   categoryIds: [ID!]
+  brandId: ID
 }
 
 input UpdateProductInput {
@@ -10,6 +11,8 @@ input UpdateProductInput {
   slug: String
   description: String
   categoryIds: [ID!]
+  brandId: ID
+  clearBrand: Boolean
 }
 
 input CreateProductVariantInput {
@@ -19,6 +22,9 @@ input CreateProductVariantInput {
   attributes: JSON
   barcode: String
   weightGrams: Int
+  lengthMm: Int
+  widthMm: Int
+  heightMm: Int
 }
 
 input UpdateProductVariantInput {
@@ -27,6 +33,10 @@ input UpdateProductVariantInput {
   attributes: JSON
   barcode: String
   weightGrams: Int
+  lengthMm: Int
+  widthMm: Int
+  heightMm: Int
+  clearDimensions: Boolean
   isActive: Boolean
 }
 
@@ -44,4 +54,13 @@ extend type Mutation {
   createProductVariant(input: CreateProductVariantInput!): ProductVariant!
   updateProductVariant(variantId: ID!, input: UpdateProductVariantInput!): ProductVariant!
   deleteProductVariant(variantId: ID!): Boolean!
+
+  """Get-or-create a brand by case-insensitive name."""
+  createBrand(name: String!): Brand!
+  updateProductImage(imageId: ID!, altText: String!): ProductImage!
+  """Moves the image to position 0, keeping the others' relative order."""
+  setPrimaryProductImage(imageId: ID!): [ProductImage!]!
+  """imageIds must list each of the product's images exactly once."""
+  reorderProductImages(productId: ID!, imageIds: [ID!]!): [ProductImage!]!
+  deleteProductImage(imageId: ID!): Boolean!
 }

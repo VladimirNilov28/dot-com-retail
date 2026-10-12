@@ -82,6 +82,12 @@ class CatalogMutationAuthorizationTest {
     ProductVariantRepository productVariantRepository;
 
     @MockitoBean
+    ee.bytecore.backend.services.BrandService brandService;
+
+    @MockitoBean
+    ee.bytecore.backend.services.ProductImageService productImageService;
+
+    @MockitoBean
     JwtDecoder jwtDecoder;
 
     private Category category;

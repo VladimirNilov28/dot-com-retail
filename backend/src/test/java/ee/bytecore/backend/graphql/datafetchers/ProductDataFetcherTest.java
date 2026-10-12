@@ -59,6 +59,12 @@ class ProductDataFetcherTest {
     ProductVariantRepository productVariantRepository;
 
     @MockitoBean
+    ee.bytecore.backend.services.BrandService brandService;
+
+    @MockitoBean
+    ee.bytecore.backend.services.ProductImageService productImageService;
+
+    @MockitoBean
     ee.bytecore.backend.repositories.category.CategoryRepository categoryRepository;
 
     private Product product;

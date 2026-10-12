@@ -34,6 +34,10 @@ spring:
       # differently-configured auto-management path instead of routing
       # around it with a duplicate/symlinked .env.
       enabled: false
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
   security:
     oauth2:
       resourceserver:
@@ -50,6 +54,10 @@ logging:
 oauth:
   service:
     client-id: ${OAUTH_SERVICE_CLIENT_ID:oauth-service-internal}
+
+# Uploaded product images live here, outside the source tree (a volume in Docker).
+media:
+  storage-dir: ${MEDIA_STORAGE_DIR:./media-data}
 
 cart:
   guest:

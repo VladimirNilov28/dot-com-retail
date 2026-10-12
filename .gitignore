@@ -216,3 +216,6 @@ infrastructure/volumes/*
 infrastructure/jenkins/venv/
 __pycache__/
 *.pyc
+# Uploaded product media from local runs; binaries are never committed
+backend/media-data/
+media-data/

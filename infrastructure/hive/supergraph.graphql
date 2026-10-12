@@ -51,6 +51,11 @@ type CancellationOrder @join__type(graph: RETAIL) {
   status: OrderStatus!
 }
 
+type Brand @join__type(graph: RETAIL) {
+  id: ID!
+  name: String!
+}
+
 type Cart @join__type(graph: RETAIL) {
   createdAt: Instant!
   id: ID!
@@ -236,6 +241,11 @@ type Mutation @join__type(graph: RETAIL) {
   createGuestOrder(input: PlaceOrderInput!): CheckoutOrder!
   createOrder(input: PlaceOrderInput!): Order!
   createProduct(input: CreateProductInput!): Product!
+  createBrand(name: String!): Brand!
+  updateProductImage(altText: String!, imageId: ID!): ProductImage!
+  setPrimaryProductImage(imageId: ID!): [ProductImage!]!
+  reorderProductImages(imageIds: [ID!]!, productId: ID!): [ProductImage!]!
+  deleteProductImage(imageId: ID!): Boolean!
   createProductVariant(input: CreateProductVariantInput!): ProductVariant!
   createWarehouse(input: CreateWarehouseInput!): Warehouse!
   deleteCategory(categoryId: ID!): Boolean!
@@ -337,6 +347,12 @@ type PriceFacet @join__type(graph: RETAIL) {
 }
 
 type Product @join__type(graph: RETAIL) {
+  """Optional brand; null when not specified."""
+  brand: Brand
+  """
+  Ordered gallery; the first image is the primary one. Empty when no image exists.
+  """
+  images: [ProductImage!]!
   """
   Arithmetic mean of persisted 1-5 star ratings; null when there are no ratings.
   """
@@ -364,6 +380,19 @@ type ProductFacets @join__type(graph: RETAIL) {
   price: PriceFacet!
 }
 
+type ProductImage @join__type(graph: RETAIL) {
+  altText: String!
+  byteSize: Int!
+  contentType: String!
+  height: Int!
+  id: ID!
+  isPrimary: Boolean!
+  position: Int!
+  """Relative URL served by the storefront media route."""
+  url: String!
+  width: Int!
+}
+
 type ProductSearchResult @join__type(graph: RETAIL) {
   facets: ProductFacets!
   items: [Product!]!
@@ -388,9 +417,16 @@ type ProductVariant @join__type(graph: RETAIL) {
   sku: String!
   updatedAt: Instant!
   weightGrams: Int
+  """
+  Canonical dimensions in millimetres; all three are present, or all null (not specified).
+  """
+  lengthMm: Int
+  widthMm: Int
+  heightMm: Int
 }
 
 type Query @join__type(graph: RETAIL) {
+  brands: [Brand!]!
   categories: [Category!]!
   category(id: ID, slug: String): Category
   checkoutOrder(requestId: UUID!): CheckoutOrder
@@ -879,6 +915,7 @@ input CreatePaymentMethodInput @join__type(graph: RETAIL) {
 }
 
 input CreateProductInput @join__type(graph: RETAIL) {
+  brandId: ID
   categoryIds: [ID!]
   description: String
   name: String!
@@ -892,6 +929,9 @@ input CreateProductVariantInput @join__type(graph: RETAIL) {
   productId: ID!
   sku: String!
   weightGrams: Int
+  lengthMm: Int
+  widthMm: Int
+  heightMm: Int
 }
 
 input CreateWarehouseInput @join__type(graph: RETAIL) {
@@ -974,7 +1014,9 @@ input UpdateOrderStatusInput @join__type(graph: RETAIL) {
 }
 
 input UpdateProductInput @join__type(graph: RETAIL) {
+  brandId: ID
   categoryIds: [ID!]
+  clearBrand: Boolean
   description: String
   name: String
   slug: String
@@ -987,6 +1029,10 @@ input UpdateProductVariantInput @join__type(graph: RETAIL) {
   price: BigDecimal
   sku: String
   weightGrams: Int
+  lengthMm: Int
+  widthMm: Int
+  heightMm: Int
+  clearDimensions: Boolean
 }
 
 input UpdateRoleInput @join__type(graph: RETAIL) {

@@ -39,9 +39,38 @@ public class ProductMapper {
                 .attributes(entity.getAttributes())
                 .barcode(entity.getBarcode())
                 .weightGrams(entity.getWeightGrams())
+                .lengthMm(entity.getLengthMm())
+                .widthMm(entity.getWidthMm())
+                .heightMm(entity.getHeightMm())
                 .isActive(entity.getIsActive() != null && entity.getIsActive())
                 .createdAt(entity.getCreatedAt())
                 .updatedAt(entity.getUpdatedAt())
+                .build();
+    }
+
+    public static com.netflix.dgs.codegen.generated.types.Brand toGraphQlType(
+            ee.bytecore.backend.entities.product.Brand entity) {
+        if (entity == null) {
+            return null;
+        }
+        return com.netflix.dgs.codegen.generated.types.Brand.newBuilder()
+                .id(entity.getId().toString())
+                .name(entity.getName())
+                .build();
+    }
+
+    public static com.netflix.dgs.codegen.generated.types.ProductImage toGraphQlType(
+            ee.bytecore.backend.entities.product.ProductImage entity) {
+        return com.netflix.dgs.codegen.generated.types.ProductImage.newBuilder()
+                .id(entity.getId().toString())
+                .url(entity.url())
+                .altText(entity.getAltText())
+                .width(entity.getWidth())
+                .height(entity.getHeight())
+                .byteSize(entity.getByteSize())
+                .contentType(entity.getContentType())
+                .position(entity.getPosition())
+                .isPrimary(entity.getPosition() == 0)
                 .build();
     }
 

@@ -70,6 +70,12 @@ class InventoryDataFetcherTest {
     ProductVariantRepository productVariantRepository;
 
     @MockitoBean
+    ee.bytecore.backend.services.BrandService brandService;
+
+    @MockitoBean
+    ee.bytecore.backend.services.ProductImageService productImageService;
+
+    @MockitoBean
     ProductRepository productRepository;
 
     @MockitoBean

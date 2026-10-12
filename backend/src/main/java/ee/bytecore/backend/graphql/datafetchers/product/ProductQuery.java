@@ -7,11 +7,14 @@ import org.springframework.security.access.prepost.PreAuthorize;
 
 import ee.bytecore.backend.graphql.mappers.CategoryMapper;
 import ee.bytecore.backend.graphql.mappers.ProductMapper;
+import ee.bytecore.backend.services.BrandService;
 import ee.bytecore.backend.services.ProductService;
 import ee.bytecore.backend.services.ProductVariantService;
 
+import com.netflix.dgs.codegen.generated.types.Brand;
 import com.netflix.dgs.codegen.generated.types.Category;
 import com.netflix.dgs.codegen.generated.types.Product;
+import com.netflix.dgs.codegen.generated.types.ProductImage;
 import com.netflix.dgs.codegen.generated.types.ProductVariant;
 import com.netflix.graphql.dgs.*;
 
@@ -21,7 +24,11 @@ public class ProductQuery {
     private final ProductService productService;
     private final ProductVariantService productVariantService;
 
-    public ProductQuery(ProductService productService, ProductVariantService productVariantService) {
+    private final BrandService brandService;
+
+    public ProductQuery(
+            ProductService productService, ProductVariantService productVariantService, BrandService brandService) {
+        this.brandService = brandService;
         this.productService = productService;
         this.productVariantService = productVariantService;
     }
@@ -50,6 +57,36 @@ public class ProductQuery {
         return productService.findAll().stream()
                 .map(ProductMapper::toGraphQlType)
                 .toList();
+    }
+
+    @DgsQuery
+    @PreAuthorize("isAnonymous() or hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).PRODUCT_READ)")
+    public List<Brand> brands() {
+        return brandService.findAll().stream().map(ProductMapper::toGraphQlType).toList();
+    }
+
+    @DgsData(parentType = "Product", field = "brand")
+    public CompletableFuture<Brand> brand(DgsDataFetchingEnvironment dfe) {
+        Product product = dfe.getSource();
+        if (product == null) {
+            return CompletableFuture.completedFuture(null);
+        }
+        org.dataloader.DataLoader<Long, ee.bytecore.backend.entities.product.Brand> loader =
+                dfe.getDataLoader("brandByProductId");
+        return loader.load(Long.valueOf(product.getId())).thenApply(ProductMapper::toGraphQlType);
+    }
+
+    @DgsData(parentType = "Product", field = "images")
+    public CompletableFuture<List<ProductImage>> images(DgsDataFetchingEnvironment dfe) {
+        Product product = dfe.getSource();
+        if (product == null) {
+            return CompletableFuture.completedFuture(List.of());
+        }
+        org.dataloader.DataLoader<Long, List<ee.bytecore.backend.entities.product.ProductImage>> loader =
+                dfe.getDataLoader("imagesByProductId");
+        return loader.load(Long.valueOf(product.getId()))
+                .thenApply(
+                        list -> list.stream().map(ProductMapper::toGraphQlType).toList());
     }
 
     @DgsData(parentType = "Product")

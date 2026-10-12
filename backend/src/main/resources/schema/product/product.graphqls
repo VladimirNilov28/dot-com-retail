@@ -7,6 +7,10 @@ type Product {
   averageRating: Float
   """Number of distinct authenticated users who rated this product."""
   ratingCount: Int!
+  """Optional brand; null when not specified."""
+  brand: Brand
+  """Ordered gallery; the first image is the primary one. Empty when no image exists."""
+  images: [ProductImage!]!
   categories: [Category!]!
   variants: [ProductVariant!]!
   createdAt: Instant!
@@ -20,8 +24,31 @@ type ProductVariant {
   price: BigDecimal!
   attributes: JSON!
   barcode: String
+  """Canonical weight in grams; null means not specified."""
   weightGrams: Int
+  """Canonical dimensions in millimetres; all three are present, or all null (not specified)."""
+  lengthMm: Int
+  widthMm: Int
+  heightMm: Int
   isActive: Boolean!
   createdAt: Instant!
   updatedAt: Instant!
+}
+
+type Brand {
+  id: ID!
+  name: String!
+}
+
+type ProductImage {
+  id: ID!
+  """Relative URL served by the storefront media route."""
+  url: String!
+  altText: String!
+  width: Int!
+  height: Int!
+  byteSize: Int!
+  contentType: String!
+  position: Int!
+  isPrimary: Boolean!
 }

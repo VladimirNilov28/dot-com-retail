@@ -98,6 +98,12 @@ class HiveGraphQlTransportTest {
     ProductVariantRepository variantRepository;
 
     @MockitoBean
+    ee.bytecore.backend.services.BrandService brandService;
+
+    @MockitoBean
+    ee.bytecore.backend.services.ProductImageService productImageService;
+
+    @MockitoBean
     CategoryRepository categoryRepository;
 
     @MockitoBean

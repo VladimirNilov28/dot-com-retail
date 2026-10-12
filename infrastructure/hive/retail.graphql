@@ -9,6 +9,11 @@ type AttributeValueFacet {
   value: String!
 }
 
+type Brand {
+  id: ID!
+  name: String!
+}
+
 type CancellationOrder {
   cancellation: OrderCancellation
   cancellationEligibility: OrderCancellationEligibility!
@@ -199,6 +204,8 @@ type Mutation {
   cancelOrder(input: CancelOrderInput!): OrderCancellationPayload!
   cancelOrderAsStaff(input: CancelOrderInput!): OrderCancellationPayload!
   clearCart: Boolean!
+  "Get-or-create a brand by case-insensitive name."
+  createBrand(name: String!): Brand!
   createCategory(input: CreateCategoryInput!): Category!
   createGuestOrder(input: PlaceOrderInput!): CheckoutOrder!
   createOrder(input: PlaceOrderInput!): Order!
@@ -209,6 +216,7 @@ type Mutation {
   deleteMyAddress(addressId: ID!): Boolean!
   deleteMyPaymentMethod(paymentMethodId: ID!): Boolean!
   deleteProduct(productId: ID!): Boolean!
+  deleteProductImage(imageId: ID!): Boolean!
   deleteProductVariant(variantId: ID!): Boolean!
   " ADMIN/SUPPORT"
   deleteUser(userId: ID!): Boolean!
@@ -225,7 +233,11 @@ type Mutation {
   removeCartItem(cartItemId: ID!): Boolean!
   removeGuestCartItem(cartItemId: ID!): GuestCart!
   removeWishlistItem(wishlistItemId: ID!): Boolean!
+  "imageIds must list each of the product's images exactly once."
+  reorderProductImages(imageIds: [ID!]!, productId: ID!): [ProductImage!]!
   setInventory(input: SetInventoryInput!): Inventory!
+  "Moves the image to position 0, keeping the others' relative order."
+  setPrimaryProductImage(imageId: ID!): [ProductImage!]!
   startGuestCart: StartGuestCartResult!
   updateCartItem(cartItemId: ID!, input: UpdateCartItemInput!): CartItem!
   updateCategory(categoryId: ID!, input: UpdateCategoryInput!): Category!
@@ -233,6 +245,7 @@ type Mutation {
   updateMyAddress(addressId: ID!, input: UpdateAddressInput!): UserAddress!
   updateOrderStatus(input: UpdateOrderStatusInput!, orderId: ID!): Order!
   updateProduct(input: UpdateProductInput!, productId: ID!): Product!
+  updateProductImage(altText: String!, imageId: ID!): ProductImage!
   updateProductVariant(input: UpdateProductVariantInput!, variantId: ID!): ProductVariant!
   updateUserRole(input: UpdateRoleInput, userId: ID!): User!
   updateWarehouse(input: UpdateWarehouseInput!, warehouseId: ID!): Warehouse!
@@ -306,10 +319,14 @@ type PriceFacet {
 type Product {
   "Arithmetic mean of persisted 1-5 star ratings; null when there are no ratings."
   averageRating: Float
+  "Optional brand; null when not specified."
+  brand: Brand
   categories: [Category!]!
   createdAt: Instant!
   description: String
   id: ID!
+  "Ordered gallery; the first image is the primary one. Empty when no image exists."
+  images: [ProductImage!]!
   name: String!
   "Number of distinct authenticated users who rated this product."
   ratingCount: Int!
@@ -329,6 +346,19 @@ type ProductFacets {
   price: PriceFacet!
 }
 
+type ProductImage {
+  altText: String!
+  byteSize: Int!
+  contentType: String!
+  height: Int!
+  id: ID!
+  isPrimary: Boolean!
+  position: Int!
+  "Relative URL served by the storefront media route."
+  url: String!
+  width: Int!
+}
+
 type ProductSearchResult {
   facets: ProductFacets!
   items: [Product!]!
@@ -345,17 +375,23 @@ type ProductVariant {
   attributes: JSON!
   barcode: String
   createdAt: Instant!
+  heightMm: Int
   id: ID!
   inventory: [Inventory!]!
   isActive: Boolean!
+  "Canonical dimensions in millimetres; all three are present, or all null (not specified)."
+  lengthMm: Int
   price: BigDecimal!
   product: Product!
   sku: String!
   updatedAt: Instant!
+  "Canonical weight in grams; null means not specified."
   weightGrams: Int
+  widthMm: Int
 }
 
 type Query {
+  brands: [Brand!]!
   categories: [Category!]!
   category(id: ID, slug: String): Category
   checkoutOrder(requestId: UUID!): CheckoutOrder
@@ -844,6 +880,7 @@ input CreatePaymentMethodInput {
 }
 
 input CreateProductInput {
+  brandId: ID
   categoryIds: [ID!]
   description: String
   name: String!
@@ -853,10 +890,13 @@ input CreateProductInput {
 input CreateProductVariantInput {
   attributes: JSON
   barcode: String
+  heightMm: Int
+  lengthMm: Int
   price: BigDecimal!
   productId: ID!
   sku: String!
   weightGrams: Int
+  widthMm: Int
 }
 
 input CreateWarehouseInput {
@@ -939,7 +979,9 @@ input UpdateOrderStatusInput {
 }
 
 input UpdateProductInput {
+  brandId: ID
   categoryIds: [ID!]
+  clearBrand: Boolean
   description: String
   name: String
   slug: String
@@ -948,10 +990,14 @@ input UpdateProductInput {
 input UpdateProductVariantInput {
   attributes: JSON
   barcode: String
+  clearDimensions: Boolean
+  heightMm: Int
   isActive: Boolean
+  lengthMm: Int
   price: BigDecimal
   sku: String
   weightGrams: Int
+  widthMm: Int
 }
 
 input UpdateRoleInput {

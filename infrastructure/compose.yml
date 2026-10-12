@@ -302,6 +302,10 @@ services:
       HYDRA_ADMIN_URL: http://hydra:4445
       OAUTH_SERVICE_CLIENT_ID: ${OAUTH_SERVICE_CLIENT_ID:?OAUTH_SERVICE_CLIENT_ID is required}
       MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED: "true"
+      MEDIA_STORAGE_DIR: /app/media-data
+
+    volumes:
+      - media_volume:/app/media-data
 
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/actuator/health/readiness"]
@@ -399,3 +403,4 @@ networks:
 volumes:
   postgres_volume:
   kafka_volume:
+  media_volume:

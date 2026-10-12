@@ -153,6 +153,12 @@ public class SecurityConfig {
                         .authenticated()
                         .requestMatchers("/internal/**")
                         .authenticated()
+                        // Public delivery of registered product images only; the
+                        // controller serves nothing outside product_images.
+                        .requestMatchers(HttpMethod.GET, "/media/products/*")
+                        .permitAll()
+                        .requestMatchers("/admin/media/**")
+                        .authenticated()
                         .anyRequest()
                         .denyAll())
                 .build();
