@@ -7,7 +7,7 @@ import { parseJson } from "./scalars";
 
 const config = { endpoint: "http://localhost:4063/graphql", origin: "http://localhost:3000" };
 const variables = { input: { page: 0, size: 20, sort: "PRICE_ASC" } };
-const body = '{"data":{"searchProducts":{"items":[{"id":"1","name":"Actual name","slug":"actual","averageRating":4.5,"ratingCount":3,"variants":[{"id":"2","price":9999999999999999999.99,"isActive":true}]}],"pageInfo":{"page":0,"size":20,"totalItems":1,"totalPages":1},"facets":{"categories":[],"attributes":[],"price":{"min":null,"max":null}}}}}';
+const body = '{"data":{"searchProducts":{"items":[{"id":"1","name":"Actual name","slug":"actual","averageRating":4.5,"ratingCount":3,"images":[],"variants":[{"id":"2","price":9999999999999999999.99,"isActive":true}]}],"pageInfo":{"page":0,"size":20,"totalItems":1,"totalPages":1},"facets":{"categories":[],"attributes":[],"price":{"min":null,"max":null}}}}}';
 const response = (source = body, headers = {}) => new Response(source, { headers: { "Content-Type": "application/json", ...headers } });
 const request = (operation = catalogListing, input = variables, headers = {}) => new Request("http://localhost:3000/graphql", {
   method: "POST", headers: { "Content-Type": "application/json", ...headers },

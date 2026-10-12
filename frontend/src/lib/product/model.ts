@@ -1,5 +1,6 @@
 import { LosslessNumber } from "lossless-json";
 import { attributeLabel, comparePrice } from "@/lib/catalog/model";
+import { formatDimensions, formatWeight } from "@/lib/product/units";
 import type { ProductDetailQuery } from "@/lib/graphql/generated";
 import type { JsonValue } from "@/lib/graphql/scalars";
 
@@ -56,10 +57,13 @@ function attributes(variant: Variant): [string, string][] {
 }
 
 export function variantSpecifications(variant: Variant): [string, string][] {
+  const weight = formatWeight(variant.weightGrams);
+  const size = formatDimensions(variant);
   return [
     ["SKU", variant.sku],
     ...attributes(variant),
-    ...(variant.weightGrams === null ? [] : [["Weight (grams)", String(variant.weightGrams)] as [string, string]]),
+    ["Weight", weight ? `${weight.metric} (${weight.imperial})` : "Not specified"],
+    ["Dimensions (L × W × H)", size ? `${size.metric} (${size.imperial})` : "Not specified"],
     ...(variant.barcode ? [["Barcode", variant.barcode] as [string, string]] : []),
   ];
 }

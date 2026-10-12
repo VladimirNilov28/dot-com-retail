@@ -110,6 +110,24 @@ function priceFacet(value: unknown) {
   };
 }
 
+const mediaUrl = /^\/media\/products\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png)$/;
+
+function productImage(value: unknown) {
+  const image = object(value);
+  const url = text(image.url);
+  const width = integer(image.width);
+  const height = integer(image.height);
+  if (!mediaUrl.test(url) || width < 1 || height < 1) throw new TypeError("Invalid product image");
+  return { url, altText: text(image.altText), width, height };
+}
+
+function nullablePositive(value: unknown, label: string) {
+  if (value === null) return null;
+  const number = integer(value);
+  if (number < 1) throw new TypeError(`Invalid ${label}`);
+  return number;
+}
+
 function catalogProduct(value: unknown) {
   const product = object(value);
   const ratingCount = integer(product.ratingCount);
@@ -117,6 +135,7 @@ function catalogProduct(value: unknown) {
   return {
     id: text(product.id), name: text(product.name), slug: text(product.slug),
     averageRating: nullableFloat(product.averageRating), ratingCount,
+    images: list(product.images, productImage),
     variants: list(product.variants, (value) => {
       const variant = object(value);
       return { id: text(variant.id), price: decimal(variant.price), isActive: boolean(variant.isActive) };
@@ -348,6 +367,11 @@ export const productDetail: Operation<ProductDetailQuery, ProductDetailQueryVari
       id, name: text(product.name), slug: text(product.slug),
       description: product.description === null ? null : text(product.description),
       averageRating, ratingCount,
+      brand: product.brand === null ? null : (() => {
+        const brand = object(product.brand);
+        return { id: text(brand.id), name: text(brand.name) };
+      })(),
+      images: list(product.images, (value) => ({ id: text(object(value).id), ...productImage(value) })),
       categories: list(product.categories, (value) => {
         const category = object(value);
         return { id: text(category.id), name: text(category.name), slug: text(category.slug) };
@@ -361,8 +385,14 @@ export const productDetail: Operation<ProductDetailQuery, ProductDetailQueryVari
         if (comparePrice(price, decimal("0")) < 0) throw new TypeError("Invalid variant price");
         const weightGrams = variant.weightGrams === null ? null : integer(variant.weightGrams);
         if (weightGrams !== null && weightGrams < 0) throw new TypeError("Invalid variant weight");
+        const lengthMm = nullablePositive(variant.lengthMm, "variant length");
+        const widthMm = nullablePositive(variant.widthMm, "variant width");
+        const heightMm = nullablePositive(variant.heightMm, "variant height");
+        if ([lengthMm, widthMm, heightMm].some((part) => part === null) && [lengthMm, widthMm, heightMm].some((part) => part !== null)) {
+          throw new TypeError("Invalid variant dimensions");
+        }
         return {
-          id, price, weightGrams, sku: text(variant.sku), attributes: json(variant.attributes),
+          id, price, weightGrams, lengthMm, widthMm, heightMm, sku: text(variant.sku), attributes: json(variant.attributes),
           isActive: boolean(variant.isActive), barcode: variant.barcode === null ? null : text(variant.barcode),
         };
       }),

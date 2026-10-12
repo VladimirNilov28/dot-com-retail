@@ -3,7 +3,7 @@ import { decimal, parseJson } from "@/lib/graphql/scalars";
 import { selectVariant, variantHref, variantLabel, variantSpecifications, variantOptionLabels } from "./model";
 
 const variant = (id, price, attributes = {}, isActive = true) => ({
-  id, price: decimal(price), attributes, isActive, sku: `SKU-${id}`, barcode: null, weightGrams: null,
+  id, price: decimal(price), attributes, isActive, sku: `SKU-${id}`, barcode: null, weightGrams: null, lengthMm: null, widthMm: null, heightMm: null,
 });
 const product = (variants) => ({ variants });
 
@@ -69,7 +69,8 @@ describe("variant links and presentation", () => {
     expect(specs).toContainEqual(["Ports", "USB-C, HDMI"]);
     expect(specs).toContainEqual(["Detail", "X: 9999999999999999999"]);
     expect(specs).toContainEqual(["Empty", "Not specified"]);
-    expect(specs).toContainEqual(["Weight (grams)", "0"]);
+    expect(specs).toContainEqual(["Weight", "0 g (0 oz)"]);
+    expect(specs).toContainEqual(["Dimensions (L × W × H)", "Not specified"]);
     expect(specs).toContainEqual(["Barcode", "real-code"]);
     expect(specs.flat().join(" ")).not.toContain("[object Object]");
   });

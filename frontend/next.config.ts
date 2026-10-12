@@ -7,7 +7,7 @@ const nextConfig: NextConfig = {
     incomingRequests: { ignore: [/^\/auth(?:\/|$)/, /^\/self-service\/methods\/oidc\/callback(?:\/|$)/] },
   },
   async headers() {
-    return ["/auth/:path*", "/login", "/register", "/verify", "/account"].map((source) => ({
+    return ["/auth/:path*", "/login", "/register", "/verify", "/account", "/admin/:path*"].map((source) => ({
       source,
       headers: [
         { key: "Cache-Control", value: "no-store, private" },

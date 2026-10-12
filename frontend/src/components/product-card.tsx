@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Star } from "lucide-react";
-import { ImageUnavailable } from "./image-unavailable";
+import { ProductImage } from "./product-image";
 import { productPrice, type CatalogProduct } from "@/lib/catalog/model";
 
 function Rating({ product }: { product: CatalogProduct }) {
@@ -19,7 +19,7 @@ export function ProductCard({ product, headingLevel = 2 }: { product: CatalogPro
   const Heading = headingLevel === 3 ? "h3" : "h2";
   return (
     <li className="product-card">
-      <ImageUnavailable />
+      <ProductImage image={product.images[0]} />
       <div className="product-card-copy">
         <Heading className="product-card-heading font-semibold tracking-tight">
           <Link href={`/products/${encodeURIComponent(product.slug)}`} prefetch={false} className="product-name">

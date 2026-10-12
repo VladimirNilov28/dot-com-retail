@@ -6,7 +6,7 @@ import { getProduct } from "@/lib/product/server";
 import { selectVariant, variantHref, variantLabel, variantSpecifications, variantOptionLabels } from "@/lib/product/model";
 import { formatPrice, catalogHref } from "@/lib/catalog/model";
 import { CatalogLink } from "@/components/catalog-link";
-import { ImageUnavailable } from "@/components/image-unavailable";
+import { ProductGallery } from "@/components/product-gallery";
 import { ProductRecovery } from "@/components/product-recovery";
 
 export async function generateMetadata({ params }: PageProps<"/products/[slug]">): Promise<Metadata> {
@@ -40,8 +40,9 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
       <span aria-hidden="true">/</span><span aria-current="page">{product.name}</span>
     </nav>
     <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{product.name}</h1>
+    <p className="product-brand">{product.brand ? <>Brand: <span>{product.brand.name}</span></> : "Brand not specified"}</p>
     <div className="product-detail-layout">
-      <div className="product-media"><ImageUnavailable /></div>
+      <div className="product-media"><ProductGallery images={product.images} /></div>
       <div className="product-information">
         <div className="product-summary">
         <div className="product-selected">

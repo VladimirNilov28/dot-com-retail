@@ -30,6 +30,7 @@ schema changes must be new `V{n}__...sql` files instead.
 | `V14__order_cancellation_refunds.sql` | financial/release markers, cancellation receipts, order refunds | `V4`, `V9`, `V11`, `V13` |
 | `V15__product_ratings.sql` | `product_ratings` | `V0`, `V1` (users), `V2` (products) |
 | `V16__native_registration_linkage.sql` | nullable unique canonical Kratos UUID, durable username/email registration reservations | `V1` (users) |
+| `V17__product_media_brand_dimensions.sql` | `brands`, nullable `products.brand_id`, nullable `product_variants.length_mm/width_mm/height_mm`, `product_images` (storage key, type, size, dimensions, alt text, position) | `V3` (products) |
 
 Every foreign key either points to a table created in an earlier migration
 file, or to a table created earlier within the same file. There are no

@@ -53,6 +53,7 @@ query CatalogListing($input: ProductSearchInput!) {
       slug
       averageRating
       ratingCount
+      images { url altText width height }
       variants { id price isActive }
     }
     pageInfo { page size totalItems totalPages }
@@ -86,6 +87,7 @@ query HomeCategoryProducts($categoryId: ID!) {
       slug
       averageRating
       ratingCount
+      images { url altText width height }
       variants { id price isActive }
     }
 
@@ -102,6 +104,8 @@ query ProductDetail($slug: String!) {
     categories { id name slug }
     averageRating
     ratingCount
-    variants { id sku price attributes isActive barcode weightGrams }
+    brand { id name }
+    images { id url altText width height }
+    variants { id sku price attributes isActive barcode weightGrams lengthMm widthMm heightMm }
   }
 }

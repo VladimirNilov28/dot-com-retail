@@ -423,6 +423,27 @@
   .product-card { min-width: 0; display: flex; flex-direction: column; gap: 0.75rem; padding-bottom: 1rem; border-bottom: 1px solid var(--separator); }
   .catalog-image { aspect-ratio: 16 / 9; max-height: 7rem; background: var(--surface); border-radius: var(--radius-lg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.25rem; padding: 0.5rem; font-size: 0.875rem; text-align: center; color: var(--muted); }
   .catalog-image span { max-width: 100%; }
+  .catalog-photo { padding: 0; overflow: hidden; }
+  .catalog-photo img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .admin-images { display: grid; gap: 1rem; list-style: none; padding: 0; margin: 0; }
+  .admin-image { display: grid; grid-template-columns: 8rem minmax(0, 1fr); gap: 1rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border); }
+  .admin-image img { width: 100%; height: auto; aspect-ratio: 1; object-fit: contain; background: var(--surface-secondary); border-radius: var(--radius-sm); }
+  .admin-image-body { display: grid; gap: 0.5rem; min-width: 0; }
+  .admin-inline { display: flex; flex-wrap: wrap; align-items: end; gap: 0.5rem; min-width: 0; }
+  .admin-inline .auth-field { flex: 1 1 10rem; }
+  .admin-sku { flex: 1 1 100%; overflow-wrap: anywhere; }
+  .admin-inline .store-cta { min-height: var(--control-height); }
+  @media (max-width: 30rem) { .admin-image { grid-template-columns: minmax(0, 1fr); } }
+  .product-gallery { display: grid; gap: 0.75rem; min-width: 0; }
+  .product-gallery-main { aspect-ratio: 4 / 3; background: var(--surface); border-radius: var(--radius-lg); overflow: hidden; }
+  .product-gallery-main img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .product-gallery .catalog-image { max-height: none; aspect-ratio: 4 / 3; }
+  .product-gallery-thumbs { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .product-gallery-thumb { width: 4.5rem; height: 4.5rem; padding: 0.125rem; border: 2px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); display: flex; align-items: center; justify-content: center; overflow: hidden; cursor: pointer; }
+  .product-gallery-thumb[aria-pressed="true"] { border-color: var(--accent); }
+  .product-gallery-thumb:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .product-gallery-thumb img { width: 100%; height: 100%; object-fit: contain; }
+  .product-brand { font-size: 0.875rem; color: var(--muted); }
   /* Reserve a fixed-height box for the name (≈2 lines) so the price/rating
      area starts at the same offset in every card regardless of whether the
      name wraps to one line or two (§9.4 visual refinement). A plain flex

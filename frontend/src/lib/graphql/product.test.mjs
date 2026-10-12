@@ -4,7 +4,7 @@ import { execute } from "./transport";
 import { requestHive } from "./server-transport";
 import { parseJson } from "./scalars";
 
-const source = '{"product":{"id":"1","name":"Real product","slug":"real","description":null,"categories":[],"averageRating":null,"ratingCount":0,"variants":[{"id":"2","sku":"REAL-2","price":9999999999999999999.99,"attributes":{"cores":8},"isActive":true,"barcode":null,"weightGrams":null}]}}';
+const source = '{"product":{"id":"1","name":"Real product","slug":"real","description":null,"brand":null,"images":[],"categories":[],"averageRating":null,"ratingCount":0,"variants":[{"id":"2","sku":"REAL-2","price":9999999999999999999.99,"attributes":{"cores":8},"isActive":true,"barcode":null,"weightGrams":null,"lengthMm":null,"widthMm":null,"heightMm":null}]}}';
 const config = { endpoint: "http://localhost:4002/graphql", origin: "http://localhost:3000" };
 const response = (body) => new Response(body, { headers: { "Content-Type": "application/json" } });
 
