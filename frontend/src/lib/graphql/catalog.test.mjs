@@ -155,3 +155,16 @@ test("home public reads omit private browser/server credentials and surface part
   expect(partial.status).toBe("partial");
   expect(JSON.stringify(partial)).not.toContain("private detail");
 });
+
+test("a stale schema (HTTP 400 query validation) is distinct from a response-decoder protocol failure", async () => {
+  const stale = '{"errors":[{"message":"Cannot query field \\"images\\" on type \\"Product\\".","extensions":{"code":"FieldsOnCorrectType"}}]}';
+  const rejected = await execute(catalogListing, variables, {
+    endpoint: config.endpoint, fetch: async () => new Response(stale, { status: 400, headers: { "Content-Type": "application/json" } }),
+  });
+  expect(rejected.status).toBe("failure");
+  expect(rejected.error.kind).toBe("validation");
+  const missingImages = body.replace('"images":[],', "");
+  const decoded = await execute(catalogListing, variables, { endpoint: config.endpoint, fetch: async () => response(missingImages) });
+  expect(decoded.status).toBe("failure");
+  expect(decoded.error.kind).toBe("protocol");
+});
