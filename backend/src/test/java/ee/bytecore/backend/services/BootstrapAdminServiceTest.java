@@ -16,6 +16,7 @@ import ee.bytecore.backend.entities.user.User;
 import ee.bytecore.backend.enums.UserRole;
 import ee.bytecore.backend.exceptions.UserAlreadyExistsException;
 import ee.bytecore.backend.integration.KratosClient;
+import ee.bytecore.backend.repositories.user.UserRegistrationReservationRepository;
 import ee.bytecore.backend.repositories.user.UserRepository;
 
 import org.junit.jupiter.api.Tag;
@@ -33,6 +34,9 @@ class BootstrapAdminServiceTest {
 
     @Mock
     UserRepository userRepository;
+
+    @Mock
+    UserRegistrationReservationRepository registrationRepository;
 
     @Mock
     KratosClient kratosClient;
@@ -90,7 +94,7 @@ class BootstrapAdminServiceTest {
         assertThatThrownBy(() ->
                         userService.provisionBootstrapAdmin("bootstrap-admin", "bootstrap-admin@example.com", DOB))
                 .isInstanceOf(UserAlreadyExistsException.class)
-                .hasMessage("User with username bootstrap-admin or email bootstrap-admin@example.com already exists");
+                .hasMessage("Account identifiers are already in use.");
 
         verify(userRepository, never()).saveAndFlush(any());
         verifyNoInteractions(kratosClient);
