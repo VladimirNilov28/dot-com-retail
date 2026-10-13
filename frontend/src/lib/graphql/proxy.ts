@@ -3,6 +3,7 @@ import { cartGuestOperations, guestCartMerge, guestOperations, publicOperations,
 import { object, parseJson, serializeJson } from "./scalars";
 import { requestHive, type HiveConfig } from "./server-transport";
 import { boundedText, type Result } from "./transport";
+import { checkoutOperations } from "./checkout-operations";
 
 function jsonResponse<Data>(result: Result<Data>, cookies: string[] = [], status = 200) {
   const data = result.status === "failure" ? null : result.data;
@@ -13,6 +14,7 @@ function jsonResponse<Data>(result: Result<Data>, cookies: string[] = [], status
       message: error.message,
       extensions: {
         failureKind: error.kind,
+        ...(error.codes?.length ? { code: error.codes[0] } : {}),
         ...(error.httpStatus ? { http: { status: error.httpStatus } } : {}),
       },
     }] } : {}),
@@ -55,7 +57,7 @@ export async function handleGuestRequest(
     return proxyFailure(failure("validation", false), 400);
   }
   async function dispatch<Data, Variables>(operation: Operation<Data, Variables>) {
-    if (operation.access === "guest" && (request.headers.get("Origin") !== config.origin ||
+    if ((operation.access === "guest" || operation.access === "authenticated") && (request.headers.get("Origin") !== config.origin ||
         request.headers.get("X-Guest-Cart-Request") !== "1")) {
       return proxyFailure(failure("forbidden", false), 403);
     }
@@ -69,7 +71,7 @@ export async function handleGuestRequest(
     }
     let context: Parameters<typeof requestHive>[3] = operation.access === "public" ?
       { kind: "public" } : { kind: "guest", cookieHeader: request.headers.get("Cookie") ?? undefined };
-    if (operation === (guestCartMerge as Operation<unknown, unknown>)) {
+    if (operation.access === "authenticated" || operation === (guestCartMerge as Operation<unknown, unknown>)) {
       const accessToken = await resolveToken();
       if (!accessToken) return proxyFailure(failure("unauthenticated", false), 401);
       context = { kind: "authenticated", accessToken, guestCookieHeader: request.headers.get("Cookie") ?? undefined };
@@ -83,6 +85,8 @@ export async function handleGuestRequest(
   if (envelope.operationName === order.name) return dispatch(order);
   const cartOperation = cartGuestOperations.find((candidate) => candidate.name === envelope.operationName);
   if (cartOperation) return dispatch(cartOperation as Operation<unknown, unknown>);
+  const checkoutOperation = checkoutOperations.find((candidate) => candidate.name === envelope.operationName);
+  if (checkoutOperation) return dispatch(checkoutOperation as Operation<unknown, unknown>);
   const [categories, listing, suggestions] = publicOperations;
   if (envelope.operationName === categories.name) return dispatch(categories);
   if (envelope.operationName === listing.name) return dispatch(listing);

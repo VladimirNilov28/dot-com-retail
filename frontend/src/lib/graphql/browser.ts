@@ -23,3 +23,14 @@ export function requestGuest<Data, Variables>(
     headers: { "X-Guest-Cart-Request": "1" },
   });
 }
+
+export function requestCustomer<Data, Variables>(
+  operation: Operation<Data, Variables>, variables: Variables,
+  options: Pick<TransportOptions, "signal" | "timeoutMs"> = {},
+) {
+  if (operation.access !== "authenticated") throw new TypeError("Customer transport requires an authenticated operation");
+  return execute(operation, variables, {
+    ...options, endpoint: "/graphql", credentials: "same-origin",
+    headers: { "X-Guest-Cart-Request": "1" },
+  });
+}

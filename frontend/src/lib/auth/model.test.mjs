@@ -23,12 +23,21 @@ describe("storefront authentication return contract", () => {
         expect(() => grantTokens({ ...grant, scope })).not.toThrow();
       }
     });
+    test("accepts customer checkout scopes without requiring scopes withheld by role policy (#74)", () => {
+      for (const scope of ["openid user:read offline_access cart:read cart:write order:read order:write",
+        "openid user:read offline_access order:read"]) {
+        expect(() => grantTokens({ ...grant, scope })).not.toThrow();
+      }
+    });
     test("rejects invalid lifetimes, missing rotation and expanded or repeated scopes", () => {
       for (const expires_in of [0, -1, 1.5, NaN, Infinity, 86401, "45"]) {
         expect(() => grantTokens({ ...grant, expires_in })).toThrow(AuthError);
       }
       for (const scope of [undefined, "", "openid offline_access user:read user:write",
-        "openid offline_access user:read user:read"]) {
+        "openid offline_access user:read user:read",
+        "openid offline_access user:read order:manage-status",
+        "openid offline_access user:read user:manage-roles",
+        "openid offline_access user:read order:read order:read"]) {
         expect(() => grantTokens({ ...grant, scope })).toThrow(AuthError);
       }
       expect(() => grantTokens({ ...grant, refresh_token: undefined })).toThrow(AuthError);

@@ -35,6 +35,7 @@ const safeCodes = new Set([
   "UNAVAILABLE", "OVERLOADED", "TIMEOUT", "DOWNSTREAM_SERVICE_ERROR", "SUBREQUEST_HTTP_ERROR",
   "GUEST_CART_UNAVAILABLE", "GUEST_ORDER_UNAVAILABLE", "CHECKOUT_INVALID",
   "CHECKOUT_QUOTE_CHANGED", "CHECKOUT_REQUEST_CONFLICT",
+  "PAYMENT_NOT_CONFIGURED", "PAYMENT_UNAVAILABLE",
 ]);
 
 export function failure(kind: FailureKind, query: boolean, httpStatus?: number, codes?: string[]): SafeFailure {
@@ -77,6 +78,7 @@ export function graphFailure(errors: unknown, query: boolean): SafeFailure {
       else if (/NOT_FOUND|GUEST_CART_UNAVAILABLE|GUEST_ORDER_UNAVAILABLE/.test(code)) kinds.push("not-found");
       else if (/CONFLICT|QUOTE_CHANGED/.test(code)) kinds.push("conflict");
       else if (/BAD_REQUEST|BAD_USER_INPUT|VALIDATION|CHECKOUT_INVALID|GRAPHQL_PARSE_FAILED|INVALIDSYNTAX/.test(code)) kinds.push("validation");
+      else if (code === "PAYMENT_NOT_CONFIGURED") kinds.push("configuration");
       else if (/UNAVAILABLE|INTERNAL|TIMEOUT|OVERLOADED/.test(code)) kinds.push("unavailable");
     }
     if (extension.http !== undefined) {

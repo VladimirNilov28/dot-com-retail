@@ -31,9 +31,10 @@ export function CartPageView() {
             <aside className="cart-summary" aria-label="Order summary">
               <h2 className="text-lg font-semibold">Summary</h2>
               <p className="cart-subtotal"><span>Subtotal</span><strong>{formatPrice(cart.subtotal)}</strong></p>
-              <p className="text-sm text-muted">Prices are confirmed by the store. Shipping and taxes are calculated at checkout, and stock is verified when you place an order.</p>
+              <p className="text-sm text-muted">Prices, shipping and stock are confirmed at checkout.</p>
               {issues.length > 0 ? <p role="status" className="cart-line-issue">{issues.length} {issues.length === 1 ? "item needs" : "items need"} attention before checkout.</p> : null}
               {mode === "guest" ? <p className="text-sm text-muted"><Link href="/login?returnTo=%2Fcart" className="store-link">Sign in</Link> to keep this cart with your account.</p> : null}
+              <Link href="/checkout" className="store-cta">Continue to checkout</Link>
               <Link href="/catalog/all-products" className="store-link">Continue shopping</Link>
             </aside>
           </div>

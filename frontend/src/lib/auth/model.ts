@@ -100,10 +100,10 @@ function decodeChallenge(value: unknown): EmailChallenge {
     expiresAt: input.expiresAt, attempts: input.attempts };
 }
 
-// Roles without cart access (e.g. SUPPORT) legitimately receive no cart scopes.
+// Roles may legitimately receive only a subset of the customer cart/order scopes.
 function grantedScopesValid(scope: string): boolean {
   const granted = scope.split(" ");
-  const optional = new Set(["cart:read", "cart:write"]);
+  const optional = new Set(["cart:read", "cart:write", "order:read", "order:write"]);
   const required = ["offline_access", "openid", "user:read"];
   return new Set(granted).size === granted.length &&
     required.every((name) => granted.includes(name)) &&

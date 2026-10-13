@@ -205,6 +205,8 @@ clients:
       - user:read
       - cart:read
       - cart:write
+      - order:read
+      - order:write
     additional_scopes:
       - openid
       - offline_access
