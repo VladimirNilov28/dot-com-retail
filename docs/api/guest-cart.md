@@ -309,3 +309,19 @@ decrement, payment outbox and durable checkout receipt. Confirmation/replay use
 the independently pre-issued `retail_guest_orders` cookie, not an order ID,
 email or unrelated cart credential. See [Checkout API](checkout.md) for quote,
 shipping, snapshot, expiration and lost-response behavior.
+
+## Storefront integration (#73, #95)
+
+- The cookie is scoped to `/graphql`, so the browser talks to the same-origin
+  Next `/graphql` route (`requestGuest`), which forwards the cookie to Hive.
+  Server components and server actions never see it. The browser's first add
+  runs `startGuestCart` (idempotent) and then `addGuestCartItem`.
+- Dev `cart.guest.allowed-origins` must include the configured
+  `STOREFRONT_ORIGIN` (`http://127.0.0.1:3000` and `http://localhost:3000`).
+- Signed-in customers use `myCart` operations through server actions. After
+  login the browser calls `mergeGuestCart` with a stored `requestId` (replay-safe)
+  through the proxy, which attaches the BFF access token server-side.
+- `ProductVariant.availability` (`AVAILABLE`/`OUT_OF_STOCK`, null = unknown) and
+  `purchasableLimit` (at most 10) are public and informational: they reflect the
+  largest single stock row, mirroring checkout allocation. The cart reserves
+  nothing; checkout stays authoritative.
