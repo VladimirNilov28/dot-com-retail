@@ -114,6 +114,7 @@ class OrderSubscriptionTransportTest {
                     .header("alg", "RS256")
                     .subject(token.equals("owner") ? "1" : "2")
                     .claim("role", role)
+                    .claim("aal", "aal2")
                     .claim("scope", token.equals("missing") ? "" : "order:read")
                     .build();
         });

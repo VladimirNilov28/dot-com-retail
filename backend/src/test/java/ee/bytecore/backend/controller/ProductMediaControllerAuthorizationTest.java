@@ -58,13 +58,25 @@ class ProductMediaControllerAuthorizationTest {
     }
 
     private org.springframework.test.web.servlet.request.RequestPostProcessor as(String scope, String role) {
+        return as(scope, role, "aal2");
+    }
+
+    private org.springframework.test.web.servlet.request.RequestPostProcessor as(String scope, String role, String aal) {
         Jwt jwt = Jwt.withTokenValue("t")
                 .header("alg", "RS256")
                 .subject("7")
                 .claim("scope", scope)
                 .claim("role", role)
+                .claim("aal", aal)
                 .build();
         return authentication(converter.convert(jwt));
+    }
+
+    @Test
+    void staffAtAal1OrWithoutAssuranceClaimIsForbidden() throws Exception {
+        mockMvc.perform(upload().with(as("product:write", "ADMIN", "aal1"))).andExpect(status().isForbidden());
+        mockMvc.perform(upload().with(as("product:write", "CATALOG_MANAGER", null))).andExpect(status().isForbidden());
+        verifyNoInteractions(images);
     }
 
     @Test

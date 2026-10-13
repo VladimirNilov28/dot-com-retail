@@ -61,6 +61,9 @@ class BootstrapAdminAuthorizationTest {
     UserRepository userRepository;
 
     @MockitoBean
+    ee.bytecore.backend.repositories.user.UserRegistrationReservationRepository reservationRepository;
+
+    @MockitoBean
     KratosClient kratosClient;
 
     @MockitoBean
@@ -88,6 +91,7 @@ class BootstrapAdminAuthorizationTest {
                 .claim("client_id", clientId)
                 .claim("scope", scope)
                 .claim("role", role)
+                .claim("aal", "aal2")
                 .build();
     }
 
@@ -179,10 +183,7 @@ class BootstrapAdminAuthorizationTest {
         when(userRepository.save(any(User.class))).thenThrow(new DataIntegrityViolationException("private-sql"));
         mockMvc.perform(machineRequest())
                 .andExpect(status().isConflict())
-                .andExpect(
-                        content()
-                                .string(
-                                        "User with username bootstrap-admin or email bootstrap-admin@example.com already exists"));
+                .andExpect(content().string("Account identifiers are already in use."));
         verify(userRepository, never()).findByUsername(any());
         verifyNoInteractions(kratosClient);
     }

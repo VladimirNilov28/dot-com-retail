@@ -82,7 +82,8 @@ def handle_login(
         raise BridgeError("Remembered OAuth subject does not match the authenticated identity")
 
     accepted = hydra_client.accept_login_request(
-        login_challenge, subject, context={"role": spring_user["role"]}
+        login_challenge, subject,
+        context={"role": spring_user["role"], "aal": session["authenticator_assurance_level"]},
     )
     return accepted["redirect_to"]
 
@@ -125,11 +126,13 @@ def handle_consent(
     allowed.discard("internal:provision-user")
     granted = sorted(set(consent_request.get("requested_scope") or []) & allowed)
 
+    aal = (consent_request.get("context") or {}).get("aal")
+    claims = {"role": role, "aal": aal if aal in ("aal1", "aal2") else "aal1"}
     accepted = hydra_client.accept_consent_request(
         consent_challenge,
         grant_scope=granted,
         grant_access_token_audience=consent_request.get("requested_access_token_audience", []),
-        access_token_claims={"role": role},
+        access_token_claims=claims,
     )
     return accepted["redirect_to"]
 
@@ -165,7 +168,7 @@ def bff_login(config: Config, hydra_client: HydraClient, kratos_client: KratosCl
     if request.get("skip") and str(request.get("subject")) != session["user_id"]:
         raise BridgeError("Remembered OAuth subject does not match")
     accepted = hydra_client.accept_login_request(
-        challenge, session["user_id"], context={"role": session["role"]},
+        challenge, session["user_id"], context={"role": session["role"], "aal": session["aal"]},
     )
     return {"redirect_to": accepted["redirect_to"], "session": session}
 

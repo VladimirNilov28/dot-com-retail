@@ -52,6 +52,7 @@ class OrderCancellationGraphQlIntegrationTest extends CheckoutGraphQlIntegration
                             .header("alg", "RS256")
                             .subject(parts[0])
                             .claim("role", parts.length == 3 ? parts[2] : "USER")
+                            .claim("aal", "aal2")
                             .claim(
                                     "scope",
                                     parts[1].replace("-read", ":read")

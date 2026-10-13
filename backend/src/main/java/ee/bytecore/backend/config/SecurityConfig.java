@@ -85,8 +85,16 @@ public class SecurityConfig {
 
             String role = jwt.getClaimAsString("role");
 
+            // Staff roles are honoured only for tokens issued from an AAL2 session.
+            // The claim is minted by the OAuth bridge from Kratos' own session
+            // assurance; a missing or lower value withholds the staff role (fail closed).
             if (role != null) {
-                result.add(new SimpleGrantedAuthority("ROLE_" + role));
+                boolean staff = !"USER".equals(role);
+                if (!staff || "aal2".equals(jwt.getClaimAsString("aal"))) {
+                    result.add(new SimpleGrantedAuthority("ROLE_" + role));
+                } else {
+                    result.add(new SimpleGrantedAuthority("MFA_REQUIRED"));
+                }
             }
 
             return result;

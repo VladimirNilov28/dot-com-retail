@@ -94,7 +94,7 @@ class HandleLoginTest(unittest.TestCase):
         )
 
         self.hydra_client.accept_login_request.assert_called_once_with(
-            "login-challenge", "42", context={"role": "USER"}
+            "login-challenge", "42", context={"role": "USER", "aal": "aal1"}
         )
         self.assertEqual(redirect, "http://hydra/next")
 
@@ -154,7 +154,7 @@ class HandleLoginTest(unittest.TestCase):
         self.kratos_client.whoami.assert_called_once_with("cookie")
         self.spring_auth_client.resolve_user.assert_called_once_with(42)
         self.hydra_client.accept_login_request.assert_called_once_with(
-            "login-challenge", "42", context={"role": "USER"}
+            "login-challenge", "42", context={"role": "USER", "aal": "aal2"}
         )
 
     def test_remembered_login_without_kratos_session_requires_login(self):
@@ -251,7 +251,7 @@ class BrowserAssuranceTest(unittest.TestCase):
         redirect = handle_login(self.config, self.hydra, self.kratos, self.spring, "challenge", "cookie")
         self.assertEqual(redirect, "http://hydra/next")
         self.hydra.accept_login_request.assert_called_once_with(
-            "challenge", "42", context={"role": "USER"},
+            "challenge", "42", context={"role": "USER", "aal": "aal2"},
         )
 
 

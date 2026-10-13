@@ -30,7 +30,7 @@ public final class JwtTestSupport {
                 .expiresAt(Instant.now().plusSeconds(60));
 
         if (role != null) {
-            builder.claim("role", role);
+            builder.claim("role", role).claim("aal", "aal2");
         }
         if (scopes.length > 0) {
             builder.claim("scope", String.join(" ", scopes));

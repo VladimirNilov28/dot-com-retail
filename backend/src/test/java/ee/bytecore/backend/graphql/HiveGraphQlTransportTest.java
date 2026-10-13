@@ -117,7 +117,7 @@ class HiveGraphQlTransportTest {
         Testcontainers.exposeHostPorts(port);
         String graph = Files.readString(Path.of("../infrastructure/hive/supergraph.graphql"));
         String routed = graph.replace(
-                "http://host.docker.internal:8080/graphql", "http://host.testcontainers.internal:" + port + "/graphql");
+                "http://backend:8080/graphql", "http://host.testcontainers.internal:" + port + "/graphql");
         assertThat(routed).isNotEqualTo(graph);
         router = new GenericContainer<>("ghcr.io/graphql-hive/router:0.2.19")
                 .withExposedPorts(4000)
@@ -141,6 +141,7 @@ class HiveGraphQlTransportTest {
                         .header("alg", "RS256")
                         .subject("1")
                         .claim("role", "ADMIN")
+                        .claim("aal", "aal2")
                         .claim("scope", "product:read product:write order:read")
                         .build());
         Product product = Product.create("Hive fixture", "hive-fixture", null);

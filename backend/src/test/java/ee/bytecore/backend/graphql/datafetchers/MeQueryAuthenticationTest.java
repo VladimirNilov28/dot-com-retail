@@ -211,6 +211,7 @@ class MeQueryAuthenticationTest {
                 .header("alg", "none")
                 .subject(subject)
                 .claim("role", role)
+                .claim("aal", "aal2")
                 .claim("scope", scope)
                 .issuedAt(Instant.now())
                 .expiresAt(Instant.now().plusSeconds(60))

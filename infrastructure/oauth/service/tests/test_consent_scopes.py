@@ -42,7 +42,7 @@ class ConsentScopeTest(unittest.TestCase):
         args, kwargs = self.hydra.accept_consent_request.call_args
         self.assertEqual(args, ("challenge",))
         self.assertEqual(kwargs["grant_access_token_audience"], ["retail"])
-        self.assertEqual(kwargs["access_token_claims"], self.request["context"])
+        self.assertEqual(kwargs["access_token_claims"], {**self.request["context"], "aal": "aal1"})
         return kwargs["grant_scope"]
 
     def test_all_roles_receive_only_their_declared_application_scopes(self):

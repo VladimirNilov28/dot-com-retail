@@ -117,7 +117,7 @@ class IssueDevTokenTest(unittest.TestCase):
             "consent-chal",
             grant_scope=["offline_access", "user:read", "user:write"],
             grant_access_token_audience=[],
-            access_token_claims={"role": "USER"},
+            access_token_claims={"role": "USER", "aal": "aal1"},
         )
 
     def test_response_includes_kratos_session_token_for_later_logout(self):
