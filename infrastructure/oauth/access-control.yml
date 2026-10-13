@@ -203,6 +203,8 @@ clients:
       - http://127.0.0.1:3000/auth/callback
     scopes:
       - user:read
+      - cart:read
+      - cart:write
     additional_scopes:
       - openid
       - offline_access

@@ -64,14 +64,14 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     if (result.status !== "success") {
       // An expired or consumed guest credential just means there is no cart.
       if (result.status === "failure" && result.error.codes?.includes("GUEST_CART_UNAVAILABLE")) return { status: "ok", cart: null };
-      return { status: "error", message: cartErrorMessage(result.status === "failure" ? result.error.kind : "graphql") };
+      return { status: "error", message: cartErrorMessage("read-unavailable") };
     }
     return { status: "ok", cart: result.data.guestCart ? toCartView(result.data.guestCart) : null };
   }, []);
 
   const reload = useCallback(async () => {
     const user = await loadCart().catch(() => null);
-    if (user === null) { setSnapshot({ status: "error", message: cartErrorMessage("unavailable") }); setLoading(false); return; }
+    if (user === null) { setSnapshot({ status: "error", message: cartErrorMessage("read-unavailable") }); setLoading(false); return; }
     if (user.mode === "user") {
       applyUser(user);
       // A guest cart that survived sign-in is merged all-or-nothing; conflicts leave it untouched.
@@ -83,7 +83,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           const merged = await loadCart().catch(() => null);
           if (merged?.mode === "user") applyUser(merged);
           setNotice({ tone: "success", text: "Your guest cart was added to your account cart." });
-        } else if (merge.status === "success") {
+        } else if (merge.status !== "success") {
+          // The request id is kept so a retry replays safely; guest items stay in the guest cart.
+          setNotice({ tone: "error", text: "Your guest cart could not be added to your account yet. Your guest items are still saved — reload to try again." });
+        } else {
           clearMergeRequest();
           const first = merge.data.mergeGuestCart.conflicts[0];
           setNotice({ tone: "error", text: `Your guest cart could not be merged${first ? `: ${first.message}` : ""}. Nothing was changed; your guest items are still saved.` });

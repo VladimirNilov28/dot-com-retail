@@ -18,6 +18,11 @@ describe("storefront authentication return contract", () => {
     test("accepts only the bounded agreed grant and retains no ID token", () => {
       expect(Object.keys(grantTokens(grant)).sort()).toEqual(["accessToken", "expiresAt", "refreshToken"]);
     });
+    test("accepts the cart scopes the storefront needs for cart reads and guest merge (#73)", () => {
+      for (const scope of ["openid user:read offline_access cart:read cart:write", "openid user:read offline_access cart:read"]) {
+        expect(() => grantTokens({ ...grant, scope })).not.toThrow();
+      }
+    });
     test("rejects invalid lifetimes, missing rotation and expanded or repeated scopes", () => {
       for (const expires_in of [0, -1, 1.5, NaN, Infinity, 86401, "45"]) {
         expect(() => grantTokens({ ...grant, expires_in })).toThrow(AuthError);

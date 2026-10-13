@@ -100,6 +100,16 @@ function decodeChallenge(value: unknown): EmailChallenge {
     expiresAt: input.expiresAt, attempts: input.attempts };
 }
 
+// Roles without cart access (e.g. SUPPORT) legitimately receive no cart scopes.
+function grantedScopesValid(scope: string): boolean {
+  const granted = scope.split(" ");
+  const optional = new Set(["cart:read", "cart:write"]);
+  const required = ["offline_access", "openid", "user:read"];
+  return new Set(granted).size === granted.length &&
+    required.every((name) => granted.includes(name)) &&
+    granted.every((name) => required.includes(name) || optional.has(name));
+}
+
 export function grantTokens(response: {
   access_token?: unknown; refresh_token?: unknown; expires_in?: unknown; scope?: unknown;
 }): NonNullable<BrowserState["tokens"]> {
@@ -108,7 +118,7 @@ export function grantTokens(response: {
       typeof response.expires_in !== "number" || !Number.isSafeInteger(response.expires_in) ||
       response.expires_in <= 0 || response.expires_in > 86400 ||
       typeof response.scope !== "string" ||
-      response.scope.split(" ").sort().join(" ") !== "offline_access openid user:read") {
+      !grantedScopesValid(response.scope)) {
     throw new AuthError("unavailable");
   }
   return { accessToken: response.access_token, refreshToken: response.refresh_token,

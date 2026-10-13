@@ -32,6 +32,10 @@ test("stock and activity problems are described honestly", () => {
   expect(lineIssue({ active: true, quantity: 1, availability: null, limit: null })).toBeNull();
 });
 
+test("a failed read never claims anything about the cart contents", () => {
+  expect(cartErrorMessage("read-unavailable")).not.toContain("has not changed");
+});
+
 test("failures never claim the cart changed", () => {
   expect(cartErrorMessage("transport")).toContain("has not changed");
 });

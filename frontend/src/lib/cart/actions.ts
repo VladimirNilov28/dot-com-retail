@@ -27,7 +27,7 @@ async function readUserCart(accessToken: string, note?: string): Promise<UserCar
   const { result } = await requestHive(myCartView, {}, { endpoint, origin }, { kind: "authenticated", accessToken });
   if (result.status !== "success") {
     console.error("Cart read failed:", result.status === "failure" ? result.error.kind : "partial");
-    return { mode: "user", snapshot: { status: "error", message: cartErrorMessage("unavailable") } };
+    return { mode: "user", snapshot: { status: "error", message: cartErrorMessage("read-unavailable") } };
   }
   return { mode: "user", snapshot: { status: "ok", cart: toCartView(result.data.myCart) }, note };
 }
