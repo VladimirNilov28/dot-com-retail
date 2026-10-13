@@ -407,6 +407,8 @@ type ProductSuggestion @join__type(graph: RETAIL) {
 
 type ProductVariant @join__type(graph: RETAIL) {
   attributes: JSON!
+  availability: ProductAvailability
+  purchasableLimit: Int
   barcode: String
   createdAt: Instant!
   id: ID!
@@ -820,6 +822,11 @@ enum PaymentMethodType @join__type(graph: RETAIL) {
   CARD @join__enumValue(graph: RETAIL)
   CASH_ON_DELIVERY @join__enumValue(graph: RETAIL)
   DIGITAL_WALLET @join__enumValue(graph: RETAIL)
+}
+
+enum ProductAvailability @join__type(graph: RETAIL) {
+  AVAILABLE
+  OUT_OF_STOCK
 }
 
 enum ProductSort @join__type(graph: RETAIL) {

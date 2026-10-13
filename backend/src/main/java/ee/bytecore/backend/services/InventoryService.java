@@ -69,6 +69,15 @@ public class InventoryService {
                 });
     }
 
+    /** Largest quantity one order could be allocated: the best single stock row. */
+    @Transactional(readOnly = true)
+    public int sellableQuantity(Long productVariantId) {
+        return inventoryRepository.findAllByProductVariantId(productVariantId).stream()
+                .mapToInt(Inventory::getQuantity)
+                .max()
+                .orElse(0);
+    }
+
     /**
      * Locks and picks the single inventory row (lowest id first, i.e. the
      * MVP multi-warehouse tie-break rule) that can fulfil the full requested

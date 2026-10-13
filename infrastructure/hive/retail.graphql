@@ -373,6 +373,8 @@ type ProductSuggestion {
 
 type ProductVariant {
   attributes: JSON!
+  "Public sellable state; null means it could not be determined. Informational only; checkout re-validates."
+  availability: ProductAvailability
   barcode: String
   createdAt: Instant!
   heightMm: Int
@@ -383,6 +385,8 @@ type ProductVariant {
   lengthMm: Int
   price: BigDecimal!
   product: Product!
+  "Largest quantity purchasable in one order, capped at 10; null when unknown."
+  purchasableLimit: Int
   sku: String!
   updatedAt: Instant!
   "Canonical weight in grams; null means not specified."
@@ -785,6 +789,11 @@ enum PaymentMethodType {
   CARD
   CASH_ON_DELIVERY
   DIGITAL_WALLET
+}
+
+enum ProductAvailability {
+  AVAILABLE
+  OUT_OF_STOCK
 }
 
 enum ProductSort {
