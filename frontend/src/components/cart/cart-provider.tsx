@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { requestGuest } from "@/lib/graphql/browser";
-import { guestCartAdd, guestCartMerge, guestCartRemove, guestCartUpdate, guestCartView } from "@/lib/graphql/operations";
+import { guestCartStart, guestCartAdd, guestCartMerge, guestCartRemove, guestCartUpdate, guestCartView } from "@/lib/graphql/operations";
 import { loadCart, mutateUserCart, type CartMutation, type UserCartResult } from "@/lib/cart/actions";
 import { cartErrorMessage, toCartView, type CartMessage, type CartSnapshot, type CartView } from "@/lib/cart/model";
 
@@ -117,6 +117,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           outcome = { ok: false, message: { tone: "error", text: cartErrorMessage("unauthenticated") } };
         }
       } else {
+        // Starting is idempotent: it reuses a usable cart and otherwise issues the guest cookie.
+        const started = mutation.kind === "add" ? await requestGuest(guestCartStart, {}) : null;
+        if (started && started.status !== "success") {
+          outcome = { ok: false, message: { tone: "error", text: cartErrorMessage(started.status === "failure" ? started.error.kind : "graphql") } };
+        } else {
         const result = mutation.kind === "add" ?
           await requestGuest(guestCartAdd, { input: { productVariantId: mutation.variantId, quantity: mutation.quantity } }) :
           mutation.kind === "update" ?
@@ -132,6 +137,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           // Re-read so the visible cart reflects what the server actually holds.
           setSnapshot(await readGuest());
           outcome = { ok: false, message: { tone: "error", text: cartErrorMessage(result.status === "failure" ? result.error.kind : "graphql") } };
+        }
         }
       }
       setNotice(outcome.ok ? null : outcome.message);

@@ -133,6 +133,13 @@ query GuestCartView {
   }
 }
 
+mutation GuestCartStart {
+  startGuestCart {
+    created
+    cart { id }
+  }
+}
+
 mutation GuestCartAdd($input: AddCartItemInput!) {
   addGuestCartItem(input: $input) {
     id

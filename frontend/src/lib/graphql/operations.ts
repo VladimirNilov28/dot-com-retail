@@ -6,6 +6,9 @@ import {
   GuestCartViewSource,
   type GuestCartViewQuery,
   type GuestCartViewQueryVariables,
+  GuestCartStartSource,
+  type GuestCartStartMutation,
+  type GuestCartStartMutationVariables,
   GuestCartAddSource,
   type GuestCartAddMutation,
   type GuestCartAddMutationVariables,
@@ -311,6 +314,14 @@ export const guestCartView: Operation<GuestCartViewQuery, GuestCartViewQueryVari
     return { guestCart: root.guestCart === null ? null : cartDecoder(root.guestCart) };
   },
 };
+export const guestCartStart: Operation<GuestCartStartMutation, GuestCartStartMutationVariables> = {
+  name: "GuestCartStart", source: GuestCartStartSource, kind: "mutation", access: "guest",
+  variables(value) { variables(value, []); return {}; },
+  decode(value) {
+    const result = object(object(value).startGuestCart);
+    return { startGuestCart: { created: boolean(result.created), cart: { id: text(object(result.cart).id) } } };
+  },
+};
 export const guestCartAdd: Operation<GuestCartAddMutation, GuestCartAddMutationVariables> = {
   name: "GuestCartAdd", source: GuestCartAddSource, kind: "mutation", access: "guest",
   variables(value) { return { input: cartInput(variables(value, ["input"]).input) }; },
@@ -347,7 +358,7 @@ export const guestCartMerge: Operation<GuestCartMergeMutation, GuestCartMergeMut
     } };
   },
 };
-export const cartGuestOperations = [guestCartView, guestCartAdd, guestCartUpdate, guestCartRemove, guestCartMerge] as const;
+export const cartGuestOperations = [guestCartView, guestCartStart, guestCartAdd, guestCartUpdate, guestCartRemove, guestCartMerge] as const;
 
 export const myCartView: Operation<MyCartViewQuery, MyCartViewQueryVariables> = {
   name: "MyCartView", source: MyCartViewSource, kind: "query", access: "authenticated",
