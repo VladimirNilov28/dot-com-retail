@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Star } from "lucide-react";
-import { getProduct } from "@/lib/product/server";
+import { getAvailability, getProduct } from "@/lib/product/server";
+import { AddToCart } from "@/components/cart/add-to-cart";
 import { selectVariant, variantHref, variantLabel, variantSpecifications, variantOptionLabels } from "@/lib/product/model";
 import { formatPrice, catalogHref } from "@/lib/catalog/model";
 import { CatalogLink } from "@/components/catalog-link";
@@ -31,6 +32,9 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
   const variants = [...product.variants].sort((a, b) => BigInt(a.id) < BigInt(b.id) ? -1 : 1);
   const optionLabels = variantOptionLabels(variants);
   const specifications = selected ? variantSpecifications(selected) : [];
+  // Live read, separate from the cached product document; failure is "unknown", never "out of stock".
+  const stock = selected ? (await getAvailability(slug))?.get(selected.id) ?? null : null;
+  const availability = stock?.availability ?? null;
   return <article className="product-page">
     <nav aria-label="Breadcrumb" className="catalog-breadcrumb">
       <Link href="/" className="store-link">Home</Link><span aria-hidden="true">/</span>
@@ -52,8 +56,14 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
             <Star size={20} strokeWidth={2} aria-hidden="true" focusable="false" />
             {product.averageRating.toFixed(1)} ({product.ratingCount} {product.ratingCount === 1 ? "rating" : "ratings"})
           </p>}
-          <p className="text-sm text-muted">Availability unknown</p>
+          {selected && selected.isActive && (
+            <p className="product-availability" data-state={availability === "AVAILABLE" ? "available" : availability === "OUT_OF_STOCK" ? "out" : "unknown"}>
+              {availability === "AVAILABLE" ? "In stock" : availability === "OUT_OF_STOCK" ? "Out of stock" : "Availability unknown"}
+            </p>
+          )}
           {selected && !selected.isActive && <p className="product-variant-unavailable">This variant is unavailable.</p>}
+          {selected && <AddToCart key={selected.id} variantId={selected.id} label={product.name} active={selected.isActive}
+            availability={availability} limit={stock?.purchasableLimit ?? null} />}
         </div>
         <div className="product-transition-loading" role="status" aria-label="Loading selected variant">
           <div className="catalog-skeleton product-price-skeleton" />

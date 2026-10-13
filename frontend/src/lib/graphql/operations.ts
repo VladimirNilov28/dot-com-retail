@@ -3,6 +3,36 @@ import {
   type StorefrontMeQuery,
   type StorefrontMeQueryVariables,
   ProductDetailSource,
+  GuestCartViewSource,
+  type GuestCartViewQuery,
+  type GuestCartViewQueryVariables,
+  GuestCartAddSource,
+  type GuestCartAddMutation,
+  type GuestCartAddMutationVariables,
+  GuestCartUpdateSource,
+  type GuestCartUpdateMutation,
+  type GuestCartUpdateMutationVariables,
+  GuestCartRemoveSource,
+  type GuestCartRemoveMutation,
+  type GuestCartRemoveMutationVariables,
+  GuestCartMergeSource,
+  type GuestCartMergeMutation,
+  type GuestCartMergeMutationVariables,
+  MyCartViewSource,
+  type MyCartViewQuery,
+  type MyCartViewQueryVariables,
+  MyCartAddSource,
+  type MyCartAddMutation,
+  type MyCartAddMutationVariables,
+  MyCartUpdateSource,
+  type MyCartUpdateMutation,
+  type MyCartUpdateMutationVariables,
+  MyCartRemoveSource,
+  type MyCartRemoveMutation,
+  type MyCartRemoveMutationVariables,
+  VariantAvailabilitySource,
+  type VariantAvailabilityQuery,
+  type VariantAvailabilityQueryVariables,
   type ProductDetailQuery,
   type ProductDetailQueryVariables,
   HomeDiscoverySource,
@@ -220,6 +250,129 @@ export const guestOrder: Operation<IntegrationGuestOrderQuery, IntegrationGuestO
 
 export const guestOperations = [shippingOptions, guestCart, guestOrder] as const;
 
+
+function cartDecoder(value: unknown) {
+  const cart = object(value);
+  const totals = object(cart.totals);
+  return {
+    id: text(cart.id),
+    totals: { subtotal: decimal(totals.subtotal), currency: text(totals.currency) },
+    items: list(cart.items, (item) => {
+      const row = object(item);
+      const variant = object(row.productVariant);
+      const product = object(variant.product);
+      const availability = variant.availability === null ? null : text(variant.availability);
+      if (availability !== null && availability !== "AVAILABLE" && availability !== "OUT_OF_STOCK") throw new TypeError("Invalid availability");
+      const purchasableLimit = variant.purchasableLimit === null ? null : integer(variant.purchasableLimit);
+      const quantity = integer(row.quantity);
+      if (quantity < 1) throw new TypeError("Invalid cart quantity");
+      return {
+        id: text(row.id), quantity, subtotal: decimal(row.subtotal),
+        productVariant: {
+          id: text(variant.id), sku: text(variant.sku), price: decimal(variant.price),
+          attributes: json(variant.attributes), isActive: boolean(variant.isActive),
+          availability: availability as "AVAILABLE" | "OUT_OF_STOCK" | null, purchasableLimit,
+          product: {
+            name: text(product.name), slug: text(product.slug),
+            images: list(product.images, (image) => productImage(image)),
+          },
+        },
+      };
+    }),
+  };
+}
+
+const cartItemId = (value: unknown) => {
+  const id = text(value);
+  if (!variantId(id)) throw new TypeError("Invalid cart item id");
+  return id;
+};
+const cartInput = (value: unknown) => {
+  const input = object(value);
+  if (Object.keys(input).some((key) => key !== "productVariantId" && key !== "quantity")) throw new TypeError("Unexpected input");
+  const id = text(input.productVariantId);
+  const quantity = integer(input.quantity);
+  if (!variantId(id) || quantity < 1 || quantity > 99) throw new TypeError("Invalid cart input");
+  return { productVariantId: id, quantity };
+};
+const quantityInput = (value: unknown) => {
+  const input = object(value);
+  if (Object.keys(input).some((key) => key !== "quantity")) throw new TypeError("Unexpected input");
+  const quantity = integer(input.quantity);
+  if (quantity < 1 || quantity > 99) throw new TypeError("Invalid cart quantity");
+  return { quantity };
+};
+
+export const guestCartView: Operation<GuestCartViewQuery, GuestCartViewQueryVariables> = {
+  name: "GuestCartView", source: GuestCartViewSource, kind: "query", access: "guest",
+  variables(value) { variables(value, []); return {}; },
+  decode(value) {
+    const root = object(value);
+    return { guestCart: root.guestCart === null ? null : cartDecoder(root.guestCart) };
+  },
+};
+export const guestCartAdd: Operation<GuestCartAddMutation, GuestCartAddMutationVariables> = {
+  name: "GuestCartAdd", source: GuestCartAddSource, kind: "mutation", access: "guest",
+  variables(value) { return { input: cartInput(variables(value, ["input"]).input) }; },
+  decode(value) { return { addGuestCartItem: cartDecoder(object(value).addGuestCartItem) }; },
+};
+export const guestCartUpdate: Operation<GuestCartUpdateMutation, GuestCartUpdateMutationVariables> = {
+  name: "GuestCartUpdate", source: GuestCartUpdateSource, kind: "mutation", access: "guest",
+  variables(value) {
+    const input = variables(value, ["id", "input"]);
+    return { id: cartItemId(input.id), input: quantityInput(input.input) };
+  },
+  decode(value) { return { updateGuestCartItem: cartDecoder(object(value).updateGuestCartItem) }; },
+};
+export const guestCartRemove: Operation<GuestCartRemoveMutation, GuestCartRemoveMutationVariables> = {
+  name: "GuestCartRemove", source: GuestCartRemoveSource, kind: "mutation", access: "guest",
+  variables(value) { return { id: cartItemId(variables(value, ["id"]).id) }; },
+  decode(value) { return { removeGuestCartItem: cartDecoder(object(value).removeGuestCartItem) }; },
+};
+export const guestCartMerge: Operation<GuestCartMergeMutation, GuestCartMergeMutationVariables> = {
+  name: "GuestCartMerge", source: GuestCartMergeSource, kind: "mutation", access: "guest",
+  variables(value) { return { requestId: uuid(variables(value, ["requestId"]).requestId) }; },
+  decode(value) {
+    const result = object(object(value).mergeGuestCart);
+    const status = text(result.status);
+    if (status !== "MERGED" && status !== "REPLAYED" && status !== "BLOCKED") throw new TypeError("Invalid merge status");
+    return { mergeGuestCart: {
+      status,
+      conflicts: list(result.conflicts, (item) => {
+        const conflict = object(item);
+        const code = text(conflict.code);
+        if (code !== "VARIANT_UNAVAILABLE" && code !== "QUANTITY_OVERFLOW") throw new TypeError("Invalid conflict");
+        return { productVariantId: text(conflict.productVariantId), code, message: text(conflict.message) };
+      }),
+    } };
+  },
+};
+export const cartGuestOperations = [guestCartView, guestCartAdd, guestCartUpdate, guestCartRemove, guestCartMerge] as const;
+
+export const myCartView: Operation<MyCartViewQuery, MyCartViewQueryVariables> = {
+  name: "MyCartView", source: MyCartViewSource, kind: "query", access: "authenticated",
+  variables(value) { variables(value, []); return {}; },
+  decode(value) { return { myCart: cartDecoder(object(value).myCart) }; },
+};
+export const myCartAdd: Operation<MyCartAddMutation, MyCartAddMutationVariables> = {
+  name: "MyCartAdd", source: MyCartAddSource, kind: "mutation", access: "authenticated",
+  variables(value) { return { input: cartInput(variables(value, ["input"]).input) }; },
+  decode(value) { return { addCartItem: { id: text(object(object(value).addCartItem).id) } }; },
+};
+export const myCartUpdate: Operation<MyCartUpdateMutation, MyCartUpdateMutationVariables> = {
+  name: "MyCartUpdate", source: MyCartUpdateSource, kind: "mutation", access: "authenticated",
+  variables(value) {
+    const input = variables(value, ["id", "input"]);
+    return { id: cartItemId(input.id), input: quantityInput(input.input) };
+  },
+  decode(value) { return { updateCartItem: { id: text(object(object(value).updateCartItem).id) } }; },
+};
+export const myCartRemove: Operation<MyCartRemoveMutation, MyCartRemoveMutationVariables> = {
+  name: "MyCartRemove", source: MyCartRemoveSource, kind: "mutation", access: "authenticated",
+  variables(value) { return { id: cartItemId(variables(value, ["id"]).id) }; },
+  decode(value) { return { removeCartItem: boolean(object(value).removeCartItem) }; },
+};
+
 export const catalogCategories: Operation<CatalogCategoriesQuery, CatalogCategoriesQueryVariables> = {
   name: "CatalogCategories", source: CatalogCategoriesSource, kind: "query", access: "public",
   variables(value) { variables(value, []); return {}; },
@@ -395,6 +548,36 @@ export const productDetail: Operation<ProductDetailQuery, ProductDetailQueryVari
           id, price, weightGrams, lengthMm, widthMm, heightMm, sku: text(variant.sku), attributes: json(variant.attributes),
           isActive: boolean(variant.isActive), barcode: variant.barcode === null ? null : text(variant.barcode),
         };
+      }),
+    } };
+  },
+};
+
+export const variantAvailability: Operation<VariantAvailabilityQuery, VariantAvailabilityQueryVariables> = {
+  name: "VariantAvailability", source: VariantAvailabilitySource, kind: "query", access: "public",
+  variables(value) {
+    const input = variables(value, ["slug"]);
+    const slug = text(input.slug);
+    if (!slug.trim() || slug.length > 255) throw new TypeError("Invalid product slug");
+    return { slug };
+  },
+  decode(value) {
+    const root = object(value);
+    if (root.product === null) return { product: null };
+    const product = object(root.product);
+    return { product: {
+      slug: text(product.slug),
+      variants: list(product.variants, (item) => {
+        const variant = object(item);
+        const id = text(variant.id);
+        if (!variantId(id)) throw new TypeError("Invalid variant identity");
+        const availability = variant.availability === null ? null : text(variant.availability);
+        if (availability !== null && availability !== "AVAILABLE" && availability !== "OUT_OF_STOCK") {
+          throw new TypeError("Invalid availability");
+        }
+        const purchasableLimit = variant.purchasableLimit === null ? null : integer(variant.purchasableLimit);
+        if (purchasableLimit !== null && (purchasableLimit < 0 || purchasableLimit > 10)) throw new TypeError("Invalid purchasable limit");
+        return { id, availability, purchasableLimit };
       }),
     } };
   },

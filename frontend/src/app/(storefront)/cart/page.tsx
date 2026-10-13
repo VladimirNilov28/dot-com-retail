@@ -1,13 +1,8 @@
 import type { Metadata } from "next";
-import { UnavailablePage } from "@/components/unavailable-page";
+import { CartPageView } from "@/components/cart/cart-page-view";
 
-export const metadata: Metadata = { title: "Cart" };
+export const metadata: Metadata = { title: "Cart", robots: { index: false, follow: false } };
 
 export default function CartPage() {
-  return (
-    <UnavailablePage
-      title="Cart"
-      description="Shopping cart features are not available yet. Cart contents, previews, and checkout will be added later."
-    />
-  );
+  return <CartPageView />;
 }

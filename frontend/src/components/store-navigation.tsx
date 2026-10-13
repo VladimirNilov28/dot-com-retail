@@ -258,6 +258,7 @@ export function StoreNavigation({
         {cartPreview ?? navigationLink(destinations[CART], true)}
       </div>
       <div className="store-mobile-nav">
+        {cartPreview}
         <Drawer isOpen={state.overlay === "mobile"} onOpenChange={(open) => setOverlay(open ? "mobile" : null)}>
           <Button ref={mobileTrigger} variant="ghost" className="store-mobile-trigger" aria-haspopup="dialog">
             <Menu className="store-icon" size={20} strokeWidth={2} aria-hidden="true" focusable="false" />

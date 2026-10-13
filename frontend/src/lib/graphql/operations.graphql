@@ -95,6 +95,13 @@ query HomeCategoryProducts($categoryId: ID!) {
   }
 }
 
+query VariantAvailability($slug: String!) {
+  product(slug: $slug) {
+    slug
+    variants { id availability purchasableLimit }
+  }
+}
+
 query ProductDetail($slug: String!) {
   product(slug: $slug) {
     id
@@ -108,4 +115,103 @@ query ProductDetail($slug: String!) {
     images { id url altText width height }
     variants { id sku price attributes isActive barcode weightGrams lengthMm widthMm heightMm }
   }
+}
+
+query GuestCartView {
+  guestCart {
+    id
+    totals { subtotal currency }
+    items {
+      id
+      quantity
+      subtotal
+      productVariant {
+        id sku price attributes isActive availability purchasableLimit
+        product { name slug images { url altText width height } }
+      }
+    }
+  }
+}
+
+mutation GuestCartAdd($input: AddCartItemInput!) {
+  addGuestCartItem(input: $input) {
+    id
+    totals { subtotal currency }
+    items {
+      id
+      quantity
+      subtotal
+      productVariant {
+        id sku price attributes isActive availability purchasableLimit
+        product { name slug images { url altText width height } }
+      }
+    }
+  }
+}
+
+mutation GuestCartUpdate($id: ID!, $input: UpdateCartItemInput!) {
+  updateGuestCartItem(cartItemId: $id, input: $input) {
+    id
+    totals { subtotal currency }
+    items {
+      id
+      quantity
+      subtotal
+      productVariant {
+        id sku price attributes isActive availability purchasableLimit
+        product { name slug images { url altText width height } }
+      }
+    }
+  }
+}
+
+mutation GuestCartRemove($id: ID!) {
+  removeGuestCartItem(cartItemId: $id) {
+    id
+    totals { subtotal currency }
+    items {
+      id
+      quantity
+      subtotal
+      productVariant {
+        id sku price attributes isActive availability purchasableLimit
+        product { name slug images { url altText width height } }
+      }
+    }
+  }
+}
+
+mutation GuestCartMerge($requestId: UUID!) {
+  mergeGuestCart(requestId: $requestId) {
+    status
+    conflicts { productVariantId code message }
+  }
+}
+
+query MyCartView {
+  myCart {
+    id
+    totals { subtotal currency }
+    items {
+      id
+      quantity
+      subtotal
+      productVariant {
+        id sku price attributes isActive availability purchasableLimit
+        product { name slug images { url altText width height } }
+      }
+    }
+  }
+}
+
+mutation MyCartAdd($input: AddCartItemInput!) {
+  addCartItem(input: $input) { id }
+}
+
+mutation MyCartUpdate($id: ID!, $input: UpdateCartItemInput!) {
+  updateCartItem(cartItemId: $id, input: $input) { id }
+}
+
+mutation MyCartRemove($id: ID!) {
+  removeCartItem(cartItemId: $id)
 }
