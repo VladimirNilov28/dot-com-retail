@@ -54,6 +54,16 @@ def resolve_canonical_user(kratos_client: KratosClient, spring_auth_client: Spri
     return spring_auth_client.resolve_user(spring_user_id)
 
 
+def effective_aal(session: dict, role: str) -> str:
+    """Assurance minted into tokens. Staff reach aal2 only through a genuine TOTP:
+    a recovery-code (lookup_secret) second factor never satisfies administrative MFA."""
+    aal = session["authenticator_assurance_level"]
+    if aal != "aal2" or role == "USER":
+        return aal
+    methods = session.get("authentication_methods") or []
+    return "aal2" if any(m.get("method") == "totp" and m.get("aal") == "aal2" for m in methods) else "aal1"
+
+
 def handle_login(
     config: Config,
     hydra_client: HydraClient,
@@ -83,7 +93,7 @@ def handle_login(
 
     accepted = hydra_client.accept_login_request(
         login_challenge, subject,
-        context={"role": spring_user["role"], "aal": session["authenticator_assurance_level"]},
+        context={"role": spring_user["role"], "aal": effective_aal(session, spring_user["role"])},
     )
     return accepted["redirect_to"]
 
@@ -145,7 +155,7 @@ def bff_session(kratos_client: KratosClient, spring_auth_client: SpringAuthClien
     return {
         "active": True, "identity_id": session["identity"]["id"],
         "session_id": session["id"], "expires_at": session["expires_at"],
-        "aal": session["authenticator_assurance_level"],
+        "aal": effective_aal(session, canonical["role"]),
         "user_id": str(canonical["id"]), "role": canonical["role"],
     }
 

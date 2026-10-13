@@ -1,5 +1,4 @@
 import "server-only";
-import Link from "next/link";
 import { headers } from "next/headers";
 import type { ReactNode } from "react";
 import { AuthProblem } from "@/components/auth-page";
@@ -55,8 +54,8 @@ export async function accountContext(section: AccountSection, title: string, sea
     const code = error instanceof AuthError ? error.code : "unavailable";
     if (code === "forbidden") return { element: (
       <div className="account-main">
-        <AccountHeading title={title} description="Staff account security is managed by an administrator." />
-        <Link className="store-link" href="/account">Back to account</Link>
+        <AccountHeading title={title} description="Staff authenticator setup and verification live in the admin area." />
+        <a className="store-cta justify-self-start" href="/admin/security">Open authenticator setup</a>
       </div>
     ) };
     if (code === "reauthentication_required") return { element: (

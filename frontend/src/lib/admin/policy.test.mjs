@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { adminPolicy, moveId, optionalInt } from "./policy";
+import { adminPolicy, moveId, optionalInt, unverifiedClaim } from "./policy";
 
 test("admin policy needs a staff role and aal2 unless locally opted in", () => {
   expect(adminPolicy("USER", "aal2", true)).toBe("role");
@@ -20,4 +20,11 @@ test("moveId swaps neighbours and refuses out-of-range moves", () => {
   expect(moveId(["a", "b", "c"], "b", -1)).toEqual(["b", "a", "c"]);
   expect(moveId(["a", "b", "c"], "c", 1)).toBeNull();
   expect(moveId(["a", "b"], "x", 1)).toBeNull();
+});
+test("unverified claim reader tolerates malformed tokens", () => {
+  const token = `h.${Buffer.from(JSON.stringify({ aal: "aal2", n: 1 })).toString("base64url")}.s`;
+  expect(unverifiedClaim(token, "aal")).toBe("aal2");
+  expect(unverifiedClaim(token, "n")).toBeUndefined();
+  expect(unverifiedClaim("garbage", "aal")).toBeUndefined();
+  expect(unverifiedClaim(undefined, "aal")).toBeUndefined();
 });

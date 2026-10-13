@@ -72,12 +72,17 @@ export interface EmailChallenge {
   attempts: number;
 }
 
-export const accountSections = ["/account/security", "/account/connections", "/account/profile", "/account/sessions"] as const;
+export const accountSections = ["/account/security", "/account/connections", "/account/profile", "/account/sessions", "/admin/security"] as const;
 export type AccountSection = typeof accountSections[number];
 export function accountSection(value: unknown): AccountSection {
   if (value === undefined) return "/account/security";
   if (typeof value === "string" && (accountSections as readonly string[]).includes(value)) return value as AccountSection;
   throw new AuthError("invalid_request", 400);
+}
+
+/** Post-MFA destination; only admin console paths are accepted, otherwise the product list. */
+export function adminNext(value: unknown): string {
+  return typeof value === "string" && /^\/admin(\/[a-z0-9][a-z0-9-]{0,120}){0,3}$/.test(value) ? value : "/admin/products";
 }
 
 export function validEmail(value: unknown): value is string {

@@ -5,10 +5,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { object, text } from "@/lib/graphql/scalars";
 import { authConfig } from "./config";
 import { assertCsrf, authBoundary, authHeaders, boundedForm, browserCookie, redirectResponse } from "./http";
-import { AuthError, accountSection, assertSameProvider, flowIdentifier, oneParameter, type AccountSection, type BrowserState,
+import { AuthError, accountSection, adminNext, assertSameProvider, flowIdentifier, oneParameter, type AccountSection, type BrowserState,
   type ProviderSession } from "./model";
 import { currentProviderSession, providerClient, providerFailure } from "./provider";
-import { accountStatus, assertStepUp, notifySecurityEvent, privilegedAge, sessionFacts, stepUpView,
+import { accountStatus, assertStepUp, type AccountStatus, notifySecurityEvent, privilegedAge, sessionFacts, stepUpView,
   type SecurityEvent } from "./account";
 import { registrationPasswordError, type PasswordErrorCode } from "./password";
 import { authenticatedState } from "./session";
@@ -166,7 +166,7 @@ function providerCsrf(value: unknown): string {
 
 export function securityPayload(form: URLSearchParams, settings: SecuritySettings, csrf: string): UpdateSettingsFlowBody & { csrf_token: string } {
   for (const name of form.keys()) {
-    if (!["_csrf", "flow", "action", "totp_code", "acknowledge", "section", "password", "password_confirm"].includes(name) ||
+    if (!["_csrf", "flow", "action", "totp_code", "acknowledge", "section", "password", "password_confirm", "next"].includes(name) ||
         form.getAll(name).length !== 1) throw new AuthError("invalid_request", 400);
   }
   const action = oneParameter(form, "action") as SecurityAction;
@@ -237,10 +237,22 @@ async function freshSettingsFlow(provider: ReturnType<typeof providerClient>, st
   return projected;
 }
 
+const staffStatus: AccountStatus = {
+  credentials: { password: false, google: false, totp: false, lookupSecret: false },
+  recoveryCodesRemaining: 0,
+  profile: { email: "", emailVerified: true, username: "" },
+};
+
 export async function securitySettingsFlow(
   state: BrowserState, browser: string, client: PoolClient, id?: string, form?: URLSearchParams,
 ): Promise<SecuritySettings> {
-  if (!state.provider || !state.tokens || state.provider.role !== "USER") throw new AuthError("forbidden", 403);
+  if (!state.provider || !state.tokens) throw new AuthError("forbidden", 403);
+  // Staff may only enroll their own authenticator here; everything else stays customer-only.
+  const staff = state.provider.role !== "USER";
+  const limit = (value: SecuritySettings): SecuritySettings => {
+    if (staff) value.actions = value.actions.filter((action) => action === "totp_confirm");
+    return value;
+  };
   if (id) await assertFlow(client, browser, flowIdentifier(id), "settings");
   const provider = providerClient(state);
   let stage = "session";
@@ -251,11 +263,11 @@ export async function securitySettingsFlow(
     const response = id ? await provider.api.getSettingsFlow({ id })
       : await provider.api.createBrowserSettingsFlow({ returnTo: `${authConfig().origin}/account/security` });
     let flow: unknown = response.data;
-    let projected = projectSecuritySettings(flow, state);
+    let projected = limit(projectSecuritySettings(flow, state));
     if (id && projected.id !== id) throw new AuthError("forbidden", 403);
     if (!id) await bindFlow(browser, projected.id, "settings", projected.expiresAt, client);
     stage = "status";
-    let status = await accountStatus(state);
+    let status = staff ? staffStatus : await accountStatus(state);
     if (form) {
       assertSecuritySession(session, state.provider, projected);
       const payload = securityPayload(form, projected, providerCsrf(flow));
@@ -263,7 +275,13 @@ export async function securitySettingsFlow(
       if (payload.method === "oidc" && state.social) throw new AuthError("invalid_request", 400);
       // Server-side step-up: TOTP when enrolled, otherwise a proven email code.
       const view = stepUpView(state, sessionFacts(session, state.provider), projected.totpEnabled);
-      assertStepUp(view);
+      if (staff) {
+        // Staff enrollment needs recent primary authentication only; an email code never stands in for MFA.
+        if (!view.fresh) throw new AuthError("reauthentication_required", 401);
+        if (action !== "totp_confirm" || projected.totpEnabled) throw new AuthError("forbidden", 403);
+      } else {
+        assertStepUp(view);
+      }
       // A recovery-code session may only replace the lost authenticator and its codes.
       if (view.recoveryMode && !recoveryActions.includes(action)) return { ...projected, notice: "recovery_mode" };
       if (action === "google_disconnect" && !status.credentials.password) return { ...projected, notice: "last_method" };
@@ -302,7 +320,7 @@ export async function securitySettingsFlow(
         state.provider = fresh;
         // Kratos success responses can carry the old flow ID with a new
         // action ID. Create and bind a fresh flow, never relax action binding.
-        projected = await freshSettingsFlow(provider, state, browser, client);
+        projected = limit(await freshSettingsFlow(provider, state, browser, client));
         if (action === "totp_disable" && projected.actions.includes("backup_disable")) {
           // Recovery codes only recover an authenticator; never leave them as a lone second factor.
           stage = "recovery_codes_cleanup";
@@ -313,11 +331,11 @@ export async function securitySettingsFlow(
         }
         projected.saved = true;
         projected.savedAction = action;
-        status = await accountStatus(state);
-        const event = action === "password" ? hadPassword ? "password_changed" : "password_set" : securityEvents[action];
+        if (!staff) status = await accountStatus(state);
+        const event = staff ? undefined : action === "password" ? hadPassword ? "password_changed" : "password_set" : securityEvents[action];
         if (event) await notifySecurityEvent(state, event);
       } else {
-        const updated = projectSecuritySettings(flow, state);
+        const updated = limit(projectSecuritySettings(flow, state));
         if (updated.id !== projected.id) throw new AuthError("forbidden", 403);
         projected = updated;
       }
@@ -341,7 +359,45 @@ export async function loadSecuritySettings(browser: string, id?: string): Promis
   });
 }
 
-const settingsSections: AccountSection[] = ["/account/security", "/account/connections"];
+export interface StaffSecurity {
+  csrf: string;
+  fresh: boolean;
+  totpEnabled: boolean;
+  settings?: SecuritySettings;
+}
+
+/** Enrollment/verification state for a signed-in staff member; customers are refused. */
+export async function loadStaffSecurity(browser: string, id?: string): Promise<StaffSecurity> {
+  await authenticatedState(browser);
+  return withBrowser(browser, async (state, client, row) => {
+    if (!row.authenticated) throw new AuthError("expired", 401);
+    if (!state.provider || state.provider.role === "USER") throw new AuthError("forbidden", 403);
+    const provider = providerClient(state);
+    let fresh: boolean;
+    try {
+      const facts = sessionFacts((await provider.api.toSession()).data, state.provider);
+      fresh = facts.authenticatedAt <= Date.now() + 5000 && Date.now() - facts.authenticatedAt < privilegedAge;
+    } catch (error) {
+      if (error instanceof AuthError) throw error;
+      settingsFailure(error);
+    } finally {
+      provider.save();
+    }
+    if (!fresh) return { csrf: state.csrf, fresh, totpEnabled: false };
+    try {
+      const settings = await securitySettingsFlow(state, browser, client, id);
+      return { csrf: state.csrf, fresh, totpEnabled: settings.totpEnabled, settings };
+    } catch (error) {
+      // Kratos withholds settings from an aal1 session that already has an authenticator.
+      if (error instanceof AuthError && error.code === "reauthentication_required") {
+        return { csrf: state.csrf, fresh, totpEnabled: true };
+      }
+      throw error;
+    }
+  });
+}
+
+const settingsSections: AccountSection[] = ["/account/security", "/account/connections", "/admin/security"];
 
 function settingsSection(value: unknown): AccountSection {
   const section = accountSection(value);
@@ -352,6 +408,7 @@ function settingsSection(value: unknown): AccountSection {
 /** Wire both GET and POST of /auth/security to this handler. */
 export async function handleSecuritySettings(request: NextRequest): Promise<NextResponse> {
   let section: AccountSection = "/account/security";
+  let nextQuery = "";
   return authBoundary(async () => {
     try {
       if (request.method !== "GET" && request.method !== "POST") {
@@ -360,11 +417,13 @@ export async function handleSecuritySettings(request: NextRequest): Promise<Next
       const browser = browserCookie(request, true);
       if (request.method === "GET") {
         section = settingsSection(oneParameter(request.nextUrl.searchParams, "section"));
+        if (section === "/admin/security") nextQuery = `&next=${encodeURIComponent(adminNext(oneParameter(request.nextUrl.searchParams, "next")))}`;
         const settings = await loadSecuritySettings(browser, oneParameter(request.nextUrl.searchParams, "flow"));
-        return redirectResponse(`${section}?flow=${settings.id}${settings.saved ? "&saved=1" : ""}`);
+        return redirectResponse(`${section}?flow=${settings.id}${settings.saved ? "&saved=1" : ""}${nextQuery}`);
       }
       const form = await boundedForm(request);
       section = settingsSection(oneParameter(form, "section"));
+      if (section === "/admin/security") nextQuery = `&next=${encodeURIComponent(adminNext(oneParameter(form, "next")))}`;
       await authenticatedState(browser);
       const settings = await withBrowser(browser, async (state, client, row) => {
         if (!row.authenticated) throw new AuthError("expired", 401);
@@ -376,13 +435,13 @@ export async function handleSecuritySettings(request: NextRequest): Promise<Next
       if (settings.savedAction) query.set("saved", settings.savedAction);
       if (settings.notice) query.set("notice", settings.notice);
       if (settings.invalid) query.set("invalid", "1");
-      return redirectResponse(`${section}?${query}`);
+      return redirectResponse(`${section}?${query}${nextQuery}`);
     } catch (error) {
       if (error instanceof AuthError && error.code === "reauthentication_required") {
-        return redirectResponse(`${section}?reauth=required`);
+        return redirectResponse(`${section}?reauth=required${nextQuery}`);
       }
       if (error instanceof AuthError && error.code === "step_up_required") {
-        return redirectResponse(`${section}?stepup=required`);
+        return redirectResponse(`${section}?stepup=required${nextQuery}`);
       }
       throw error;
     }

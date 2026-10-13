@@ -67,7 +67,7 @@ export default async function AccountPage() {
             <Item href="/account/connections" label="Google" value={status.credentials.google ? "Connected" : "Not connected"} ok={status.credentials.google} />
           </ul>
         </section>
-      ) : <p className="text-sm text-muted">Staff account security is managed by an administrator.</p>}
+      ) : <p className="text-sm text-muted">Staff authenticator setup is in the <Link className="store-link" href="/admin/security">admin area</Link>.</p>}
       <Link className="store-link" href="/catalog/all-products">Continue browsing</Link>
     </div>
   );

@@ -1,3 +1,15 @@
+/** Reads one string claim from a JWT payload without verifying it; display gating only, the API re-verifies. */
+export function unverifiedClaim(token: string | undefined, name: string): string | undefined {
+  const part = token?.split(".")[1];
+  if (!part) return undefined;
+  try {
+    const value = (JSON.parse(Buffer.from(part, "base64url").toString("utf8")) as Record<string, unknown>)[name];
+    return typeof value === "string" ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export const adminRoles = new Set(["ADMIN", "CATALOG_MANAGER"]);
 
 /** Staff role, plus a second factor unless a local-only dev opt-in is set. */

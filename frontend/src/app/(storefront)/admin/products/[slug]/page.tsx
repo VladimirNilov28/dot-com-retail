@@ -29,7 +29,7 @@ export default async function AdminProduct({ params, searchParams }: {
   const { slug } = await params;
   const query_ = await searchParams;
   const access = await adminAccess();
-  if (access.kind !== "ok") return <AdminDenied access={access} />;
+  if (access.kind !== "ok") return <AdminDenied access={access} next={`/admin/products/${encodeURIComponent(slug)}`} />;
   let data: { product: Product | null; brands: { id: string; name: string }[] };
   try {
     data = await adminGraphql(access.session.accessToken, query, { slug });

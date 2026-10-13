@@ -54,7 +54,8 @@ export function PasswordPanel({ settings, hasPassword, editable, notice }: {
   );
 }
 
-export function AuthenticatorPanel({ settings, enabled, editable }: { settings?: SecuritySettings; enabled: boolean; editable: boolean }) {
+export function AuthenticatorPanel({ settings, enabled, editable, section = "/account/security", next }:
+  { settings?: SecuritySettings; enabled: boolean; editable: boolean; section?: string; next?: string }) {
   const id = useId();
   const [visible, setVisible] = useState(true);
   useEffect(() => {
@@ -84,7 +85,7 @@ export function AuthenticatorPanel({ settings, enabled, editable }: { settings?:
           {visible && settings.secret ? <p className="text-sm">Setup key: <code className="break-all select-all">{settings.secret}</code></p> : null}
           {!visible ? <div><Button variant="secondary" onPress={() => setVisible(true)}>Show setup details</Button></div> : null}
           <ActionForm endpoint="/auth/security" csrf={settings.csrf} label="Turn on authenticator"
-            fields={{ flow: settings.id, action: "totp_confirm", section }}>
+            fields={{ flow: settings.id, action: "totp_confirm", section, ...(next ? { next } : {}) }}>
             <label className="auth-field">
               <span>6-digit code from the app</span>
               <input className="auth-input px-3" name="totp_code" inputMode="numeric" autoComplete="one-time-code"

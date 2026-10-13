@@ -12,6 +12,7 @@ from clients.kratos import KratosClient  # noqa: E402
 from services.login_consent import (  # noqa: E402
     BridgeError,
     UnprovisionedIdentityError,
+    effective_aal,
     handle_login,
     resolve_canonical_user,
 )
@@ -253,6 +254,20 @@ class BrowserAssuranceTest(unittest.TestCase):
         self.hydra.accept_login_request.assert_called_once_with(
             "challenge", "42", context={"role": "USER", "aal": "aal2"},
         )
+
+
+class EffectiveAalTest(unittest.TestCase):
+    def test_customer_keeps_provider_assurance(self):
+        self.assertEqual(effective_aal(active_session("aal2"), "USER"), "aal2")
+        self.assertEqual(effective_aal(active_session("aal1"), "USER"), "aal1")
+
+    def test_staff_aal2_requires_genuine_totp(self):
+        self.assertEqual(effective_aal(active_session("aal2"), "ADMIN"), "aal2")
+        recovery = active_session("aal2")
+        recovery["authentication_methods"] = [{"method": "password", "aal": "aal1"},
+                                              {"method": "lookup_secret", "aal": "aal2"}]
+        self.assertEqual(effective_aal(recovery, "CATALOG_MANAGER"), "aal1")
+        self.assertEqual(effective_aal(active_session("aal1"), "ADMIN"), "aal1")
 
 
 if __name__ == "__main__":
