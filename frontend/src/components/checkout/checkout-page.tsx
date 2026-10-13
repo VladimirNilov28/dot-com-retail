@@ -6,7 +6,7 @@ import { Button } from "@heroui/react";
 import { CartLines } from "@/components/cart/cart-lines";
 import { useCart } from "@/components/cart/cart-provider";
 import { formatPrice } from "@/lib/catalog/model";
-import { requestCustomer, requestGuest } from "@/lib/graphql/browser";
+import { requestGuest } from "@/lib/graphql/browser";
 import { shippingOptions } from "@/lib/graphql/operations";
 import {
   checkoutConfiguration, checkoutPrefill, customerConfirmation, guestConfirmation,
@@ -14,7 +14,9 @@ import {
 } from "@/lib/graphql/checkout-operations";
 import type { CheckoutAddressInput, CheckoutInput, CheckoutPrefillQuery } from "@/lib/graphql/generated";
 import { uuid } from "@/lib/graphql/scalars";
-import { addressFields, checkoutError, clearAttempt, confirmationHref, emptyAddress, readAttempt, requestSelection, saveAttempt, validation, type Attempt } from "@/lib/checkout/model";
+import { addressFields, checkoutError, clearAttempt, clearLegacyAttempt, readLegacyAttempt, confirmationHref, emptyAddress, readAttempt, requestSelection, saveAttempt, validation, type Attempt } from "@/lib/checkout/model";
+import { requestCheckout } from "@/lib/checkout/identity";
+import { useCheckoutIdentity } from "./identity-boundary";
 import { OrderSummary } from "./order-summary";
 import { StripePayment } from "./stripe-payment";
 
@@ -44,7 +46,11 @@ const initialInput = (): CheckoutInput => ({
 });
 
 export function CheckoutPageView() {
-  const { mode, snapshot, loading, pending: cartPending, reload, notice } = useCart();
+  const owner = useCheckoutIdentity();
+  const mode = owner.mode;
+  const { mode: cartMode, customerId, snapshot, loading, pending: cartPending, reload, notice } = useCart();
+  const cartOwned = cartMode === mode && (mode === "guest" || owner.scope === `user:${customerId}`);
+  const [recovering, setRecovering] = useState(true);
   const [input, setInput] = useState<CheckoutInput>(initialInput);
   const [shipping, setShipping] = useState<{ method: "STANDARD" | "EXPRESS" | "PICKUP"; charge: Parameters<typeof formatPrice>[0]; estimate: string; supportedCountries: string[] }[]>([]);
   const [configured, setConfigured] = useState<boolean | null>(null);
@@ -69,6 +75,10 @@ export function CheckoutPageView() {
   const currentAccepted = !!current && accepted === current.quoteVersion;
 
   useEffect(() => {
+    if (!cartOwned) void reload();
+  }, [cartOwned, reload]);
+
+  useEffect(() => {
     const controller = new AbortController();
     async function setup() {
       const [methods, config] = await Promise.all([
@@ -89,7 +99,7 @@ export function CheckoutPageView() {
     if (mode !== "user") return;
     const controller = new AbortController();
     async function prefill() {
-      const result = await requestCustomer(checkoutPrefill, {}, { signal: controller.signal });
+      const result = await requestCheckout(owner, checkoutPrefill, {}, { signal: controller.signal });
       if (controller.signal.aborted) return;
       if (result.status === "success") {
         setSaved(result.data.me.addresses);
@@ -109,36 +119,56 @@ export function CheckoutPageView() {
     }
     void prefill();
     return () => controller.abort();
-  }, [mode]);
+  }, [mode, owner]);
 
   useEffect(() => {
     const controller = new AbortController();
     async function recover() {
       let stored: Attempt | null;
-      try { stored = readAttempt(); }
-      catch { setError("Saved checkout recovery is unavailable. Do not place another order if a previous submission was uncertain."); return; }
-      if (!stored) return;
-      setAttempt(stored); setInput(stored.input.checkout); setPlacedMode(stored.mode);
+      let legacy = false;
+      try {
+        stored = readAttempt(owner);
+        if (!stored) {
+          try { stored = readLegacyAttempt(); }
+          catch { console.error("Unscoped legacy checkout recovery is invalid and has been retained without reuse."); }
+          legacy = true;
+          if (stored?.mode !== owner.mode) stored = null;
+        }
+      } catch { setError("Saved checkout recovery is unavailable. Do not place another order if a previous submission was uncertain."); return; }
+      if (!stored) { setRecovering(false); return; }
+      if (!legacy) { setAttempt(stored); setInput(stored.input.checkout); setPlacedMode(stored.mode); }
       const result = stored.mode === "guest" ?
-        await requestGuest(guestConfirmation, { requestId: stored.input.requestId }, { signal: controller.signal }) :
-        await requestCustomer(customerConfirmation, { requestId: stored.input.requestId }, { signal: controller.signal });
+        await requestCheckout(owner, guestConfirmation, { requestId: stored.input.requestId }, { signal: controller.signal }) :
+        await requestCheckout(owner, customerConfirmation, { requestId: stored.input.requestId }, { signal: controller.signal });
       if (controller.signal.aborted) return;
       const order = result.status === "success" ? ("guestOrder" in result.data ? result.data.guestOrder : result.data.checkoutOrder) : null;
-      if (order) setPlaced(order);
-      else setError("A saved placement request was found, but its outcome is not confirmed. Check its status or explicitly retry the same saved request.");
+      if (order) {
+        try {
+          if (order.status !== "PENDING") {
+            clearAttempt(owner, stored.input.requestId);
+            if (legacy) clearLegacyAttempt(stored.input.requestId);
+            setAttempt(null);
+          } else {
+            saveAttempt(stored, owner);
+            if (legacy) clearLegacyAttempt(stored.input.requestId);
+            setAttempt(stored); setInput(stored.input.checkout); setPlacedMode(stored.mode); setPlaced(order);
+          }
+        } catch { setError("Order state is known, but checkout recovery storage could not be updated. Do not submit a replacement request."); return; }
+      } else if (!legacy) setError("A saved placement request was found, but its outcome is not confirmed. Check its status or explicitly retry the same saved request.");
+      setRecovering(false);
     }
     void recover();
     return () => controller.abort();
-  }, []);
+  }, [owner]);
 
   useEffect(() => {
-    if (!valid || !cart?.lines.length || cartPending || placed || attempt || mode === "unknown") return;
+    if (!valid || !cart?.lines.length || cartPending || placed || attempt || recovering || !cartOwned) return;
     const controller = new AbortController();
     const timer = setTimeout(async () => {
       setQuoting(true);
       const selection = requestSelection(input);
-      const result = mode === "guest" ? await requestGuest(guestPreview, { input: selection }, { signal: controller.signal }) :
-        await requestCustomer(customerPreview, { input: selection }, { signal: controller.signal });
+      const result = mode === "guest" ? await requestCheckout(owner, guestPreview, { input: selection }, { signal: controller.signal }) :
+        await requestCheckout(owner, customerPreview, { input: selection }, { signal: controller.signal });
       if (controller.signal.aborted) return;
       setQuoting(false);
       if (result.status === "success") {
@@ -147,19 +177,19 @@ export function CheckoutPageView() {
       } else { setPreview(null); setError(checkoutError(result.error)); }
     }, 450);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [valid, key, cartPending, placed, attempt, mode, retryQuote, input, cart?.lines.length]);
+  }, [valid, key, cartPending, placed, attempt, mode, retryQuote, input, cart?.lines.length, owner, recovering, cartOwned]);
 
   async function place(retry?: Attempt) {
-    if (busy.current || (!retry && (!current?.placeable || !currentAccepted || !valid || cartPending || mode === "unknown"))) return;
+    if (busy.current || recovering || !cartOwned || (!retry && (!current?.placeable || !currentAccepted || !valid || cartPending))) return;
     const next: Attempt = retry ?? { mode: mode === "user" ? "user" : "guest", input: {
       requestId: uuid(crypto.randomUUID()), acceptedQuoteVersion: current!.quoteVersion, checkout: requestSelection(input),
     } };
-    try { saveAttempt(next); }
+    try { saveAttempt(next, owner); }
     catch { setError("This browser cannot save the request for safe recovery. Enable session storage before placing an order."); return; }
     busy.current = true; setPlacing(true); setAttempt(next); setError("");
     try {
-      const result = next.mode === "guest" ? await requestGuest(guestPlace, { input: next.input }) :
-        await requestCustomer(customerPlace, { input: next.input });
+      const result = next.mode === "guest" ? await requestCheckout(owner, guestPlace, { input: next.input }) :
+        await requestCheckout(owner, customerPlace, { input: next.input });
       if (result.status === "success") {
         const order = "createGuestOrder" in result.data ? result.data.createGuestOrder : result.data.createOrder.checkout;
         if (!order) { setError("The order response was incomplete. Recover the same request before proceeding."); return; }
@@ -167,7 +197,7 @@ export function CheckoutPageView() {
       } else {
         setError(checkoutError(result.error));
         if (result.error.codes?.some((code) => ["CHECKOUT_QUOTE_CHANGED", "CHECKOUT_INVALID", "PAYMENT_NOT_CONFIGURED"].includes(code))) {
-          clearAttempt(); setAttempt(null); setAccepted(null); setPreview(null); setRetryQuote((value) => value + 1);
+          clearAttempt(owner, next.input.requestId); setAttempt(null); setAccepted(null); setPreview(null); setRetryQuote((value) => value + 1);
         }
       }
     } catch {
@@ -175,6 +205,7 @@ export function CheckoutPageView() {
     } finally { busy.current = false; setPlacing(false); }
   }
 
+  if (recovering || !cartOwned) return <p role="status">{error || "Recovering checkout for your verified identity…"}</p>;
   if (placed) return <div className="checkout-page">
     <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Complete your order</h1>
     <p role="status">Order placed · {placed.publicId}. Payment is {placed.payment.status.toLowerCase()}.</p>

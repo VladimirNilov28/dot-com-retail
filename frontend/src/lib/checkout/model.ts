@@ -51,17 +51,42 @@ export function checkoutError(error: SafeFailure): string {
 }
 
 export type Attempt = { mode: "guest" | "user"; input: PlaceOrderInput };
+export type CheckoutIdentity = { mode: Attempt["mode"]; scope: string };
 const key = "bytecore.checkout.attempt";
-export function readAttempt(): Attempt | null {
-  const saved = sessionStorage.getItem(key);
-  if (!saved) return null;
-  const value: unknown = JSON.parse(saved);
+function decodeAttempt(value: unknown): Attempt {
   if (!value || typeof value !== "object" || !("mode" in value) || !("input" in value) ||
       (value.mode !== "guest" && value.mode !== "user")) throw new TypeError("Invalid saved checkout");
   return { mode: value.mode, input: guestPlace.variables({ input: value.input }).input };
 }
-export function saveAttempt(attempt: Attempt) { sessionStorage.setItem(key, JSON.stringify(attempt)); }
-export function clearAttempt() { sessionStorage.removeItem(key); }
+function scopedKey(owner: CheckoutIdentity) {
+  if (!(owner.mode === "user" ? /^user:[1-9][0-9]*$/ : /^guest:[a-f0-9]{64}$/).test(owner.scope))
+    throw new TypeError("Invalid checkout identity");
+  return `${key}:${owner.scope}`;
+}
+export function readAttempt(owner: CheckoutIdentity): Attempt | null {
+  const saved = sessionStorage.getItem(scopedKey(owner));
+  if (!saved) return null;
+  const value: unknown = JSON.parse(saved);
+  if (!value || typeof value !== "object" || !("scope" in value) || value.scope !== owner.scope || !("attempt" in value))
+    throw new TypeError("Invalid saved checkout identity");
+  const attempt = decodeAttempt(value.attempt);
+  if (attempt.mode !== owner.mode) throw new TypeError("Checkout identity changed");
+  return attempt;
+}
+export function saveAttempt(attempt: Attempt, owner: CheckoutIdentity) {
+  if (attempt.mode !== owner.mode) throw new TypeError("Checkout identity changed");
+  sessionStorage.setItem(scopedKey(owner), JSON.stringify({ scope: owner.scope, attempt: decodeAttempt(attempt) }));
+}
+export function clearAttempt(owner: CheckoutIdentity, requestId: UUID) {
+  if (readAttempt(owner)?.input.requestId === requestId) sessionStorage.removeItem(scopedKey(owner));
+}
+export function readLegacyAttempt(): Attempt | null {
+  const saved = sessionStorage.getItem(key);
+  return saved ? decodeAttempt(JSON.parse(saved)) : null;
+}
+export function clearLegacyAttempt(requestId: UUID) {
+  if (readLegacyAttempt()?.input.requestId === requestId) sessionStorage.removeItem(key);
+}
 export function confirmationHref(requestId: UUID, mode: "guest" | "user") {
   return `/order-confirmation/${uuid(requestId)}${mode === "guest" ? "?guest=1" : ""}`;
 }

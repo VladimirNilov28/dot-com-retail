@@ -9,32 +9,32 @@ import { myCartAdd, myCartRemove, myCartUpdate, myCartView } from "@/lib/graphql
 import { cartErrorMessage, toCartView, type CartSnapshot } from "./model";
 
 /** `guest` means no customer session; staff and anonymous visitors both use the guest cart. */
-export type UserCartResult = { mode: "guest" } | { mode: "user"; snapshot: CartSnapshot; note?: string };
+export type UserCartResult = { mode: "guest" } | { mode: "user"; customerId: string; snapshot: CartSnapshot; note?: string };
 
-async function customerToken(): Promise<string | null> {
+async function customerToken(): Promise<{ accessToken: string; id: string } | null> {
   try {
     const id = authCookie((await headers()).get("cookie"), authConfig().sessionCookie);
     if (!id) return null;
     const { state, user } = await authenticatedState(id);
-    return user.role === "USER" ? state.tokens?.accessToken ?? null : null;
+    return user.role === "USER" && state.tokens ? { accessToken: state.tokens.accessToken, id: user.id } : null;
   } catch {
     return null;
   }
 }
 
-async function readUserCart(accessToken: string, note?: string): Promise<UserCartResult> {
+async function readUserCart(accessToken: string, customerId: string, note?: string): Promise<UserCartResult> {
   const { endpoint, origin } = hiveConfig(process.env);
   const { result } = await requestHive(myCartView, {}, { endpoint, origin }, { kind: "authenticated", accessToken });
   if (result.status !== "success") {
     console.error("Cart read failed:", result.status === "failure" ? result.error.kind : "partial");
-    return { mode: "user", snapshot: { status: "error", message: cartErrorMessage("read-unavailable") } };
+    return { mode: "user", customerId, snapshot: { status: "error", message: cartErrorMessage("read-unavailable") } };
   }
-  return { mode: "user", snapshot: { status: "ok", cart: toCartView(result.data.myCart) }, note };
+  return { mode: "user", customerId, snapshot: { status: "ok", cart: toCartView(result.data.myCart) }, note };
 }
 
 export async function loadCart(): Promise<UserCartResult> {
   const token = await customerToken();
-  return token ? readUserCart(token) : { mode: "guest" };
+  return token ? readUserCart(token.accessToken, token.id) : { mode: "guest" };
 }
 
 export type CartMutation =
@@ -46,7 +46,7 @@ export async function mutateUserCart(mutation: CartMutation): Promise<UserCartRe
   const token = await customerToken();
   if (!token) return { mode: "guest" };
   const { endpoint, origin } = hiveConfig(process.env);
-  const context = { kind: "authenticated", accessToken: token } as const;
+  const context = { kind: "authenticated", accessToken: token.accessToken } as const;
   const config = { endpoint, origin };
   // Mutations are never retried automatically; the caller decides after an uncertain failure.
   const { result } = mutation.kind === "add" ?
@@ -56,6 +56,6 @@ export async function mutateUserCart(mutation: CartMutation): Promise<UserCartRe
       await requestHive(myCartRemove, { id: mutation.id }, config, context);
   const error = result.status === "success" ? undefined : cartErrorMessage(result.status === "failure" ? result.error.kind : "graphql");
   if (result.status !== "success") console.error("Cart mutation failed:", result.status === "failure" ? result.error.kind : "partial");
-  const fresh = await readUserCart(token);
+  const fresh = await readUserCart(token.accessToken, token.id);
   return error ? { ...fresh, error } : fresh;
 }

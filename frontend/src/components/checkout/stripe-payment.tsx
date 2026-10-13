@@ -4,14 +4,18 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@heroui/react";
 import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
-import { requestCustomer, requestGuest } from "@/lib/graphql/browser";
 import { customerPayment, guestPayment, type PaymentSession } from "@/lib/graphql/checkout-operations";
 import type { UUID } from "@/lib/graphql/scalars";
 import { confirmationHref } from "@/lib/checkout/model";
+import { requestCheckout, verifyCheckoutIdentity } from "@/lib/checkout/identity";
+import { useCheckoutIdentity } from "./identity-boundary";
 
 function HostedPayment({ requestId, mode, onUpdated }: { requestId: UUID; mode: "guest" | "user"; onUpdated(): void }) {
+  const owner = useCheckoutIdentity();
   const stripe = useStripe(), elements = useElements();
   const busy = useRef(false);
+  const active = useRef(true);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [complete, setComplete] = useState(false);
@@ -20,10 +24,15 @@ function HostedPayment({ requestId, mode, onUpdated }: { requestId: UUID; mode: 
     if (!stripe || !elements || busy.current) return;
     busy.current = true; setPending(true); setError("");
     try {
+      await verifyCheckoutIdentity(owner);
+      if (!active.current) return;
       const result = await stripe.confirmPayment({
         elements, confirmParams: { return_url: new URL(confirmationHref(requestId, mode), window.location.origin).href },
         redirect: "if_required",
       });
+      if (!active.current) return;
+      await verifyCheckoutIdentity(owner);
+      if (!active.current) return;
       if (result.error) setError(result.error.message ?? "Payment could not complete. Check your payment details or try another test card.");
       else onUpdated();
     } catch {
@@ -50,6 +59,7 @@ function HostedElements({ session, requestId, mode, onUpdated }: { session: Paym
 }
 
 export function StripePayment({ requestId, mode, onUpdated }: { requestId: UUID; mode: "guest" | "user"; onUpdated(): void }) {
+  const owner = useCheckoutIdentity();
   const [session, setSession] = useState<PaymentSession | null>(null);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
@@ -59,8 +69,8 @@ export function StripePayment({ requestId, mode, onUpdated }: { requestId: UUID;
     let reads = 0;
     async function read() {
       const options = { signal: controller.signal };
-      const result = mode === "guest" ? await requestGuest(guestPayment, { requestId }, options) :
-        await requestCustomer(customerPayment, { requestId }, options);
+      const result = mode === "guest" ? await requestCheckout(owner, guestPayment, { requestId }, options) :
+        await requestCheckout(owner, customerPayment, { requestId }, options);
       if (controller.signal.aborted) return;
       if (result.status !== "success") {
         setError("Payment is temporarily unavailable. Your order is retained; refresh to retry safely.");
@@ -72,7 +82,7 @@ export function StripePayment({ requestId, mode, onUpdated }: { requestId: UUID;
     }
     void read();
     return () => { controller.abort(); clearTimeout(timer); };
-  }, [requestId, mode, revision]);
+  }, [requestId, mode, revision, owner]);
   const refresh = () => setRevision((value) => value + 1);
   const failure = session?.failureCode === "insufficient_funds" ? "The test card has insufficient funds. Use another test payment method." :
     session?.failureCode ? "The payment was declined. Check your details or use another test payment method." : "";

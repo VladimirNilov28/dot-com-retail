@@ -15,22 +15,22 @@ export function requestPublic<Data, Variables>(
 export function requestGuest<Data, Variables>(
   operation: Operation<Data, Variables>,
   variables: Variables,
-  options: Pick<TransportOptions, "signal" | "timeoutMs"> = {},
+  options: Pick<TransportOptions, "signal" | "timeoutMs"> & { checkoutScope?: string } = {},
 ) {
   if (operation.access !== "guest") throw new TypeError("Guest transport requires a guest operation");
   return execute(operation, variables, {
     ...options, endpoint: "/graphql", credentials: "same-origin",
-    headers: { "X-Guest-Cart-Request": "1" },
+    headers: { "X-Guest-Cart-Request": "1", ...(options.checkoutScope ? { "X-Checkout-Scope": options.checkoutScope } : {}) },
   });
 }
 
 export function requestCustomer<Data, Variables>(
   operation: Operation<Data, Variables>, variables: Variables,
-  options: Pick<TransportOptions, "signal" | "timeoutMs"> = {},
+  options: Pick<TransportOptions, "signal" | "timeoutMs"> & { checkoutScope?: string } = {},
 ) {
   if (operation.access !== "authenticated") throw new TypeError("Customer transport requires an authenticated operation");
   return execute(operation, variables, {
     ...options, endpoint: "/graphql", credentials: "same-origin",
-    headers: { "X-Guest-Cart-Request": "1" },
+    headers: { "X-Guest-Cart-Request": "1", ...(options.checkoutScope ? { "X-Checkout-Scope": options.checkoutScope } : {}) },
   });
 }

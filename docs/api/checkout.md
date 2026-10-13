@@ -211,6 +211,33 @@ are retained in sessionStorage for lost-response recovery; payment credentials
 are not. The consumed cart's immutable selections remain available in the pending
 order, including after a failed payment.
 
+Recovery is scoped to a **verified checkout identity**, not just `user`/`guest`.
+The same-origin, no-store `POST /graphql/checkout-identity` verifies the current
+BFF customer and returns a non-secret customer namespace, or prepares the
+existing HttpOnly `/graphql` guest-order proof and returns only its SHA-256
+namespace. Preparing this proof before placement keeps guest lost-response
+retries bound to the same credential. `X-Checkout-Scope` binds registered checkout
+requests to that current identity; it is not an authorization credential and
+never replaces backend ownership checks.
+
+Session-storage placement records are partitioned by that namespace. Logout,
+account-change broadcasts and payment-time identity checks invalidate old
+in-memory forms, orders and Stripe components. Visibility/page restoration
+hides the UI until identity is reverified, preserving form/provider state only
+when the same owner is confirmed.
+Login/logout clear the guest-order proof, but **not** the guest-cart cookie used
+by the existing merge. Unresolved customer records remain in their owner's
+namespace across sign-out/sign-in and reload; another customer never adopts or
+replays them. Only an authoritative non-PENDING order clears the matching saved
+request, including directly after payment confirmation without a button click.
+Timeouts retain the original request UUID and exact accepted payload.
+
+Older unscoped records are adopted only after an authorized status read proves
+ownership. Foreign, malformed or unverified legacy records are retained in
+quarantine, not displayed as another customer's recovery and never automatically
+replayed or assigned a replacement UUID. An unscoped request with no persisted
+receipt cannot safely be attributed from contact email alone.
+
 Provider fields appear after PENDING placement. Browser validation, declines and
 additional authentication are handled by Stripe. Neither a successful SDK
 response nor visiting the return URL marks the order paid. Verified provider
@@ -262,6 +289,15 @@ safe prior evidence and never records passwords, guest cookies or provider
 client secrets. Use Stripe test methods only. Paid disposable orders/provider
 records are retained as evidence; retire the fixture variant after review
 rather than deleting referenced financial history.
+
+`CHECKOUT_SCENARIOS=account-switch,guest-recovery` selects the focused recovery
+regressions: native same-browser A payment/logout/B payment, an actual committed
+placement with its response deliberately dropped at the browser fetch boundary,
+original-owner
+reload/re-login replay, foreign status/payment/replay denial, stale payment-tab
+invalidation and preissued protected guest-proof recovery. Newly created unpaid
+recovery fixtures are cancelled through the normal authorized API; paid orders
+and existing history remain intact.
 
 ## Historical snapshots and migrations
 

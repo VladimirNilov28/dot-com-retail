@@ -6,7 +6,7 @@ import { join } from "node:path";
 import {
   GuestCartStartSource, GuestCartAddSource,
   GuestCheckoutPreviewSource, GuestCheckoutPlaceSource, GuestCheckoutConfirmationSource,
-  GuestPaymentSessionSource, CustomerCheckoutConfirmationSource, CustomerPaymentSessionSource,
+  GuestPaymentSessionSource, CustomerCheckoutConfirmationSource, CustomerPaymentSessionSource, CustomerCheckoutPlaceSource,
 } from "../src/lib/graphql/generated.ts";
 
 const base = process.env.STOREFRONT_BASE_URL ?? "http://127.0.0.1:3000";
@@ -20,13 +20,14 @@ assert.ok(process.env.PLAYWRIGHT_MODULE, "Provide the installed Playwright modul
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE);
 const browser = await chromium.launch({ headless: true });
 const selected = new Set((process.env.CHECKOUT_SCENARIOS ?? "guest,retry,sca,validation,customer,pending").split(","));
-for (const scenario of selected) assert.ok(["guest", "retry", "sca", "validation", "customer", "pending"].includes(scenario));
+for (const scenario of selected) assert.ok(["guest", "retry", "sca", "validation", "customer", "pending", "account-switch", "guest-recovery"].includes(scenario));
 let previous = {};
 try { previous = JSON.parse(await readFile(join(captures, "evidence.json"), "utf8")); }
 catch (error) { if (error.code !== "ENOENT") throw error; }
 const evidence = previous.scenarios ?? [];
 const unexpected = [];
 const contexts = [];
+const customerCredentials = new Map();
 let currentPage;
 let stage = "startup";
 
@@ -51,8 +52,11 @@ async function pageFor() {
 }
 async function op(page, source, name, variables = {}) {
   return page.evaluate(async ({ source, name, variables }) => {
+    const identity = await (await fetch("/graphql/checkout-identity", {
+      method: "POST", headers: { "X-Guest-Cart-Request": "1" },
+    })).json();
     const response = await fetch("/graphql", { method: "POST", credentials: "same-origin",
-      headers: { "Content-Type": "application/json", "X-Guest-Cart-Request": "1" },
+      headers: { "Content-Type": "application/json", "X-Guest-Cart-Request": "1", "X-Checkout-Scope": identity.scope },
       body: JSON.stringify({ query: source, operationName: name, variables }) });
     return { http: response.status, body: await response.json() };
   }, { source, name, variables });
@@ -98,10 +102,33 @@ async function place(page, customer = false, capture = false) {
   }
   await page.getByRole("button", { name: /^Place order ·/ }).click();
   await page.getByRole("heading", { name: "Complete your order", exact: true }).waitFor();
-  const attempt = await page.evaluate(() => JSON.parse(sessionStorage.getItem("bytecore.checkout.attempt")));
+  const attempt = await page.evaluate(async () => {
+    const identity = await (await fetch("/graphql/checkout-identity", {
+      method: "POST", headers: { "X-Guest-Cart-Request": "1" },
+    })).json();
+    return JSON.parse(sessionStorage.getItem(`bytecore.checkout.attempt:${identity.scope}`)).attempt;
+  });
   assert.equal(attempt.mode, customer ? "user" : "guest");
   assert.equal(attempt.input.checkout.paymentSelection, "STRIPE");
   return attempt;
+}
+async function losePlacementResponse(page, customer) {
+  await page.evaluate(({ operationName, field }) => {
+    const original = window.fetch.bind(window);
+    window.fetch = async (resource, options) => {
+      const response = await original(resource, options);
+      const input = typeof options?.body === "string" ? JSON.parse(options.body) : null;
+      if (input?.operationName === operationName) {
+        const result = await response.clone().json();
+        if (!result.data?.[field]) throw new Error("The real placement did not commit");
+        window.__lostPlacementInput = input.variables.input;
+        window.fetch = original;
+        throw new TypeError("Deliberately lost committed placement response");
+      }
+      return response;
+    };
+  }, { operationName: customer ? "CustomerCheckoutPlace" : "GuestCheckoutPlace",
+    field: customer ? "createOrder" : "createGuestOrder" });
 }
 async function hostedFrame(page) {
   for (let read = 0; read < 140; read++) {
@@ -177,6 +204,7 @@ async function disposableCustomer(page) {
   const suffix = randomBytes(6).toString("hex");
   const email = `sandbox-${suffix}@checkout.example.test`;
   const password = `Fixture!${randomBytes(24).toString("base64url")}9`;
+  customerCredentials.set(email, password);
   await page.goto(base + "/register?returnTo=%2Faccount");
   await page.getByRole("heading", { name: "Create your account", exact: true }).waitFor();
   await page.getByLabel("Email", { exact: true }).fill(email);
@@ -212,6 +240,160 @@ async function disposableCustomer(page) {
 }
 
 try {
+  if (selected.has("account-switch")) {
+    stage = "same-browser account-switch regression";
+    const page = await pageFor();
+    await seed(page);
+    const emailA = await disposableCustomer(page);
+    const idA = sql(`SELECT id FROM users WHERE email='${emailA}';`);
+    await checkoutForm(page, emailA, true);
+    const attemptA = await place(page, true);
+    await pay(page, "4242424242424242");
+    remember("account-A-paid-before-switch", attemptA, await paid(page, attemptA));
+    stage = "completed recovery cleanup and A lost response";
+    await page.goto(base + "/checkout");
+    await page.getByText("Your cart is empty.", { exact: false }).waitFor();
+    assert.equal(await page.getByText(attemptA.input.requestId, { exact: false }).count(), 0);
+    await page.goto(base + "/products/sandbox-checkout-25-74-75");
+    await page.getByRole("button", { name: "Add to cart", exact: true }).click();
+    await checkoutForm(page, emailA, true);
+    await losePlacementResponse(page, true);
+    await page.getByText("I accept this current item and shipping total.").click();
+    await page.getByRole("button", { name: /^Place order ·/ }).click();
+    await page.waitForFunction(() => window.__lostPlacementInput);
+    await page.getByRole("button", { name: "Retry saved placement", exact: true }).waitFor();
+    const uncertainA = await page.evaluate(() => window.__lostPlacementInput);
+    assert.ok(uncertainA);
+    await page.reload();
+    await page.getByRole("heading", { name: "Complete your order", exact: true }).waitFor();
+    const pendingA = { mode: "user", input: uncertainA };
+    assert.equal((await order(page, pendingA)).status, "PENDING");
+    await page.evaluate((legacy) => sessionStorage.setItem("bytecore.checkout.attempt", JSON.stringify(legacy)), attemptA);
+    stage = "stale A confirmation tab";
+    const staleTab = await page.context().newPage();
+    await staleTab.goto(base + `/order-confirmation/${pendingA.input.requestId}`);
+    await staleTab.getByRole("heading", { name: "Payment pending", exact: true }).waitFor();
+    await page.bringToFront();
+    stage = "A logout and B independent checkout";
+    await page.goto(base + "/account");
+    await page.getByRole("button", { name: "Sign out", exact: true }).click();
+    await page.waitForURL(base + "/");
+    const emailB = await disposableCustomer(page);
+    const idB = sql(`SELECT id FROM users WHERE email='${emailB}';`);
+    assert.notEqual(idA, idB);
+    await page.goto(base + "/products/sandbox-checkout-25-74-75");
+    await page.getByRole("button", { name: "Add to cart", exact: true }).click();
+    await page.goto(base + "/checkout");
+    await page.getByRole("heading", { name: "Checkout", exact: true }).waitFor();
+    await page.getByLabel("Email", { exact: true }).waitFor({ timeout: 15_000 });
+    assert.equal(await page.getByText(uncertainA.requestId, { exact: false }).count(), 0,
+      "B must never display A's request");
+    for (const [source, name, variables] of [
+      [CustomerCheckoutConfirmationSource, "CustomerCheckoutConfirmation", { requestId: uncertainA.requestId }],
+      [CustomerPaymentSessionSource, "CustomerPaymentSession", { requestId: uncertainA.requestId }],
+      [CustomerCheckoutPlaceSource, "CustomerCheckoutPlace", { input: uncertainA }],
+    ]) {
+      assert.ok((await op(page, source, name, variables)).body.errors?.length,
+        "B cannot manually read, replay or obtain payment for A's request");
+    }
+    await checkoutForm(page, emailB, true);
+    await staleTab.bringToFront();
+    await staleTab.locator(".checkout-page > section[role='alert']").waitFor();
+    assert.equal(await staleTab.getByRole("heading", { name: "Payment pending", exact: true }).count(), 0);
+    assert.equal(await staleTab.getByText(pendingA.input.requestId, { exact: false }).count(), 0);
+    for (const frame of staleTab.frames()) {
+      assert.equal(await frame.getByPlaceholder("1234 1234 1234 1234").count(), 0,
+        "A's hosted payment fields must be unmounted");
+    }
+    await staleTab.close();
+    await page.bringToFront();
+    await page.getByRole("heading", { name: "Checkout", exact: true }).waitFor();
+    await layout(page, "account-B-checkout-desktop");
+    await page.setViewportSize({ width: 390, height: 1000 });
+    await layout(page, "account-B-checkout-mobile");
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    const attemptB = await place(page, true);
+    assert.notEqual(attemptB.input.requestId, uncertainA.requestId);
+    await pay(page, "4242424242424242");
+    remember("account-B-independent-payment", attemptB, await paid(page, attemptB));
+    stage = "A resumes original unresolved placement after B payment";
+    await page.goto(base + "/account");
+    await page.getByRole("button", { name: "Sign out", exact: true }).click();
+    await page.waitForURL(base + "/");
+    await page.goto(base + "/login?returnTo=%2Faccount");
+    await page.getByLabel("Email", { exact: true }).fill(emailA);
+    await page.getByLabel("Password", { exact: true }).fill(customerCredentials.get(emailA));
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    await page.waitForURL(base + "/account");
+    await page.goto(base + "/checkout");
+    await page.getByRole("heading", { name: "Complete your order", exact: true }).waitFor();
+    assert.equal((await order(page, pendingA)).requestId, uncertainA.requestId);
+    assert.equal(sql(`SELECT count(*) FROM checkout_requests WHERE request_id='${uncertainA.requestId}';`), "1");
+    const recovered = await op(page, CustomerCheckoutPlaceSource, "CustomerCheckoutPlace", { input: uncertainA });
+    assert.equal(recovered.body.data.createOrder.checkout.requestId, uncertainA.requestId);
+    await page.goto(base + `/order-confirmation/${uncertainA.requestId}`);
+    page.once("dialog", (dialog) => void dialog.accept());
+    await page.getByRole("button", { name: "Cancel pending order", exact: true }).click();
+    await page.getByRole("heading", { name: "Order cancelled", exact: true }).waitFor();
+    await page.goto(base + "/checkout");
+    await page.getByText("Your cart is empty.", { exact: false }).waitFor();
+    assert.equal(await page.evaluate(() => sessionStorage.getItem("bytecore.checkout.attempt")), null,
+      "Only A can verify and retire its legacy completed request");
+    previous.accountSwitch = true;
+  }
+  if (selected.has("guest-recovery")) {
+    stage = "protected guest lost-response recovery";
+    const page = await pageFor();
+    await seed(page);
+    await page.context().clearCookies({ name: "retail_guest_orders" });
+    const email = `guest-recovery-${Date.now()}@example.test`;
+    await checkoutForm(page, email);
+    await page.evaluate(() => {
+      Object.defineProperty(document, "hidden", { value: true, configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await page.getByRole("heading", { name: "Checkout", exact: true }).waitFor({ state: "hidden" });
+    await page.evaluate(() => {
+      delete document.hidden;
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await page.getByRole("heading", { name: "Checkout", exact: true }).waitFor();
+    assert.equal(await page.getByLabel("Email", { exact: true }).inputValue(), email,
+      "Same-owner visibility revalidation must not discard safe form input");
+    const otherTab = await page.context().newPage();
+    await otherTab.goto(base + "/");
+    await page.bringToFront();
+    await page.getByRole("heading", { name: "Checkout", exact: true }).waitFor();
+    assert.equal(await page.getByLabel("Email", { exact: true }).inputValue(), email,
+      "Checking the same identity after a tab switch must preserve safe form input");
+    await otherTab.close();
+    const proofBefore = (await page.context().cookies(base + "/graphql")).find((cookie) => cookie.name === "retail_guest_orders");
+    assert.ok(proofBefore?.httpOnly, "The order proof must be prepared before placement");
+    const stock = Number(sql(`SELECT quantity FROM inventory WHERE product_variant_id=${variant};`));
+    await losePlacementResponse(page, false);
+    await page.getByText("I accept this current item and shipping total.").click();
+    await page.getByRole("button", { name: /^Place order ·/ }).click();
+    await page.waitForFunction(() => window.__lostPlacementInput);
+    await page.getByRole("button", { name: "Retry saved placement" }).waitFor();
+    const lost = await page.evaluate(() => window.__lostPlacementInput);
+    assert.ok(lost?.requestId);
+    const attempt = { mode: "guest", input: lost };
+    await page.reload();
+    await page.getByRole("heading", { name: "Complete your order", exact: true }).waitFor();
+    const proofAfter = (await page.context().cookies(base + "/graphql")).find((cookie) => cookie.name === "retail_guest_orders");
+    assert.equal(proofAfter?.value, proofBefore.value);
+    const replay = await op(page, GuestCheckoutPlaceSource, "GuestCheckoutPlace", { input: lost });
+    assert.equal(replay.body.data.createGuestOrder.requestId, lost.requestId);
+    assert.equal((await order(page, attempt)).requestId, lost.requestId);
+    assert.equal(Number(sql(`SELECT count(*) FROM checkout_requests WHERE request_id='${lost.requestId}';`)), 1);
+    assert.equal(Number(sql(`SELECT quantity FROM inventory WHERE product_variant_id=${variant};`)), stock - 1);
+    await page.goto(base + `/order-confirmation/${lost.requestId}?guest=1`);
+    page.once("dialog", (dialog) => void dialog.accept());
+    await page.getByRole("button", { name: "Cancel pending order", exact: true }).click();
+    await page.getByRole("heading", { name: "Order cancelled", exact: true }).waitFor();
+    assert.equal(Number(sql(`SELECT quantity FROM inventory WHERE product_variant_id=${variant};`)), stock);
+    previous.guestRecovery = true;
+  }
   if (selected.has("guest")) {
   stage = "guest success / replay / pending";
   const page = await pageFor();
@@ -388,14 +570,16 @@ try {
   assert.deepEqual(unexpected, []);
   await writeFile(join(captures, "evidence.json"), JSON.stringify({ scenarios: evidence,
     cartAndValidation: previous.cartAndValidation, boundedPendingReads: previous.boundedPendingReads,
-    pendingCancellation: previous.pendingCancellation, unexpected }, null, 2));
+    pendingCancellation: previous.pendingCancellation, accountSwitch: previous.accountSwitch,
+    guestRecovery: previous.guestRecovery, unexpected }, null, 2));
   console.log(`PASS normal-stack checkout checks: ${[...selected].join(", ")}. Safe evidence saved; no provider secrets recorded.`);
 } catch (error) {
   if (currentPage) await currentPage.screenshot({ path: join(captures, "failure.png"), fullPage: true });
   console.error(`Checkout check failed at ${stage}: ${error.message.split("\n")[0].replace(/pi_\w+_secret_\w+/g, "[suppressed]")}`);
   await writeFile(join(captures, "evidence.json"), JSON.stringify({ scenarios: evidence, stage, incomplete: true,
     cartAndValidation: previous.cartAndValidation, boundedPendingReads: previous.boundedPendingReads,
-    pendingCancellation: previous.pendingCancellation }, null, 2));
+    pendingCancellation: previous.pendingCancellation, accountSwitch: previous.accountSwitch,
+    guestRecovery: previous.guestRecovery }, null, 2));
   process.exitCode = 1;
 } finally {
   for (const context of contexts) await context.close();

@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@heroui/react";
-import { requestCustomer, requestGuest } from "@/lib/graphql/browser";
 import { customerConfirmation, guestConfirmation, customerCancel, guestCancel, type CheckoutOrder } from "@/lib/graphql/checkout-operations";
 import { uuid, type UUID } from "@/lib/graphql/scalars";
 import { checkoutError, clearAttempt } from "@/lib/checkout/model";
 import { OrderSummary } from "./order-summary";
 import { StripePayment } from "./stripe-payment";
+import { useCheckoutIdentity } from "./identity-boundary";
+import { requestCheckout } from "@/lib/checkout/identity";
 
 function Address({ title, address }: { title: string; address: CheckoutOrder["details"]["shippingAddress"] }) {
   if (!address) return null;
@@ -20,6 +21,7 @@ function Address({ title, address }: { title: string; address: CheckoutOrder["de
 }
 
 export function ConfirmationPageView({ reference, guest }: { reference: string; guest: boolean }) {
+  const owner = useCheckoutIdentity();
   const [order, setOrder] = useState<CheckoutOrder | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -31,11 +33,6 @@ export function ConfirmationPageView({ reference, guest }: { reference: string; 
   const mode = guest ? "guest" : "user";
   const refresh = useCallback(() => setRevision((value) => value + 1), []);
   useEffect(() => {
-    // Stripe may add a transient payment capability to its return URL.
-    // Never use that parameter as order proof; remove it before rendering.
-    const url = new URL(window.location.href);
-    for (const name of ["payment_intent_client_secret", "payment_intent", "redirect_status"]) url.searchParams.delete(name);
-    window.history.replaceState(null, "", url.pathname + url.search);
     const controller = new AbortController();
     const started = Date.now();
     let reads = 0;
@@ -48,21 +45,26 @@ export function ConfirmationPageView({ reference, guest }: { reference: string; 
       if (Date.now() - started > 120_000 || reads >= 24) { setStopped(true); return; }
       if (document.visibilityState === "hidden") { timer = setTimeout(() => void read(), 2500); return; }
       ++reads;
-      const result = guest ? await requestGuest(guestConfirmation, { requestId }, { signal: controller.signal }) :
-        await requestCustomer(customerConfirmation, { requestId }, { signal: controller.signal });
+      if (guest !== (owner.mode === "guest")) { setError("This order belongs to a different checkout identity."); setLoading(false); return; }
+      const result = guest ? await requestCheckout(owner, guestConfirmation, { requestId }, { signal: controller.signal }) :
+        await requestCheckout(owner, customerConfirmation, { requestId }, { signal: controller.signal });
       if (controller.signal.aborted) return;
       setLoading(false);
       if (result.status !== "success") { setError(checkoutError(result.error)); setStopped(true); return; }
       const value = "guestOrder" in result.data ? result.data.guestOrder : result.data.checkoutOrder;
       if (!value) { setError("No order was found for this authorized checkout request. If placement was uncertain, return to checkout and retry its saved request."); setStopped(true); return; }
       setOrder(value); setError("");
+      if (value.status !== "PENDING") {
+        try { clearAttempt(owner, value.requestId); }
+        catch { setError("Order state is confirmed, but saved recovery cleanup failed. Revisit checkout before starting another purchase."); }
+      }
       if (value.status === "PENDING" || (value.status === "CANCELLED" && !["NONE", "SUCCEEDED", "FAILED"].includes(value.refund.status))) {
         timer = setTimeout(() => void read(), 2500);
       }
     }
     void read();
     return () => { controller.abort(); clearTimeout(timer); };
-  }, [reference, guest, revision]);
+  }, [reference, guest, revision, owner]);
 
   const paid = order?.payment.status === "SUCCEEDED";
   const failed = order?.payment.status === "FAILED";
@@ -91,7 +93,7 @@ export function ConfirmationPageView({ reference, guest }: { reference: string; 
             cancelRequest.current ??= uuid(crypto.randomUUID());
             try {
               const input = { requestId: cancelRequest.current, publicId: order.publicId };
-              const result = guest ? await requestGuest(guestCancel, { input }) : await requestCustomer(customerCancel, { input });
+              const result = guest ? await requestCheckout(owner, guestCancel, { input }) : await requestCheckout(owner, customerCancel, { input });
               if (result.status !== "success") setError("Cancellation is not confirmed. Refresh this order or retry the same cancellation.");
               refresh();
             } finally { cancelBusy.current = false; setCancelling(false); }
@@ -115,7 +117,7 @@ export function ConfirmationPageView({ reference, guest }: { reference: string; 
         </div>
         <OrderSummary order={order} />
       </div>
-      {order.status !== "PENDING" ? <Link href="/catalog/all-products" className="store-cta" onClick={() => clearAttempt()}>Continue shopping</Link> : null}
+      {order.status !== "PENDING" ? <Link href="/catalog/all-products" className="store-cta">Continue shopping</Link> : null}
     </> : null}
   </div>;
 }

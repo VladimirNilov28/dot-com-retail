@@ -5,6 +5,7 @@ import { failure } from "@/lib/graphql/errors";
 import { authConfig } from "@/lib/auth/config";
 import { authCookie } from "@/lib/auth/model";
 import { authenticatedState } from "@/lib/auth/session";
+import { checkoutSession } from "@/lib/checkout/server-identity";
 
 export async function POST(request: Request) {
   let config;
@@ -23,6 +24,14 @@ export async function POST(request: Request) {
       return user.role === "USER" ? state.tokens?.accessToken : undefined;
     } catch {
       return undefined;
+    }
+  }, async (scope, guest) => {
+    try {
+      const session = await checkoutSession(request);
+      return session.owner.scope === scope && (guest ? session.owner.mode === "guest" : session.owner.mode === "user");
+    } catch {
+      console.error("Checkout request identity could not be verified");
+      return false;
     }
   });
 }

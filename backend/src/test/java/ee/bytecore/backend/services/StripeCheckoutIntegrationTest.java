@@ -183,6 +183,29 @@ class StripeCheckoutIntegrationTest {
     }
 
     @Test
+    void foreignCustomerCannotReadReplayOrPayAnUncertainPlacement() {
+        var owner = fixture();
+        var foreign = fixture();
+        var input = placement(owner);
+        var pending = orders.placeCheckout(owner.user().getId(), null, null, input);
+        assertThatThrownBy(() ->
+                        orders.checkoutOrder(input.requestId(), foreign.user().getId()))
+                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+        assertThatThrownBy(() -> orders.placeCheckout(foreign.user().getId(), null, null, input))
+                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+        assertThatThrownBy(() ->
+                        orders.paymentSession(input.requestId(), foreign.user().getId(), null))
+                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+        verify(stripe, never()).session(any());
+        assertThat(orders.placeCheckout(owner.user().getId(), null, null, input).getId())
+                .isEqualTo(pending.getId());
+        assertThat(orders.checkoutOrder(input.requestId(), owner.user().getId()).status())
+                .isEqualTo("PENDING");
+        assertThat(inventory.sellableQuantity(owner.variant().getId())).isEqualTo(5);
+        assertThat(inventory.sellableQuantity(foreign.variant().getId())).isEqualTo(6);
+    }
+
+    @Test
     void paymentSessionRequiresCustomerOwnershipAndIndependentGuestProof() throws Exception {
         var owner = fixture();
         var foreign = fixture();

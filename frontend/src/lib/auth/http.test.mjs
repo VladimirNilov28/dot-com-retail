@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { assertBrowserNavigation, authBoundary, boundedForm } from "./http";
+import { assertBrowserNavigation, authBoundary, boundedForm, clearBrowserCookies } from "./http";
+import { NextResponse } from "next/server";
 import { AuthError } from "./model";
 
 const request = (body, headers = {}) => new Request("http://127.0.0.1/auth/submit", {
@@ -44,6 +45,13 @@ test("expired session polling clears only the stale authenticated cookie, preser
     AUTH_SEAL_KEYS: JSON.stringify({ active: "fixture", keys: { fixture: Buffer.alloc(32, 1).toString("base64url") } }),
   });
   try {
+    for (const logout of [true, false]) {
+      const cleared = new NextResponse();
+      clearBrowserCookies(cleared, logout);
+      expect(cleared.cookies.get("retail_guest_orders")).toMatchObject({ value: "", path: "/graphql", httpOnly: true, maxAge: 0 });
+      expect(cleared.cookies.get("retail_guest_cart")).toBeUndefined();
+      if (!logout) expect(cleared.cookies.get("bc_session")).toBeUndefined();
+    }
     for (const code of ["expired", "reauthentication_required"]) {
       const response = await authBoundary(async () => { throw new AuthError(code, 401); }, "session",
         new Request("http://127.0.0.1:3300/auth/session", { headers: { Accept: "application/json" } }));

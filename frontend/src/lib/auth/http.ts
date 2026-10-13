@@ -36,6 +36,7 @@ export function clearBrowserCookies(response: NextResponse, authenticated = true
   for (const name of authenticated ? [config.sessionCookie, config.flowCookie] : [config.flowCookie]) {
     response.cookies.set(name, "", { httpOnly: true, secure: config.secure, sameSite: "lax", path: "/", maxAge: 0 });
   }
+  response.cookies.set("retail_guest_orders", "", { httpOnly: true, secure: config.secure, sameSite: "lax", path: "/graphql", maxAge: 0 });
 }
 
 export function assertBrowserNavigation(request: Request): void {

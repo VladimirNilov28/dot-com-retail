@@ -31,8 +31,9 @@ export function proxyFailure(error: SafeFailure, status: number) {
 
 export async function handleGuestRequest(
   request: Request, config: HiveConfig, fetcher: typeof fetch = fetch,
-  // Resolves the signed-in user's access token server-side; only the merge operation ever uses it.
+  // Browser-supplied bearer tokens are never accepted.
   resolveToken: () => Promise<string | undefined> = async () => undefined,
+  validateCheckout: (scope: string | null, guest: boolean) => Promise<boolean> = async () => true,
 ) {
   if (request.method !== "POST") return proxyFailure(failure("validation", false), 405);
   if ((request.headers.has("Origin") && request.headers.get("Origin") !== config.origin) ||
@@ -62,6 +63,11 @@ export async function handleGuestRequest(
       return proxyFailure(failure("forbidden", false), 403);
     }
     if (envelope.query !== operation.source) return proxyFailure(failure("validation", false), 400);
+    if ((checkoutOperations.some((candidate) => candidate.name === operation.name) && operation.name !== "CheckoutConfiguration") ||
+        operation === (guestOperations[2] as Operation<unknown, unknown>)) {
+      if (!await validateCheckout(request.headers.get("X-Checkout-Scope"), operation.access === "guest"))
+        return proxyFailure(failure("unauthenticated", false), 401);
+    }
     let variables: Variables;
     try {
       variables = operation.variables(envelope.variables ?? {});

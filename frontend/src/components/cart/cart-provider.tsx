@@ -12,6 +12,7 @@ type Outcome = { ok: boolean; message: CartMessage };
 type CartContextValue = {
   loading: boolean;
   mode: Mode;
+  customerId: string | null;
   snapshot: CartSnapshot;
   pending: boolean;
   notice: CartMessage | null;
@@ -47,14 +48,23 @@ const clearMergeRequest = () => { try { sessionStorage.removeItem(MERGE_KEY); } 
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [mode, setMode] = useState<Mode>("unknown");
+  const [customerId, setCustomerId] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<CartSnapshot>({ status: "ok", cart: null });
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState<CartMessage | null>(null);
   const busy = useRef(false);
+  const activeCustomer = useRef<string | null>(null);
 
   const applyUser = useCallback((result: Extract<UserCartResult, { mode: "user" }>) => {
+    if (activeCustomer.current !== result.customerId) {
+      activeCustomer.current = result.customerId;
+      const channel = new BroadcastChannel("bytecore.checkout.identity-changed");
+      channel.postMessage({ scope: `user:${result.customerId}` });
+      channel.close();
+    }
     setMode("user");
+    setCustomerId(result.customerId);
     setSnapshot(result.snapshot);
     return result.snapshot;
   }, []);
@@ -94,6 +104,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       }
     } else {
       setMode("guest");
+      activeCustomer.current = null;
+      setCustomerId(null);
       setSnapshot(await readGuest());
     }
     setLoading(false);
@@ -152,12 +164,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }, [applyUser, mode, readGuest]);
 
   const value = useMemo<CartContextValue>(() => ({
-    loading, mode, snapshot, pending, notice, reload,
+    loading, mode, customerId, snapshot, pending, notice, reload,
     add: (variantId, quantity, label) => run({ kind: "add", variantId, quantity }, `${label} added to your cart.`),
     update: (id, quantity) => run({ kind: "update", id, quantity }, "Cart updated."),
     remove: (id) => run({ kind: "remove", id }, "Item removed."),
     dismiss: () => setNotice(null),
-  }), [loading, mode, snapshot, pending, notice, reload, run]);
+  }), [loading, mode, customerId, snapshot, pending, notice, reload, run]);
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }
