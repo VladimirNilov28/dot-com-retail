@@ -174,7 +174,8 @@ func (c *RequestConsumer) handle(ctx context.Context, msg kafkago.Message) outco
 			"error", err, "offset", msg.Offset, "partition", msg.Partition)
 		return c.sendToDLQ(ctx, msg, "malformed_json: "+err.Error())
 	}
-	if req.EventID == uuid.Nil || req.OrderID <= 0 || !validCurrency(req.Currency) {
+	if req.EventID == uuid.Nil || req.OrderID <= 0 || !validCurrency(req.Currency) ||
+		(req.Provider != "" && req.Provider != "simulated" && req.Provider != "stripe") {
 		c.logger.Warn("invalid payment.requested message (missing eventId/orderId), routing to DLQ",
 			"offset", msg.Offset, "partition", msg.Partition)
 		return c.sendToDLQ(ctx, msg, "missing_required_fields")
@@ -191,6 +192,7 @@ func (c *RequestConsumer) handle(ctx context.Context, msg kafkago.Message) outco
 		"topic", msg.Topic, "partition", msg.Partition, "offset", msg.Offset)
 
 	saveResult, err := c.store.SaveRequested(ctx, domain.Payment{
+		Provider:       req.Provider,
 		ID:             uuid.New(),
 		RequestEventID: req.EventID,
 		OrderID:        req.OrderID,
@@ -249,6 +251,9 @@ func (c *RequestConsumer) handle(ctx context.Context, msg kafkago.Message) outco
 		return outcomeRetry
 	}
 
+	if result.Pending {
+		return outcomeCommit
+	}
 	if err := c.recordResult(ctx, payment, req.EventID, result); err != nil {
 		logger.Error("failed to record payment result, will retry", "error", err, "paymentId", payment.ID)
 		return outcomeRetry

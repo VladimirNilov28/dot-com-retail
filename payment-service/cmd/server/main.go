@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -18,6 +19,7 @@ import (
 	paymentkafka "github.com/VladimirNilov28/dot-com-retail/payment-service/internal/kafka"
 	"github.com/VladimirNilov28/dot-com-retail/payment-service/internal/provider"
 	"github.com/VladimirNilov28/dot-com-retail/payment-service/internal/store"
+	"github.com/VladimirNilov28/dot-com-retail/payment-service/internal/stripehttp"
 )
 
 func main() {
@@ -59,7 +61,18 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 
-	fakeProvider := provider.NewDurableProvider(db)
+	stripe, err := provider.NewStripe(db, os.Getenv("STRIPE_SECRET_KEY"))
+	if err != nil {
+		return err
+	}
+	fakeProvider := &provider.Routing{Store: db, Simulated: provider.NewDurableProvider(db), Stripe: stripe}
+	stripeHandler := &stripehttp.Handler{
+		Store: db, Stripe: stripe, InternalToken: os.Getenv("PAYMENT_INTERNAL_TOKEN"),
+		SigningSecret: os.Getenv("STRIPE_WEBHOOK_SECRET"), PublishableKey: os.Getenv("STRIPE_PUBLISHABLE_KEY"),
+		Configured: os.Getenv("STRIPE_SECRET_KEY") != "" && os.Getenv("STRIPE_WEBHOOK_SECRET") != "" &&
+			strings.HasPrefix(os.Getenv("STRIPE_PUBLISHABLE_KEY"), "pk_test_"),
+		Logger: logger,
+	}
 
 	consumer := paymentkafka.NewRequestConsumer(cfg.KafkaBrokers, cfg.ConsumerGroupID, db, fakeProvider, logger)
 	defer func() { _ = consumer.Close() }()
@@ -73,7 +86,8 @@ func run(logger *slog.Logger) error {
 	defer func() { _ = publisher.Close() }()
 
 	var workers sync.WaitGroup
-	workers.Add(3)
+	workers.Add(4)
+	go func() { defer workers.Done(); stripeHandler.RunReconciliation(ctx) }()
 	go func() {
 		defer workers.Done()
 		publisher.Run(ctx)
@@ -94,7 +108,8 @@ func run(logger *slog.Logger) error {
 	}()
 
 	mux := health.NewMux(db)
-	httpServer := &http.Server{Addr: ":" + cfg.HTTPPort, Handler: mux}
+	stripeHandler.Register(mux)
+	httpServer := &http.Server{Addr: ":" + cfg.HTTPPort, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	go func() {
 		logger.Info("health server listening", "port", cfg.HTTPPort)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {

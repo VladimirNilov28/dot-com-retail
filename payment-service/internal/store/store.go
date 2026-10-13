@@ -84,12 +84,15 @@ type SaveRequestedResult struct {
 // call; unresolved payments resume with the existing ID and immutable fields.
 // Preventing a second external charge requires provider-side idempotency.
 func (s *Store) SaveRequested(ctx context.Context, p domain.Payment) (SaveRequestedResult, error) {
+	if p.Provider == "" {
+		p.Provider = "simulated"
+	}
 	row := s.pool.QueryRow(ctx, `
-		INSERT INTO payments (id, request_event_id, order_id, user_id, amount_cents, currency, status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO payments (id, request_event_id, order_id, user_id, amount_cents, currency, status, provider)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		ON CONFLICT (request_event_id) DO NOTHING
 		RETURNING id, created_at, updated_at
-	`, p.ID, p.RequestEventID, p.OrderID, p.UserID, p.AmountCents, p.Currency, p.Status)
+	`, p.ID, p.RequestEventID, p.OrderID, p.UserID, p.AmountCents, p.Currency, p.Status, p.Provider)
 
 	var id uuid.UUID
 	var createdAt, updatedAt time.Time
@@ -108,7 +111,7 @@ func (s *Store) SaveRequested(ctx context.Context, p domain.Payment) (SaveReques
 	if err != nil {
 		return SaveRequestedResult{}, fmt.Errorf("store: load existing payment after conflict: %w", err)
 	}
-	if existing.OrderID != p.OrderID || !reflect.DeepEqual(existing.UserID, p.UserID) ||
+	if existing.Provider != p.Provider || existing.OrderID != p.OrderID || !reflect.DeepEqual(existing.UserID, p.UserID) ||
 		existing.AmountCents != p.AmountCents || existing.Currency != p.Currency {
 		return SaveRequestedResult{}, ErrConflict
 	}
@@ -119,7 +122,7 @@ func (s *Store) SaveRequested(ctx context.Context, p domain.Payment) (SaveReques
 func (s *Store) GetByRequestEventID(ctx context.Context, requestEventID uuid.UUID) (domain.Payment, error) {
 	return s.scanOne(ctx, `
 		SELECT id, request_event_id, order_id, user_id, amount_cents, currency, status,
-		       coalesce(failure_reason, ''), coalesce(provider_transaction_id, ''), created_at, updated_at
+		       coalesce(failure_reason, ''), coalesce(provider_transaction_id, ''), created_at, updated_at, provider
 		FROM payments WHERE request_event_id = $1
 	`, requestEventID)
 }
@@ -128,7 +131,7 @@ func (s *Store) GetByRequestEventID(ctx context.Context, requestEventID uuid.UUI
 func (s *Store) GetByID(ctx context.Context, id uuid.UUID) (domain.Payment, error) {
 	return s.scanOne(ctx, `
 		SELECT id, request_event_id, order_id, user_id, amount_cents, currency, status,
-		       coalesce(failure_reason, ''), coalesce(provider_transaction_id, ''), created_at, updated_at
+		       coalesce(failure_reason, ''), coalesce(provider_transaction_id, ''), created_at, updated_at, provider
 		FROM payments WHERE id = $1
 	`, id)
 }
@@ -137,7 +140,7 @@ func (s *Store) scanOne(ctx context.Context, query string, arg any) (domain.Paym
 	var p domain.Payment
 	err := s.pool.QueryRow(ctx, query, arg).Scan(
 		&p.ID, &p.RequestEventID, &p.OrderID, &p.UserID, &p.AmountCents, &p.Currency, &p.Status,
-		&p.FailureReason, &p.ProviderTransactionID, &p.CreatedAt, &p.UpdatedAt,
+		&p.FailureReason, &p.ProviderTransactionID, &p.CreatedAt, &p.UpdatedAt, &p.Provider,
 	)
 	if err != nil {
 		return domain.Payment{}, err

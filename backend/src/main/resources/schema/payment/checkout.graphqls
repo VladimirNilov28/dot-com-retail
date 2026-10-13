@@ -6,6 +6,7 @@ enum CheckoutShippingMethod {
 
 enum CheckoutPaymentSelection {
   SIMULATED
+  STRIPE
 }
 
 input CheckoutAddressInput {
@@ -124,7 +125,24 @@ type CheckoutOrder {
   paymentInteraction: String!
 }
 
+type CheckoutPaymentConfiguration {
+  available: Boolean!
+  publishableKey: String!
+}
+
+# Authorized provider projection. Client secrets are short-lived browser
+# payment capabilities, never order-access credentials or raw card data.
+type CheckoutPaymentSession {
+  status: String!
+  publishableKey: String!
+  clientSecret: String
+  failureCode: String
+}
+
 extend type Query {
+  checkoutPaymentConfiguration: CheckoutPaymentConfiguration!
+  checkoutPaymentSession(requestId: UUID!): CheckoutPaymentSession!
+  guestPaymentSession(requestId: UUID!): CheckoutPaymentSession!
   checkoutShippingOptions(countryCode: String): [CheckoutShippingOption!]!
   checkoutPreview(input: CheckoutInput!): CheckoutPreview!
   guestCheckoutPreview(input: CheckoutInput!): CheckoutPreview!

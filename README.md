@@ -33,10 +33,11 @@ no backend services. Full-stack Docker reviewer setup remains separate work.
   The Compose network remains pinned to
   `172.28.88.0/24` (see `infrastructure/compose.yml`'s `networks.default.ipam`
   block). No Docker-to-host Spring connection or firewall exception is needed.
-- The future Payment Service is **not** a Hive subgraph and Hive Router is
-  not involved in reaching it. It integrates asynchronously via Kafka
-  (`PaymentEventPublisher` seam, not yet wired) — Hive Router is
-  client-facing GraphQL infrastructure only.
+- The Go Payment Service is **not** a Hive subgraph. Financial requests/results
+  use Kafka and transactional outboxes. Stripe sandbox hosted-payment sessions
+  are retrieved by Spring over a protected internal HTTP seam after order
+  ownership validation; browser success never settles an order. See
+  [Stripe setup and webhook forwarding](payment-service/README.md#stripe-sandbox-setup).
 
 ### Initial setup
 
@@ -144,7 +145,12 @@ placement, development shipping and immutable confirmations. Public
 `createOrder` now requires accepted checkout input and a stable request UUID.
 Guest confirmation uses a separate HttpOnly cookie established before placement
 to support lost-response recovery. Deploy nullable guest ownership in the Go
-Payment Service before enabling guest checkout; no real gateway is integrated.
+Payment Service before enabling guest checkout. The compact `/checkout` and
+protected `/order-confirmation/<requestId>` routes support genuine Stripe test
+payments, same-order retry and bounded authoritative status refresh. Order
+notifications use the configured SMTP/Mailpit outbox; local Mailpit evidence is
+not a claim of external inbox delivery. Shipping remains configured development
+data, not a live carrier or delivery promise.
 
 [Guest Cart API and security guide](docs/api/guest-cart.md) documents anonymous
 server-persisted carts, cookie transport, origin/preflight requirements, live

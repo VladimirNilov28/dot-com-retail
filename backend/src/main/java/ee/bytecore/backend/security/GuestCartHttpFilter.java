@@ -40,6 +40,8 @@ public class GuestCartHttpFilter extends OncePerRequestFilter {
             "updateGuestCartItem",
             "removeGuestCartItem",
             "checkoutShippingOptions",
+            "checkoutPaymentConfiguration",
+            "guestPaymentSession",
             "guestCheckoutPreview",
             "createGuestOrder",
             "guestOrder",
@@ -150,7 +152,13 @@ public class GuestCartHttpFilter extends OncePerRequestFilter {
             response.setHeader("Cache-Control", "private, no-store");
         }
         if (roots.stream()
-                .anyMatch(field -> Set.of("checkoutPreview", "createOrder", "checkoutOrder", "order", "myOrders")
+                .anyMatch(field -> Set.of(
+                                        "checkoutPreview",
+                                        "createOrder",
+                                        "checkoutOrder",
+                                        "checkoutPaymentSession",
+                                        "order",
+                                        "myOrders")
                                 .contains(field)
                         || Set.of("cancelOrder", "cancelOrderAsStaff", "updateOrderStatus")
                                 .contains(field))) response.setHeader("Cache-Control", "private, no-store");

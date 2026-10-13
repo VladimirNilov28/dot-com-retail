@@ -37,7 +37,7 @@ class CheckoutHiveTransportTest extends CheckoutGraphQlIntegrationTest {
         Testcontainers.exposeHostPorts(port);
         String graph = Files.readString(Path.of("../infrastructure/hive/supergraph.graphql"));
         String routed = graph.replace(
-                "http://host.docker.internal:8080/graphql", "http://host.testcontainers.internal:" + port + "/graphql");
+                "http://backend:8080/graphql", "http://host.testcontainers.internal:" + port + "/graphql");
         assertThat(routed).isNotEqualTo(graph);
         router = new GenericContainer<>("ghcr.io/graphql-hive/router:0.2.19")
                 .withExposedPorts(4000)

@@ -92,6 +92,17 @@ public class OrderService {
     @Autowired
     private ObjectProvider<PaymentOutboxEventRepository> financialRequests;
 
+    @Autowired
+    private ObjectProvider<ee.bytecore.backend.integration.payment.StripePaymentClient> stripePayments;
+
+    @Autowired
+    private ObjectProvider<ee.bytecore.backend.integration.payment.OrderNotifications> notifications;
+
+    private void notifyOrder(Order order, String kind) {
+        var sender = notifications == null ? null : notifications.getIfAvailable();
+        if (sender != null) sender.enqueue(order, kind);
+    }
+
     public OrderService(
             OrderRepository orderRepository,
             OrderItemRepository orderItemRepository,
@@ -199,7 +210,14 @@ public class OrderService {
         // KafkaPaymentEventPublisher: this only writes an outbox row here,
         // the actual Kafka send happens later, outside this transaction.
         paymentEventPublisher.publishPaymentRequested(new PaymentRequestedEvent(
-                UUID.randomUUID(), saved.getId(), userId, totalAmount, DEFAULT_CURRENCY, Instant.now()));
+                UUID.randomUUID(),
+                saved.getId(),
+                userId,
+                totalAmount,
+                DEFAULT_CURRENCY,
+                Instant.now(),
+                snapshot != null && "STRIPE".equals(snapshot.details().paymentSelection()) ? "stripe" : "simulated"));
+        notifyOrder(saved, "PLACED");
 
         return saved;
     }
@@ -268,6 +286,10 @@ public class OrderService {
             throw new CheckoutException(
                     "CHECKOUT_QUOTE_CHANGED",
                     "Checkout quote changed; preview again and explicitly accept the new quote");
+        if ("STRIPE".equals(canonical.checkout().paymentSelection())
+                && !stripePayments.getObject().configuration().available())
+            throw new CheckoutException(
+                    "PAYMENT_NOT_CONFIGURED", "Stripe sandbox is not configured; no order was placed");
         Snapshot snapshot = new Snapshot(1, input.requestId(), preview.lines(), preview.details(), preview.totals());
         Order order = persistOrder(cart, userId, snapshot);
         checkoutRequests
@@ -322,8 +344,33 @@ public class OrderService {
                 snapshot.details(),
                 snapshot.totals(),
                 order.getCreatedAt(),
-                "NONE",
+                "STRIPE".equals(snapshot.details().paymentSelection()) ? "STRIPE_ELEMENTS" : "NONE",
                 recovery(order));
+    }
+
+    @Transactional(readOnly = true)
+    public ee.bytecore.backend.integration.payment.StripePaymentClient.Session paymentSession(
+            UUID requestId, Long userId, String guestCredential) {
+        Confirmation confirmation =
+                userId == null ? guestOrder(null, requestId, guestCredential) : checkoutOrder(requestId, userId);
+        if (confirmation == null || !"STRIPE".equals(confirmation.details().paymentSelection()))
+            throw new CheckoutException("PAYMENT_UNAVAILABLE", "Stripe payment is unavailable");
+        if (!"PENDING".equals(confirmation.status()))
+            return new ee.bytecore.backend.integration.payment.StripePaymentClient.Session(
+                    confirmation.recovery().payment().status(), "", null, null);
+        var receipt = checkoutRequests.getObject().findById(requestId).orElseThrow();
+        var requests = financialRequests
+                .getObject()
+                .findAllByOrderIdAndEventType(receipt.getOrder().getId(), "payment.requested");
+        if (requests.size() != 1) throw new IllegalStateException("Original payment request requires reconciliation");
+        try {
+            var event = new com.fasterxml.jackson.databind.ObjectMapper()
+                    .findAndRegisterModules()
+                    .readValue(requests.getFirst().getPayload(), PaymentRequestedEvent.class);
+            return stripePayments.getObject().session(event.eventId());
+        } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
+            throw new IllegalStateException("Persisted payment request is malformed", exception);
+        }
     }
 
     private OrderRecoveryValues.Summary recovery(Order order) {
@@ -459,6 +506,7 @@ public class OrderService {
         order.setPaymentStatus(status);
         if ("UNRESOLVED".equals(status)) {
             orderRepository.save(order);
+            if ("payment_retry_required".equals(reason)) notifyOrder(order, "PAYMENT_RETRY_REQUIRED");
             return;
         }
         order.setProviderTransactionId(providerTransactionId);
@@ -568,8 +616,10 @@ public class OrderService {
         String email = selection.contactEmail();
         if (email == null && userId != null) email = cart.getUser().getEmail();
         email = CheckoutSupport.email(email);
-        if (!"SIMULATED".equals(selection.paymentSelection()))
-            throw new IllegalArgumentException("Only SIMULATED payment is supported");
+        if (!java.util.Set.of("SIMULATED", "STRIPE").contains(selection.paymentSelection()))
+            throw new IllegalArgumentException("Unsupported payment selection");
+        if ("STRIPE".equals(selection.paymentSelection()) && selection.paymentMethodId() != null)
+            throw new IllegalArgumentException("Stripe payment details must be collected through hosted fields");
         Address shipping = resolveAddress(userId, selection.shippingAddressId(), selection.shippingAddress());
         Address billing = resolveAddress(userId, selection.billingAddressId(), selection.billingAddress());
         boolean pickup = "PICKUP".equals(selection.shippingMethod());
@@ -607,8 +657,8 @@ public class OrderService {
                 .filter(value -> value.method().equals(selection.shippingMethod()))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Shipping method is unsupported"));
-        Details details =
-                new Details(email, selection.contactPhone(), shipping, billing, option, "SIMULATED", methodType);
+        Details details = new Details(
+                email, selection.contactPhone(), shipping, billing, option, selection.paymentSelection(), methodType);
         List<Line> lines = new ArrayList<>();
         List<Issue> issues = new ArrayList<>();
         if (cart.getItems().isEmpty())
@@ -744,6 +794,8 @@ public class OrderService {
         order.setStatus(status);
         if (status == OrderStatus.CANCELLED) ensureRefund(order);
         Order saved = orderRepository.save(order);
+        if (status == OrderStatus.PAID) notifyOrder(saved, "PAID");
+        if (status == OrderStatus.CANCELLED) notifyOrder(saved, "CANCELLED");
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override

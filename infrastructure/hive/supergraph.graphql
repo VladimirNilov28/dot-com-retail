@@ -42,6 +42,11 @@ type AttributeValueFacet @join__type(graph: RETAIL) {
   value: String!
 }
 
+type Brand @join__type(graph: RETAIL) {
+  id: ID!
+  name: String!
+}
+
 type CancellationOrder @join__type(graph: RETAIL) {
   cancellation: OrderCancellation
   cancellationEligibility: OrderCancellationEligibility!
@@ -49,11 +54,6 @@ type CancellationOrder @join__type(graph: RETAIL) {
   publicId: UUID!
   refund: OrderRefund!
   status: OrderStatus!
-}
-
-type Brand @join__type(graph: RETAIL) {
-  id: ID!
-  name: String!
 }
 
 type Cart @join__type(graph: RETAIL) {
@@ -148,6 +148,22 @@ type CheckoutOrder @join__type(graph: RETAIL) {
   totals: CheckoutTotals!
 }
 
+type CheckoutPaymentConfiguration @join__type(graph: RETAIL) {
+  available: Boolean!
+  publishableKey: String!
+}
+
+"""
+Authorized provider projection. Client secrets are short-lived browser
+payment capabilities, never order-access credentials or raw card data.
+"""
+type CheckoutPaymentSession @join__type(graph: RETAIL) {
+  clientSecret: String
+  failureCode: String
+  publishableKey: String!
+  status: String!
+}
+
 type CheckoutPickupLocation @join__type(graph: RETAIL) {
   address: CheckoutAddress!
   name: String!
@@ -237,21 +253,19 @@ type Mutation @join__type(graph: RETAIL) {
   cancelOrder(input: CancelOrderInput!): OrderCancellationPayload!
   cancelOrderAsStaff(input: CancelOrderInput!): OrderCancellationPayload!
   clearCart: Boolean!
+  """Get-or-create a brand by case-insensitive name."""
+  createBrand(name: String!): Brand!
   createCategory(input: CreateCategoryInput!): Category!
   createGuestOrder(input: PlaceOrderInput!): CheckoutOrder!
   createOrder(input: PlaceOrderInput!): Order!
   createProduct(input: CreateProductInput!): Product!
-  createBrand(name: String!): Brand!
-  updateProductImage(altText: String!, imageId: ID!): ProductImage!
-  setPrimaryProductImage(imageId: ID!): [ProductImage!]!
-  reorderProductImages(imageIds: [ID!]!, productId: ID!): [ProductImage!]!
-  deleteProductImage(imageId: ID!): Boolean!
   createProductVariant(input: CreateProductVariantInput!): ProductVariant!
   createWarehouse(input: CreateWarehouseInput!): Warehouse!
   deleteCategory(categoryId: ID!): Boolean!
   deleteMyAddress(addressId: ID!): Boolean!
   deleteMyPaymentMethod(paymentMethodId: ID!): Boolean!
   deleteProduct(productId: ID!): Boolean!
+  deleteProductImage(imageId: ID!): Boolean!
   deleteProductVariant(variantId: ID!): Boolean!
   " ADMIN/SUPPORT"
   deleteUser(userId: ID!): Boolean!
@@ -268,7 +282,11 @@ type Mutation @join__type(graph: RETAIL) {
   removeCartItem(cartItemId: ID!): Boolean!
   removeGuestCartItem(cartItemId: ID!): GuestCart!
   removeWishlistItem(wishlistItemId: ID!): Boolean!
+  """imageIds must list each of the product's images exactly once."""
+  reorderProductImages(imageIds: [ID!]!, productId: ID!): [ProductImage!]!
   setInventory(input: SetInventoryInput!): Inventory!
+  """Moves the image to position 0, keeping the others' relative order."""
+  setPrimaryProductImage(imageId: ID!): [ProductImage!]!
   startGuestCart: StartGuestCartResult!
   updateCartItem(cartItemId: ID!, input: UpdateCartItemInput!): CartItem!
   updateCategory(categoryId: ID!, input: UpdateCategoryInput!): Category!
@@ -276,6 +294,7 @@ type Mutation @join__type(graph: RETAIL) {
   updateMyAddress(addressId: ID!, input: UpdateAddressInput!): UserAddress!
   updateOrderStatus(input: UpdateOrderStatusInput!, orderId: ID!): Order!
   updateProduct(input: UpdateProductInput!, productId: ID!): Product!
+  updateProductImage(altText: String!, imageId: ID!): ProductImage!
   updateProductVariant(input: UpdateProductVariantInput!, variantId: ID!): ProductVariant!
   updateUserRole(input: UpdateRoleInput, userId: ID!): User!
   updateWarehouse(input: UpdateWarehouseInput!, warehouseId: ID!): Warehouse!
@@ -347,20 +366,20 @@ type PriceFacet @join__type(graph: RETAIL) {
 }
 
 type Product @join__type(graph: RETAIL) {
-  """Optional brand; null when not specified."""
-  brand: Brand
-  """
-  Ordered gallery; the first image is the primary one. Empty when no image exists.
-  """
-  images: [ProductImage!]!
   """
   Arithmetic mean of persisted 1-5 star ratings; null when there are no ratings.
   """
   averageRating: Float
+  """Optional brand; null when not specified."""
+  brand: Brand
   categories: [Category!]!
   createdAt: Instant!
   description: String
   id: ID!
+  """
+  Ordered gallery; the first image is the primary one. Empty when no image exists.
+  """
+  images: [ProductImage!]!
   name: String!
   """Number of distinct authenticated users who rated this product."""
   ratingCount: Int!
@@ -407,24 +426,33 @@ type ProductSuggestion @join__type(graph: RETAIL) {
 
 type ProductVariant @join__type(graph: RETAIL) {
   attributes: JSON!
+  """
+  Public sellable state derived from stock a single order could actually be allocated.
+  Null means it could not be determined (treat as unknown, not as out of stock).
+  Informational only; checkout re-validates under lock.
+  """
   availability: ProductAvailability
-  purchasableLimit: Int
   barcode: String
   createdAt: Instant!
+  heightMm: Int
   id: ID!
   inventory: [Inventory!]!
   isActive: Boolean!
-  price: BigDecimal!
-  product: Product!
-  sku: String!
-  updatedAt: Instant!
-  weightGrams: Int
   """
   Canonical dimensions in millimetres; all three are present, or all null (not specified).
   """
   lengthMm: Int
+  price: BigDecimal!
+  product: Product!
+  """
+  Largest quantity currently purchasable in one order, capped at 10. Null when unknown.
+  """
+  purchasableLimit: Int
+  sku: String!
+  updatedAt: Instant!
+  """Canonical weight in grams; null means not specified."""
+  weightGrams: Int
   widthMm: Int
-  heightMm: Int
 }
 
 type Query @join__type(graph: RETAIL) {
@@ -432,11 +460,14 @@ type Query @join__type(graph: RETAIL) {
   categories: [Category!]!
   category(id: ID, slug: String): Category
   checkoutOrder(requestId: UUID!): CheckoutOrder
+  checkoutPaymentConfiguration: CheckoutPaymentConfiguration!
+  checkoutPaymentSession(requestId: UUID!): CheckoutPaymentSession!
   checkoutPreview(input: CheckoutInput!): CheckoutPreview!
   checkoutShippingOptions(countryCode: String): [CheckoutShippingOption!]!
   guestCart: GuestCart
   guestCheckoutPreview(input: CheckoutInput!): CheckoutPreview!
   guestOrder(publicId: UUID, requestId: UUID): CheckoutOrder
+  guestPaymentSession(requestId: UUID!): CheckoutPaymentSession!
   me: User!
   myCart: Cart!
   myOrders: [Order!]!
@@ -526,6 +557,7 @@ type WishlistItem @join__type(graph: RETAIL) {
 
 enum CheckoutPaymentSelection @join__type(graph: RETAIL) {
   SIMULATED @join__enumValue(graph: RETAIL)
+  STRIPE @join__enumValue(graph: RETAIL)
 }
 
 enum CheckoutShippingMethod @join__type(graph: RETAIL) {
@@ -825,8 +857,8 @@ enum PaymentMethodType @join__type(graph: RETAIL) {
 }
 
 enum ProductAvailability @join__type(graph: RETAIL) {
-  AVAILABLE
-  OUT_OF_STOCK
+  AVAILABLE @join__enumValue(graph: RETAIL)
+  OUT_OF_STOCK @join__enumValue(graph: RETAIL)
 }
 
 enum ProductSort @join__type(graph: RETAIL) {
@@ -932,13 +964,13 @@ input CreateProductInput @join__type(graph: RETAIL) {
 input CreateProductVariantInput @join__type(graph: RETAIL) {
   attributes: JSON
   barcode: String
+  heightMm: Int
+  lengthMm: Int
   price: BigDecimal!
   productId: ID!
   sku: String!
   weightGrams: Int
-  lengthMm: Int
   widthMm: Int
-  heightMm: Int
 }
 
 input CreateWarehouseInput @join__type(graph: RETAIL) {
@@ -1032,14 +1064,14 @@ input UpdateProductInput @join__type(graph: RETAIL) {
 input UpdateProductVariantInput @join__type(graph: RETAIL) {
   attributes: JSON
   barcode: String
+  clearDimensions: Boolean
+  heightMm: Int
   isActive: Boolean
+  lengthMm: Int
   price: BigDecimal
   sku: String
   weightGrams: Int
-  lengthMm: Int
   widthMm: Int
-  heightMm: Int
-  clearDimensions: Boolean
 }
 
 input UpdateRoleInput @join__type(graph: RETAIL) {

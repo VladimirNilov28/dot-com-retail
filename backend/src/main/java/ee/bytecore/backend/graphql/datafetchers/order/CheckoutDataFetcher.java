@@ -23,10 +23,34 @@ public class CheckoutDataFetcher {
     private final CurrentUserProvider currentUser;
     private final CheckoutSettings settings;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.beans.factory.ObjectProvider<
+                    ee.bytecore.backend.integration.payment.StripePaymentClient>
+            payments;
+
     public CheckoutDataFetcher(OrderService orders, CurrentUserProvider currentUser, CheckoutSettings settings) {
         this.orders = orders;
         this.currentUser = currentUser;
         this.settings = settings;
+    }
+
+    @DgsQuery
+    public ee.bytecore.backend.integration.payment.StripePaymentClient.Configuration checkoutPaymentConfiguration() {
+        return payments.getObject().configuration();
+    }
+
+    @DgsQuery
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).ORDER_READ) "
+            + "and hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).ORDER_WRITE)")
+    public ee.bytecore.backend.integration.payment.StripePaymentClient.Session checkoutPaymentSession(
+            @InputArgument UUID requestId) {
+        return orders.paymentSession(requestId, userId(), null);
+    }
+
+    @DgsQuery
+    public ee.bytecore.backend.integration.payment.StripePaymentClient.Session guestPaymentSession(
+            @InputArgument UUID requestId, DgsDataFetchingEnvironment environment) {
+        return orders.paymentSession(requestId, null, context(environment).orderCredential());
     }
 
     @DgsQuery

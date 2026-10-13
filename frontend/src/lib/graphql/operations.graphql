@@ -2,6 +2,75 @@ query StorefrontMe {
   me { id username email role }
 }
 
+fragment CheckoutDetailsFields on CheckoutDetails {
+  contactEmail contactPhone paymentSelection
+  shippingAddress { firstName lastName city countryCode postalCode addressLine1 addressLine2 phone }
+  billingAddress { firstName lastName city countryCode postalCode addressLine1 addressLine2 phone }
+  shipping {
+    method charge currency estimate supportedCountries
+    pickupLocation { name address { firstName lastName city countryCode postalCode addressLine1 addressLine2 phone } }
+  }
+}
+
+fragment CheckoutOrderFields on CheckoutOrder {
+  publicId requestId status cancellationReason createdAt paymentInteraction
+  payment { status }
+  refund { status amount currency failureReason }
+  cancellationEligibility { allowed reason }
+  lines { productVariantId productName sku attributes quantity unitPrice subtotal }
+  totals { merchandiseSubtotal shippingCharge total currency }
+  details { ...CheckoutDetailsFields }
+}
+
+fragment CheckoutPreviewFields on CheckoutPreview {
+  quoteVersion placeable
+  lines { productVariantId productName sku attributes quantity unitPrice subtotal }
+  totals { merchandiseSubtotal shippingCharge total currency }
+  details { ...CheckoutDetailsFields }
+  issues { code productVariantId message }
+  availableShippingOptions { method charge currency estimate supportedCountries }
+}
+
+query CheckoutConfiguration {
+  checkoutPaymentConfiguration { available publishableKey }
+}
+query CheckoutPrefill {
+  me {
+    email
+    addresses { id firstName lastName city country postalCode addressLine1 addressLine2 mobile }
+  }
+}
+query CustomerCheckoutPreview($input: CheckoutInput!) {
+  checkoutPreview(input: $input) { ...CheckoutPreviewFields }
+}
+query GuestCheckoutPreview($input: CheckoutInput!) {
+  guestCheckoutPreview(input: $input) { ...CheckoutPreviewFields }
+}
+mutation CustomerCheckoutPlace($input: PlaceOrderInput!) {
+  createOrder(input: $input) { checkout { ...CheckoutOrderFields } }
+}
+mutation GuestCheckoutPlace($input: PlaceOrderInput!) {
+  createGuestOrder(input: $input) { ...CheckoutOrderFields }
+}
+query CustomerCheckoutConfirmation($requestId: UUID!) {
+  checkoutOrder(requestId: $requestId) { ...CheckoutOrderFields }
+}
+query GuestCheckoutConfirmation($requestId: UUID!) {
+  guestOrder(requestId: $requestId) { ...CheckoutOrderFields }
+}
+query CustomerPaymentSession($requestId: UUID!) {
+  checkoutPaymentSession(requestId: $requestId) { status publishableKey clientSecret failureCode }
+}
+query GuestPaymentSession($requestId: UUID!) {
+  guestPaymentSession(requestId: $requestId) { status publishableKey clientSecret failureCode }
+}
+mutation CustomerCheckoutCancel($input: CancelOrderInput!) {
+  cancelOrder(input: $input) { requestId order { publicId status } }
+}
+mutation GuestCheckoutCancel($input: CancelOrderInput!) {
+  cancelGuestOrder(input: $input) { requestId order { publicId status } }
+}
+
 query IntegrationShippingOptions($countryCode: String) {
   checkoutShippingOptions(countryCode: $countryCode) {
     method

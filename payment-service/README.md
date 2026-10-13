@@ -1,9 +1,11 @@
 # Payment Service
 
 A standalone Go service that processes payments asynchronously, communicating
-with the Spring backend exclusively through Kafka. It is **not** a GraphQL
-subgraph and is never reached via the Hive Router — the two services never
-call each other directly, and never touch each other's databases.
+with the Spring backend through the existing Kafka financial workflow. It is
+**not** a GraphQL subgraph. Spring additionally retrieves sandbox configuration
+and an already-authorized order's hosted-payment session over a server-token
+protected internal HTTP interface; these calls never settle an order. Neither
+service touches the other's database.
 
 ```
 Spring backend (OrderService.createOrder, same DB tx)
@@ -11,6 +13,9 @@ Spring backend (OrderService.createOrder, same DB tx)
        -> Payment Service RequestConsumer
             -> idempotent INSERT into payments (unique request_event_id)
             -> Provider.ChargeIdempotently(persisted Payment ID, ...)
+            -> Stripe test PaymentIntent (or historical simulator)
+            -> browser confirms hosted Stripe fields
+            -> raw signed webhook / authoritative provider reconciliation
             -> payments status update + payment_outbox row, same DB tx
        -> Payment Service OutboxPublisher -> Kafka topic: payment.succeeded | payment.failed
   -> Spring PaymentResultListener -> verified request/receipt + OrderService transition, same DB tx
@@ -31,8 +36,8 @@ Spring backend (OrderService.createOrder, same DB tx)
 - **`testcontainers-go`** (postgres + kafka modules) - integration tests run
   against a real Postgres and a real Kafka broker, not mocks, so consumer
   group / offset / redelivery semantics are actually exercised.
-- No web framework: only two trivial `net/http` endpoints (`/healthz`,
-  `/readyz`) are needed.
+- No web framework: standard `net/http` serves health/readiness, the raw signed
+  Stripe webhook and token-protected internal configuration/session projections.
 
 ## Persistence & idempotency
 
@@ -42,8 +47,11 @@ that null rather than inventing a numeric user or account. Migration
 authenticated ownership. Deploy this version before enabling Spring guest
 checkout. No customer email/address is sent over the payment seam.
 The checkout final amount includes server-calculated shipping, in EUR.
-The only supported checkout payment selection is SIMULATED, with no browser
-redirect, card collection, client secret or synchronous PAID response.
+New storefront checkout selects STRIPE. PAN/CVC are collected by Stripe-hosted
+fields and never sent to application servers. Historical SIMULATED requests
+remain explicitly routed to the durable simulator; old requests without a
+provider retain that behavior. Migration `0004_stripe_intents` persists provider
+selection, original operation identity and intent/refund references.
 
 - `payments.request_event_id` has a **unique constraint**. A
   redelivered/duplicate `payment.requested` message is inserted via
@@ -95,8 +103,10 @@ Its key/outcome retention must cover the entire retry/redelivery lifetime.
 If a gateway expires keys sooner, the adapter must reconcile the original
 charge or stop for operator recovery; it must not submit a fresh charge.
 Provider-specific durable reconciliation and retention verification are
-mandatory acceptance requirements for #25. No real gateway is integrated or
-certified by this development implementation.
+mandatory acceptance requirements for #25. The Stripe adapter persists the
+pre-call identity and intent reference. It reuses the original intent; an unknown
+creation older than 23 hours fails closed for operator reconciliation instead of
+using a potentially expired Stripe key to create another intent.
 
 Spring correlation prevents unrelated/conflicting results from settling an
 order, but still trusts the Payment Service/producer for the first valid
@@ -104,9 +114,9 @@ financial outcome; it does not independently prove a provider charge.
 
 ## Fake payment provider
 
-`internal/provider.DurableProvider` is the runtime simulator. It **declines whenever the
+`internal/provider.DurableProvider` remains the legacy runtime simulator. It **declines whenever the
 charged amount's cents component equals `13`** (e.g. `10.13`), and approves
-everything else. No real provider is integrated in this milestone. Nothing in
+everything else. This behavior is not used for STRIPE orders. Nothing in
 `ChargeRequest`/`ChargeResult` carries card/PAN/CVV data - there is no such
 field to store or log, by design. The immutable `provider_ledger` in the existing
 Payment Service database records simulated charge/refund identities, parameters,
@@ -150,6 +160,14 @@ transactions serialize on their own record. Late progress cannot downgrade a
 terminal outcome, including when separate topics deliver progress after success.
 Spring must also retain this finality when consuming results out of order.
 
+Stripe awaits browser interaction without blocking the sequential charge reader.
+Decline, insufficient funds and authentication-needed states retain the original
+PaymentIntent and allocation; verified retry-required progress uses
+`payment.unresolved`. Only an actual terminal cancellation/failure uses
+`payment.failed`. Explicit store cancellation retains the existing late-success/
+full-refund recovery. Stripe refunds use the original intent/full amount and
+durable refund UUID, preserving this boundary rather than adding administration.
+
 The refund reader has its own consumer group, `<KAFKA_CONSUMER_GROUP>-refunds`,
 independent of the charge reader. An unresolved charge cannot block refunds.
 An unresolved refund deliberately blocks its refund reader until recovery; no
@@ -157,6 +175,44 @@ offset advances over unresolved work. The existing 500ms retry, synchronous
 RequireAll DLQ acknowledgement, commit retry and shutdown conventions apply to
 both readers. All request/result/progress/DLQ topics are bootstrapped by the Go
 server, so no broker auto-creation or infrastructure edit is required.
+
+## Stripe sandbox setup
+
+Privately configure the ignored root `.env` with matching **test** sandbox
+`STRIPE_SECRET_KEY=sk_test_...`, `STRIPE_PUBLISHABLE_KEY=pk_test_...` and the
+local listener's `STRIPE_WEBHOOK_SECRET=whsec_...`. Set an independent random
+`PAYMENT_INTERNAL_TOKEN` of at least 32 characters for Spring-to-Go calls.
+Never commit, print or send these values in chat. The secret API key, webhook
+secret and internal token remain server-only; only the publishable key and an
+authorized actionable intent's client secret reach the browser. Live-mode
+credentials/events are not accepted.
+
+From the repository root (without deleting volumes):
+
+```bash
+docker compose -f infrastructure/compose.yml --env-file .env up -d
+docker compose -f infrastructure/compose.yml --env-file .env build backend payment-service
+docker compose -f infrastructure/compose.yml --env-file .env up -d --no-deps backend payment-service
+stripe login
+stripe listen \
+  --events payment_intent.succeeded,payment_intent.payment_failed,payment_intent.processing,payment_intent.canceled \
+  --forward-to http://127.0.0.1:8081/webhooks/stripe
+```
+
+Use the signing secret from this exact CLI listener, not a Dashboard endpoint.
+After changing Stripe settings recreate only `payment-service`; changing the
+internal token requires recreating both payment-service and backend. The payment
+port is loopback-only. Start the storefront separately using its existing
+documented production/development command; `/checkout` uses the normal BFF/Hive
+stack. Mailpit is available at `http://127.0.0.1:8025`.
+
+The webhook verifies HMAC over the bounded **raw** body, checks timestamp
+tolerance and rejects live or mismatched order/payment/amount/currency objects.
+It retrieves current Stripe state, so delayed/out-of-order events cannot
+downgrade a terminal outcome. Duplicate terminal events do not enqueue another
+result. A 30-second provider reconciliation worker recovers missed delivery
+through the same durable outbox; a browser success URL is never settlement proof.
+The existing Kafka retries, outbox and DLQ remain the only messaging system.
 
 ### Kafka contracts
 

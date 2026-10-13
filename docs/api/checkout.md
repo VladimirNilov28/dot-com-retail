@@ -1,8 +1,11 @@
 # Checkout API
 
 Checkout is served by the existing retail GraphQL subgraph through Hive at
-`http://localhost:4002/graphql`. No frontend, carrier, production gateway or
-email recovery is implemented. Guest carts are described in [Guest Cart](guest-cart.md).
+`http://localhost:4002/graphql`, through the storefront's registered same-origin
+`/graphql` BFF. `/checkout` supports customers and protected guests; the
+confirmation route reads the original order without placing or charging again.
+Stripe test mode is supported; production payments and carrier integration are
+not. Guest carts are described in [Guest Cart](guest-cart.md).
 Cancellation eligibility, customer/guest cancellation, late-payment recovery
 and asynchronous full refunds are described in [Order cancellation](order-cancellation.md).
 
@@ -17,6 +20,9 @@ and asynchronous full refunds are described in [Order cancellation](order-cancel
 | `createGuestOrder(input: PlaceOrderInput!)` | Live guest cart and independent confirmation cookies |
 | `checkoutOrder(requestId: UUID!)` | Active original owner and `order:read` |
 | `guestOrder(publicId: UUID, requestId: UUID)` | Exactly one reference plus valid independent confirmation cookie |
+| `checkoutPaymentConfiguration` | Public publishable sandbox configuration through protected transport |
+| `checkoutPaymentSession(requestId: UUID!)` | Active original owner, `order:read` and `order:write` |
+| `guestPaymentSession(requestId: UUID!)` | Original independent guest confirmation credential |
 
 **Intentional breaking transition:** public no-argument `createOrder` is replaced
 by required checkout input. It cannot bypass address validation, shipping,
@@ -30,7 +36,10 @@ Authenticated placement still returns `Order`. Select `Order.checkout` for the
 snapshot confirmation (requires `order:read`), or retrieve `checkoutOrder` after
 a reload. Guest operations return only `CheckoutOrder`, without User,
 OrderItem.order or live catalog traversal. `publicId` is the order reference,
-not a credential. Payment interaction is `NONE`, not a payment token.
+not a credential. Payment interaction is `STRIPE_ELEMENTS` for Stripe orders,
+and remains `NONE` for historical simulated orders. A separately authorized
+payment-session query returns the provider client secret only when interaction
+is necessary; confirmation snapshots contain no payment credentials.
 
 ## Selections, validation and totals
 
@@ -56,7 +65,12 @@ are trimmed; control characters, blank required fields, unsupported country
 codes and malformed combinations are rejected. This is structural validation,
 **not postal deliverability or phone-number verification**.
 
-Only `SIMULATED` payment is supported. A saved method may be selected only if
+The storefront selects `STRIPE` and collects instrument details exclusively in
+Stripe's hosted Payment Element. Application APIs never accept PAN/CVC, an
+instrument token, an arbitrary provider intent or a browser-supplied amount.
+Stripe does not accept the application's legacy saved `paymentMethodId`.
+
+`SIMULATED` remains supported for existing development contracts. A saved method may be selected only if
 owned by the active customer, provider is `simulated` (case-insensitive), and
 type is not CASH_ON_DELIVERY. Type is historical descriptive metadata; CARD,
 BANK_TRANSFER and DIGITAL_WALLET do not connect to real instruments. Other
@@ -117,7 +131,7 @@ existing order snapshots are unaffected.
 
 Preview returns a deterministic `quoteVersion`: SHA-256 over versioned canonical
 server quote data (source cart, sorted lines/prices/snapshot details, normalized
-contact/addresses, shipping/location, simulated selection, totals and currency).
+contact/addresses, shipping/location, payment selection, totals and currency).
 It is a comparison version, not an authentication credential or signed
 reservation. Client-submitted amounts never determine pricing.
 
@@ -175,8 +189,79 @@ transaction's PaymentRequestedEvent/outbox. Kafka publication and provider
 charging occur later, outside this database transaction. Guest userId is
 genuinely null across Spring/Go persistence, never zero or a synthetic user.
 Existing request/result correlation, terminal protection and persisted Payment
-UUID provider idempotency are preserved. Failure cancels/restores the exact
-allocated inventory according to existing rules; it never repopulates a cart.
+UUID provider idempotency are preserved. Definitive terminal failure cancels/
+restores the exact allocated inventory according to existing rules; it never
+repopulates a cart. A Stripe decline/insufficient-funds error is retryable:
+`payment.unresolved` retains the pending order and original inventory allocation.
+Retry reuses that order and PaymentIntent, not a new cart or charge. The customer
+must explicitly cancel to release stock; no automatic expiry is invented.
+Late success after cancellation uses the existing queued full-refund pipeline.
+
+## Browser payment, confirmation and notification lifecycle
+
+The checkout displays authoritative item/shipping totals and requires explicit
+quote acceptance. Changes invalidate acceptance immediately. Customer contact
+and saved addresses come from authorized APIs; manual address entry is available.
+Sessions established before the storefront requested `order:read`/`order:write`
+may need a fresh sign-in. These are ordinary customer scopes, not staff grants;
+the existing role-to-scope policy still controls which subset is issued.
+An empty/invalid cart, unsupported address/shipping or unavailable sandbox blocks
+placement. Safe contact/address selections and the exact placement request UUID
+are retained in sessionStorage for lost-response recovery; payment credentials
+are not. The consumed cart's immutable selections remain available in the pending
+order, including after a failed payment.
+
+Provider fields appear after PENDING placement. Browser validation, declines and
+additional authentication are handled by Stripe. Neither a successful SDK
+response nor visiting the return URL marks the order paid. Verified provider
+state enters the existing Go outbox/Kafka/Spring transition boundary.
+
+`/order-confirmation/<requestId>` (guest requests add only `?guest=1`) shows the
+immutable purchased items, addresses, shipping option, totals and actual payment/
+order/refund state. No personal information or ownership capability is in the
+URL. Guest cookies remain HttpOnly and scoped to `/graphql`; the route uses
+browser BFF requests rather than inventing server-rendered guest credentials.
+Confirmation performs at most 24 automatic checks with a two-minute lifetime
+bound, pauses while hidden and stops on terminal states; manual refresh remains.
+Payment-session preparation polls at most 12 times. Reload and provider return
+do not place another order or initiate another PaymentIntent.
+
+Spring `V18__order_notifications.sql` adds a transactional SMTP notification
+outbox for placement, paid, cancellation and retry-required status. A unique
+order/kind identity deduplicates logical events; delivery retries independently
+with bounded backoff and becomes DEAD after eight failures. SMTP outages do not
+roll back commerce. SMTP's ambiguous acknowledgement window can still produce
+duplicate delivery after a crash; this is not an exactly-once inbox guarantee.
+Messages contain immutable order facts, not guest access credentials or payment
+secrets. Configured Mailpit delivery is local evidence only, not external inbox
+delivery. No email-based order claiming/recovery is introduced.
+
+See [Payment Service setup](../../payment-service/README.md#stripe-sandbox-setup)
+for private configuration and signed webhook forwarding.
+
+The focused local browser check is `frontend/scripts/checkout-smoke.mjs`. It
+requires an explicitly created **disposable** product named `Sandbox checkout
+fixture`, a variant priced EUR 19.99 and inventory in a dedicated warehouse
+named `Sandbox checkout verification`. It refuses owner products/warehouses.
+The validation case changes/restores only this fixture's price and stock before
+placement; it never edits an order/payment or performs a distributed rollback.
+The customer case registers new ordinary test accounts through native signup/
+email verification and inserts addresses only for those new accounts.
+
+```bash
+cd frontend
+CHECKOUT_FIXTURE_VARIANT_ID=<disposable-variant-id> \
+PLAYWRIGHT_MODULE=<absolute-path-to-installed-playwright/index.mjs> \
+STOREFRONT_ARTIFACTS=<private-directory-outside-source-control> \
+bun scripts/checkout-smoke.mjs
+```
+
+`CHECKOUT_SCENARIOS=guest,retry,sca,validation,customer,pending` is the default;
+select a narrower subset when diagnosing a failed check. The script preserves
+safe prior evidence and never records passwords, guest cookies or provider
+client secrets. Use Stripe test methods only. Paid disposable orders/provider
+records are retained as evidence; retire the fixture variant after review
+rather than deleting referenced financial history.
 
 ## Historical snapshots and migrations
 
@@ -189,7 +274,7 @@ unchanged.
 New orders retain product name, SKU, deep-copied attributes, unit price/quantity/
 line subtotal; contact email/phone; shipping/billing address or pickup location;
 shipping method/estimate/charge; merchandise subtotal/final total/currency and
-non-secret simulated payment description. Later edits cannot alter these facts.
+non-secret payment selection. Later edits cannot alter these facts.
 Database triggers reject snapshot/financial/line identity changes; state and
 cancellation/timestamps remain mutable.
 
@@ -242,11 +327,14 @@ direct tests assert their actual HTTP statuses. Always inspect GraphQL errors.
 Never log Cookie/Authorization/Set-Cookie or put bearer values in URLs,
 GraphQL response fields/variables, analytics or browser storage.
 
-Future Next.js should use same-site HTTPS or a same-origin `/graphql` proxy,
+The Next.js storefront uses the same-origin `/graphql` proxy to
 forward only intended cookies during server fetches, and propagate each
 Set-Cookie separately back to the browser. Server-side fetch does not maintain
 the browser cookie jar automatically. JavaScript never reads either HttpOnly
-credential. This contract does not include browser/Next.js implementation.
+credential. Customer browser requests use the existing BFF OAuth session, never
+a browser-supplied bearer token. The storefront client requests ordinary
+`order:read`/`order:write` scopes through the existing role-to-scope policy; no
+privileged staff scopes are granted.
 
 ## Working request examples
 

@@ -303,6 +303,11 @@ services:
       OAUTH_SERVICE_CLIENT_ID: ${OAUTH_SERVICE_CLIENT_ID:?OAUTH_SERVICE_CLIENT_ID is required}
       MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED: "true"
       MEDIA_STORAGE_DIR: /app/media-data
+      PAYMENT_SERVICE_URL: http://payment-service:8081
+      PAYMENT_INTERNAL_TOKEN: ${PAYMENT_INTERNAL_TOKEN:-}
+      SPRING_MAIL_HOST: ${SMTP_HOST:-mailpit}
+      SPRING_MAIL_PORT: ${SMTP_PORT:-1025}
+      ORDER_MAIL_FROM: ${SMTP_FROM:-no-reply@bytecore.ee}
 
     volumes:
       - media_volume:/app/media-data
@@ -372,7 +377,7 @@ services:
         condition: service_healthy
 
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
 
     environment:
       PAYMENT_DB_URL: ${PAYMENT_DB_URL:?PAYMENT_DB_URL is required}
@@ -380,6 +385,10 @@ services:
       KAFKA_CONSUMER_GROUP: payment-service
       HTTP_PORT: "8081"
       OUTBOX_POLL_INTERVAL_MS: "1000"
+      PAYMENT_INTERNAL_TOKEN: ${PAYMENT_INTERNAL_TOKEN:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
 
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/healthz"]

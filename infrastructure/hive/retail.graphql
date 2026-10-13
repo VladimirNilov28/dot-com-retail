@@ -115,6 +115,22 @@ type CheckoutOrder {
   totals: CheckoutTotals!
 }
 
+type CheckoutPaymentConfiguration {
+  available: Boolean!
+  publishableKey: String!
+}
+
+"""
+ Authorized provider projection. Client secrets are short-lived browser
+ payment capabilities, never order-access credentials or raw card data.
+"""
+type CheckoutPaymentSession {
+  clientSecret: String
+  failureCode: String
+  publishableKey: String!
+  status: String!
+}
+
 type CheckoutPickupLocation {
   address: CheckoutAddress!
   name: String!
@@ -373,7 +389,11 @@ type ProductSuggestion {
 
 type ProductVariant {
   attributes: JSON!
-  "Public sellable state; null means it could not be determined. Informational only; checkout re-validates."
+  """
+  Public sellable state derived from stock a single order could actually be allocated.
+  Null means it could not be determined (treat as unknown, not as out of stock).
+  Informational only; checkout re-validates under lock.
+  """
   availability: ProductAvailability
   barcode: String
   createdAt: Instant!
@@ -385,7 +405,7 @@ type ProductVariant {
   lengthMm: Int
   price: BigDecimal!
   product: Product!
-  "Largest quantity purchasable in one order, capped at 10; null when unknown."
+  "Largest quantity currently purchasable in one order, capped at 10. Null when unknown."
   purchasableLimit: Int
   sku: String!
   updatedAt: Instant!
@@ -399,11 +419,14 @@ type Query {
   categories: [Category!]!
   category(id: ID, slug: String): Category
   checkoutOrder(requestId: UUID!): CheckoutOrder
+  checkoutPaymentConfiguration: CheckoutPaymentConfiguration!
+  checkoutPaymentSession(requestId: UUID!): CheckoutPaymentSession!
   checkoutPreview(input: CheckoutInput!): CheckoutPreview!
   checkoutShippingOptions(countryCode: String): [CheckoutShippingOption!]!
   guestCart: GuestCart
   guestCheckoutPreview(input: CheckoutInput!): CheckoutPreview!
   guestOrder(publicId: UUID, requestId: UUID): CheckoutOrder
+  guestPaymentSession(requestId: UUID!): CheckoutPaymentSession!
   me: User!
   myCart: Cart!
   myOrders: [Order!]!
@@ -493,6 +516,7 @@ type WishlistItem {
 
 enum CheckoutPaymentSelection {
   SIMULATED
+  STRIPE
 }
 
 enum CheckoutShippingMethod {

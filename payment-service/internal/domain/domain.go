@@ -23,6 +23,7 @@ const (
 // idempotency identity; database uniqueness alone cannot deduplicate remote
 // charges while a payment remains REQUESTED.
 type Payment struct {
+	Provider              string
 	ID                    uuid.UUID
 	RequestEventID        uuid.UUID
 	OrderID               int64

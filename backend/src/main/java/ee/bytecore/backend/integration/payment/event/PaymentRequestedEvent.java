@@ -10,4 +10,15 @@ import java.util.UUID;
  * boundary, not the internal Order/OrderItem persistence shape.
  */
 public record PaymentRequestedEvent(
-        UUID eventId, Long orderId, Long userId, BigDecimal amount, String currency, Instant occurredAt) {}
+        UUID eventId,
+        Long orderId,
+        Long userId,
+        BigDecimal amount,
+        String currency,
+        Instant occurredAt,
+        String provider) {
+    public PaymentRequestedEvent(
+            UUID eventId, Long orderId, Long userId, BigDecimal amount, String currency, Instant occurredAt) {
+        this(eventId, orderId, userId, amount, currency, occurredAt, "simulated");
+    }
+}

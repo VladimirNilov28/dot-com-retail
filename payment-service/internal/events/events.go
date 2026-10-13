@@ -31,6 +31,7 @@ const (
 // Amount uses json.Number (not float64) to avoid any binary-floating-point
 // rounding of a monetary value that started life as a Java BigDecimal.
 type PaymentRequestedEvent struct {
+	Provider   string            `json:"provider,omitempty"`
 	EventID    uuid.UUID         `json:"eventId"`
 	OrderID    int64             `json:"orderId"`
 	UserID     *int64            `json:"userId"`

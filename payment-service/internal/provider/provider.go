@@ -1,6 +1,5 @@
-// Package provider defines the payment-provider boundary. No real provider
-// is integrated in this milestone (per the brief) - only a deterministic
-// fake/development implementation. Neither the interface nor any
+// Package provider defines the Stripe sandbox and legacy simulated
+// payment-provider boundary. Neither the interface nor any
 // implementation may ever carry card/PAN/CVV data; ChargeRequest/Result are
 // intentionally limited to what a real gateway integration would still need
 // to expose across this boundary (amount, currency, durable payment identity).
@@ -23,6 +22,7 @@ type ChargeRequest struct {
 // ChargeResult is the outcome of a charge attempt.
 type ChargeResult struct {
 	Approved              bool
+	Pending               bool
 	ProviderTransactionID string
 	// Reason is a short, safe-to-log decline description when Approved is
 	// false (never raw provider/gateway secrets).
@@ -37,7 +37,7 @@ type ChargeResult struct {
 // The gateway's key/outcome retention must cover the entire retry/redelivery
 // lifetime; after expiry an adapter must reconcile or fail closed, not charge
 // again. Local caches or marking a payment successful before this call do not
-// satisfy this contract. No production gateway is integrated yet.
+// satisfy this contract. Production/live-mode payments are not supported.
 // Returned errors/reasons must be safe to log: never include credentials,
 // tokens, card data or raw gateway response bodies.
 type Provider interface {

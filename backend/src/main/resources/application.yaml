@@ -23,6 +23,13 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
+  mail:
+    host: ${SMTP_HOST:localhost}
+    port: ${SMTP_PORT:1025}
+    properties:
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 5000
+      mail.smtp.writetimeout: 5000
   docker:
     compose:
       file: ../infrastructure/compose.yml
@@ -73,3 +80,7 @@ checkout:
   pickup-charge: 0.00
   supported-countries: [EE]
   guest-order-ttl: PT720H
+
+payment:
+  service-url: ${PAYMENT_SERVICE_URL:http://localhost:8081}
+  internal-token: ${PAYMENT_INTERNAL_TOKEN:}
