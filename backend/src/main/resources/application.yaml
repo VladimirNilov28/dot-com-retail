@@ -62,6 +62,14 @@ oauth:
   service:
     client-id: ${OAUTH_SERVICE_CLIENT_ID:oauth-service-internal}
 
+# Encryption at rest for personal/order data. APP_DATA_KEYS is "<id>:<base64 32-byte key>[,...]" and must
+# come from private env (never Git). Append new keys and point APP_DATA_ACTIVE_KEY at them to rotate.
+app:
+  data-encryption:
+    keys: ${APP_DATA_KEYS:}
+    active-key: ${APP_DATA_ACTIVE_KEY:}
+    backfill: ${APP_DATA_BACKFILL:true}
+
 # Uploaded product images live here, outside the source tree (a volume in Docker).
 media:
   storage-dir: ${MEDIA_STORAGE_DIR:./media-data}

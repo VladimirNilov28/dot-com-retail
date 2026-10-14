@@ -14,6 +14,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import ee.bytecore.backend.entities.payment.Order;
+import ee.bytecore.backend.security.crypto.FieldEncryption;
 
 import jakarta.mail.MessagingException;
 import org.slf4j.Logger;
@@ -114,9 +115,9 @@ public class OrderNotifications {
                 order.getId(),
                 kind,
                 ref == null ? "" : ref,
-                snapshot.details().contactEmail(),
+                FieldEncryption.seal(snapshot.details().contactEmail()),
                 "ByteCore order " + order.getPublicId() + " — " + kind.replace('_', ' '),
-                body.toString());
+                FieldEncryption.seal(body.toString()));
     }
 
     public record Pending(UUID id, String recipient, String subject, String body, int attempts) {}
@@ -132,9 +133,9 @@ public class OrderNotifications {
                     """,
                     (rs, row) -> new Pending(
                             rs.getObject("id", UUID.class),
-                            rs.getString("recipient"),
+                            FieldEncryption.open(rs.getString("recipient")),
                             rs.getString("subject"),
-                            rs.getString("body"),
+                            FieldEncryption.open(rs.getString("body")),
                             rs.getInt("attempts")));
             for (var notification : pending) {
                 try {

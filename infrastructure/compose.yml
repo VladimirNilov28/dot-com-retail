@@ -308,6 +308,8 @@ services:
       SPRING_MAIL_HOST: ${SMTP_HOST:-mailpit}
       SPRING_MAIL_PORT: ${SMTP_PORT:-1025}
       ORDER_MAIL_FROM: ${SMTP_FROM:-no-reply@bytecore.ee}
+      APP_DATA_KEYS: ${APP_DATA_KEYS:?APP_DATA_KEYS is required (see .env.example)}
+      APP_DATA_ACTIVE_KEY: ${APP_DATA_ACTIVE_KEY:-}
 
     volumes:
       - media_volume:/app/media-data

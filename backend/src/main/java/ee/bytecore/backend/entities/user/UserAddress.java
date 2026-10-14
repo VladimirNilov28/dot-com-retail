@@ -24,28 +24,36 @@ public class UserAddress {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Size(max = 50) @Column(name = "first_name", length = 50)
+    @Convert(converter = ee.bytecore.backend.security.crypto.EncryptedStringConverter.class)
+    @Size(max = 50) @Column(name = "first_name", length = 1024)
     private String firstName;
 
-    @Size(max = 50) @Column(name = "last_name", length = 50)
+    @Convert(converter = ee.bytecore.backend.security.crypto.EncryptedStringConverter.class)
+    @Size(max = 50) @Column(name = "last_name", length = 1024)
     private String lastName;
 
-    @Size(max = 100) @Column(name = "city", length = 100)
+    @Convert(converter = ee.bytecore.backend.security.crypto.EncryptedStringConverter.class)
+    @Size(max = 100) @Column(name = "city", length = 1024)
     private String city;
 
-    @Size(max = 200) @Column(name = "country", length = 200)
+    @Convert(converter = ee.bytecore.backend.security.crypto.EncryptedStringConverter.class)
+    @Size(max = 200) @Column(name = "country", length = 1024)
     private String country;
 
-    @Size(max = 10) @Column(name = "postal_code", length = 10)
+    @Convert(converter = ee.bytecore.backend.security.crypto.EncryptedStringConverter.class)
+    @Size(max = 10) @Column(name = "postal_code", length = 1024)
     private String postalCode;
 
-    @Size(max = 255) @Column(name = "address_line1")
+    @Convert(converter = ee.bytecore.backend.security.crypto.EncryptedStringConverter.class)
+    @Size(max = 255) @Column(name = "address_line1", length = 1024)
     private String addressLine1;
 
-    @Size(max = 255) @Column(name = "address_line2")
+    @Convert(converter = ee.bytecore.backend.security.crypto.EncryptedStringConverter.class)
+    @Size(max = 255) @Column(name = "address_line2", length = 1024)
     private String addressLine2;
 
-    @Size(max = 20) @Column(name = "mobile", length = 20)
+    @Convert(converter = ee.bytecore.backend.security.crypto.EncryptedStringConverter.class)
+    @Size(max = 20) @Column(name = "mobile", length = 1024)
     private String mobile;
 
     @CreationTimestamp

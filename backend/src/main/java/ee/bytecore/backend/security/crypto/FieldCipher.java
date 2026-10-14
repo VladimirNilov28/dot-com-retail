@@ -28,13 +28,16 @@ public final class FieldCipher {
     private final Map<String, SecretKey> keys;
     private final String activeKeyId;
 
-    private FieldCipher(Map<String, SecretKey> keys, String activeKeyId) {
+    private final byte[] indexKey;
+
+    private FieldCipher(Map<String, SecretKey> keys, String activeKeyId, byte[] indexKey) {
         this.keys = keys;
         this.activeKeyId = activeKeyId;
+        this.indexKey = indexKey;
     }
 
     /**
-     * Parses {@code "<id>:<base64 32-byte key>[,<id>:<key>...]"}. The first entry encrypts new data unless
+     * Parses {@code "<id>:<base64 or base64url 32-byte key>[,<id>:<key>...]"}. The first entry encrypts new data unless
      * {@code activeKeyId} names another; all entries can decrypt.
      */
     public static FieldCipher fromKeyRing(String keyRing, String activeKeyId) {
@@ -50,7 +53,8 @@ public final class FieldCipher {
             if (!id.matches("[A-Za-z0-9_-]{1,16}")) throw new IllegalStateException("Invalid data key id");
             byte[] material;
             try {
-                material = Base64.getDecoder().decode(trimmed.substring(separator + 1));
+                String encoded = trimmed.substring(separator + 1).replace('+', '-').replace('/', '_').replace("=", "");
+                material = Base64.getUrlDecoder().decode(encoded);
             } catch (IllegalArgumentException e) {
                 throw new IllegalStateException("Data key " + id + " is not valid base64");
             }
@@ -61,7 +65,30 @@ public final class FieldCipher {
         }
         String active = activeKeyId == null || activeKeyId.isBlank() ? parsed.keySet().iterator().next() : activeKeyId;
         if (!parsed.containsKey(active)) throw new IllegalStateException("Active data key is not in the key ring");
-        return new FieldCipher(Map.copyOf(parsed), active);
+        byte[] indexKey;
+        try {
+            javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
+            mac.init(parsed.values().iterator().next());
+            indexKey = mac.doFinal("bytecore-blind-index-v1".getBytes(StandardCharsets.UTF_8));
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException("Blind index key derivation failed", e);
+        }
+        return new FieldCipher(Map.copyOf(parsed), active, indexKey);
+    }
+
+    /**
+     * Keyed SHA-256 blind index for equality lookups on encrypted values (e.g. a guest contact email).
+     * Derived from the first key in the ring, which must therefore be kept when rotating.
+     */
+    public String blindIndex(String value) {
+        if (value == null) return null;
+        try {
+            javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(indexKey, "HmacSHA256"));
+            return java.util.HexFormat.of().formatHex(mac.doFinal(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException("Blind index failed", e);
+        }
     }
 
     public String activeKeyId() {

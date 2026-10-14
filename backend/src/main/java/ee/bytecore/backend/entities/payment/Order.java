@@ -51,6 +51,7 @@ public class Order {
     private BigDecimal totalAmount;
 
     @Setter(lombok.AccessLevel.NONE)
+    @Convert(converter = ee.bytecore.backend.security.crypto.SealedSnapshotConverter.class)
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "checkout_snapshot", updatable = false)
     private CheckoutValues.Snapshot checkoutSnapshot;

@@ -192,10 +192,10 @@ class OrderLifecycleIntegrationTest {
         assertThat(jdbc.queryForList(
                         "SELECT kind FROM order_notifications WHERE order_id=?", String.class, order.getId()))
                 .containsExactlyInAnyOrder("PLACED", "PAID", "PROCESSING", "SHIPPED", "COMPLETED");
-        assertThat(jdbc.queryForObject(
-                        "SELECT body FROM order_notifications WHERE order_id=? AND kind='SHIPPED'",
-                        String.class,
-                        order.getId()))
+        String shippedBody = jdbc.queryForObject(
+                "SELECT body FROM order_notifications WHERE order_id=? AND kind='SHIPPED'", String.class, order.getId());
+        assertThat(shippedBody).startsWith("enc:").doesNotContain("JD0123");
+        assertThat(ee.bytecore.backend.security.crypto.FieldEncryption.open(shippedBody))
                 .contains("DHL Express", "JD0123", "https://track.example/JD0123");
         assertThat(jdbc.queryForList(
                         "SELECT operation FROM admin_audit_log WHERE target_id=?",
@@ -377,10 +377,10 @@ class OrderLifecycleIntegrationTest {
                         Integer.class,
                         order.getId()))
                 .isEqualTo(2);
-        assertThat(jdbc.queryForObject(
+        assertThat(ee.bytecore.backend.security.crypto.FieldEncryption.open(jdbc.queryForObject(
                         "SELECT recipient FROM order_notifications WHERE order_id=? AND kind='PAID'",
                         String.class,
-                        order.getId()))
+                        order.getId())))
                 .isEqualTo(f.user().getEmail());
     }
 }

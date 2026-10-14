@@ -100,12 +100,17 @@ class PaymentOutboxIntegrationTest {
 
     @AfterEach
     void cleanUp() {
-        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(new org.springframework.jdbc.datasource.SingleConnectionDataSource(
+                org.springframework.jdbc.datasource.DataSourceUtils.getConnection(dataSource), true));
+        // Test-only cleanup: order_status_events is append-only, so triggers are bypassed on this connection.
+        jdbcTemplate.execute("SET session_replication_role = replica");
         createdOrderIds.forEach(id -> jdbcTemplate.update("DELETE FROM payment_outbox WHERE order_id = ?", id));
+        createdOrderIds.forEach(id -> jdbcTemplate.update("DELETE FROM order_status_events WHERE order_id = ?", id));
         createdOrderIds.forEach(id -> jdbcTemplate.update("DELETE FROM orders WHERE id = ?", id));
         createdProductIds.forEach(id -> jdbcTemplate.update("DELETE FROM products WHERE id = ?", id));
         createdWarehouseIds.forEach(id -> jdbcTemplate.update("DELETE FROM warehouses WHERE id = ?", id));
         createdUserIds.forEach(id -> jdbcTemplate.update("DELETE FROM users WHERE id = ?", id));
+        jdbcTemplate.execute("SET session_replication_role = origin");
     }
 
     private User createUserWithCart() {

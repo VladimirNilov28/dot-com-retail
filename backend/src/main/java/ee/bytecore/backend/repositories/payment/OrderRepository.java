@@ -42,7 +42,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
                    OR CAST(o.public_id AS varchar) LIKE lower(CAST(:query AS varchar)) || '%'
                    OR lower(u.email) = lower(CAST(:query AS varchar))
                    OR lower(u.username) = lower(CAST(:query AS varchar))
-                   OR lower(o.checkout_snapshot -> 'details' ->> 'contactEmail') = lower(CAST(:query AS varchar)))
+                   OR o.checkout_snapshot ->> 'contactEmailIndex' = CAST(:emailIndex AS varchar))
             """;
 
     /**
@@ -53,11 +53,21 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             value = "SELECT o.* " + SEARCH_WHERE + " ORDER BY o.created_at DESC, o.id DESC",
             countQuery = "SELECT count(*) " + SEARCH_WHERE,
             nativeQuery = true)
-    Page<Order> search(
+    Page<Order> searchIndexed(
             @Param("userId") Long userId,
             @Param("status") String status,
             @Param("fromAt") java.time.OffsetDateTime fromAt,
             @Param("toAt") java.time.OffsetDateTime toAt,
             @Param("query") String query,
+            @Param("emailIndex") String emailIndex,
             Pageable pageable);
+
+    /** Guest contact emails are encrypted at rest, so they are matched through their keyed blind index. */
+    default Page<Order> search(
+            Long userId, String status, java.time.OffsetDateTime fromAt, java.time.OffsetDateTime toAt,
+            String query, Pageable pageable) {
+        String emailIndex = query == null || !query.contains("@")
+                ? null : ee.bytecore.backend.security.crypto.FieldEncryption.contactEmailIndex(query);
+        return searchIndexed(userId, status, fromAt, toAt, query, emailIndex, pageable);
+    }
 }

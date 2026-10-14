@@ -268,6 +268,10 @@ class StripeCheckoutIntegrationTest {
         assertThat(jdbc.queryForObject(
                         "SELECT count(*) FROM order_notifications WHERE order_id=?", Integer.class, order.getId()))
                 .isEqualTo(1);
+        // Other tests share this database; defer their due rows so the bounded delivery batch picks this order.
+        jdbc.update(
+                "UPDATE order_notifications SET next_attempt_at=now()+interval '1 day' WHERE order_id<>? AND status='PENDING'",
+                order.getId());
         doThrow(new MailSendException("fixture SMTP unavailable")).when(mail).send(any(MimeMessage.class));
         notifications.deliver();
         assertThat(jdbc.queryForObject(

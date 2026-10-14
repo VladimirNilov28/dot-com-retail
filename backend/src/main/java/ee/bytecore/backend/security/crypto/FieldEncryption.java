@@ -20,6 +20,20 @@ public class FieldEncryption {
         return current;
     }
 
+    /** Encrypts a value for a column written through JDBC rather than a JPA converter. */
+    public static String seal(String plaintext) {
+        return required().encrypt(plaintext);
+    }
+
+    /** Decrypts a JDBC-read column; legacy plaintext passes through. */
+    public static String open(String stored) {
+        return required().decrypt(stored);
+    }
+
+    public static String contactEmailIndex(String email) {
+        return SealedSnapshotConverter.emailIndex(required(), email);
+    }
+
     static FieldCipher required() {
         FieldCipher cipher = current;
         if (cipher == null) throw new IllegalStateException("Field encryption is not initialised");
