@@ -123,7 +123,8 @@ public class CatalogSearchRepository {
                     case RELEVANCE -> "ORDER BY " + RELEVANCE_RANK_EXPRESSION + " ASC, p.id ASC";
                     case PRICE_ASC -> "ORDER BY " + EFFECTIVE_PRICE_SUBQUERY + " ASC NULLS LAST, p.id ASC";
                     case PRICE_DESC -> "ORDER BY " + EFFECTIVE_PRICE_SUBQUERY + " DESC NULLS LAST, p.id ASC";
-                    case RATING_DESC -> "ORDER BY (SELECT AVG(r.stars) FROM product_ratings r WHERE r.product_id = p.id)"
+                    case RATING_DESC -> "ORDER BY (SELECT AVG(r.stars) FROM product_ratings r WHERE r.product_id = p.id"
+                            + " AND r.status = 'VISIBLE')"
                             + " DESC NULLS LAST, p.id ASC";
                 };
 

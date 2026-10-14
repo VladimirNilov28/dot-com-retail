@@ -208,6 +208,28 @@ type Inventory {
   warehouse: Warehouse!
 }
 
+type ModerationReview {
+  authorName: String!
+  body: String
+  createdAt: Instant!
+  helpfulCount: Int!
+  id: ID!
+  moderatedAt: Instant
+  moderationReason: String
+  productId: ID!
+  productName: String!
+  productSlug: String!
+  stars: Int!
+  status: ReviewStatus!
+  title: String
+  updatedAt: Instant!
+}
+
+type ModerationReviewPage {
+  items: [ModerationReview!]!
+  pageInfo: SearchPageInfo!
+}
+
 type Mutation {
   addCartItem(input: AddCartItemInput!): CartItem!
   addGuestCartItem(input: AddCartItemInput!): GuestCart!
@@ -231,6 +253,7 @@ type Mutation {
   deleteCategory(categoryId: ID!): Boolean!
   deleteMyAddress(addressId: ID!): Boolean!
   deleteMyPaymentMethod(paymentMethodId: ID!): Boolean!
+  deleteMyReview(productId: ID!): Boolean!
   deleteProduct(productId: ID!): Boolean!
   deleteProductImage(imageId: ID!): Boolean!
   deleteProductVariant(variantId: ID!): Boolean!
@@ -239,6 +262,7 @@ type Mutation {
   deleteUserAddress(addressId: ID!, userId: ID!): Boolean!
   deleteUserPaymentMethod(paymentMethodId: ID!, userId: ID!): Boolean!
   deleteWarehouse(warehouseId: ID!): Boolean!
+  hideReview(reason: String!, reviewId: ID!): ModerationReview!
   mergeGuestCart(requestId: UUID!): GuestCartMergeResult!
   """
   Submit/update the caller's integer 1-5 star rating. Requires rating:write and an
@@ -251,10 +275,12 @@ type Mutation {
   removeWishlistItem(wishlistItemId: ID!): Boolean!
   "imageIds must list each of the product's images exactly once."
   reorderProductImages(imageIds: [ID!]!, productId: ID!): [ProductImage!]!
+  restoreReview(reviewId: ID!): ModerationReview!
   setInventory(input: SetInventoryInput!): Inventory!
   "Moves the image to position 0, keeping the others' relative order."
   setPrimaryProductImage(imageId: ID!): [ProductImage!]!
   startGuestCart: StartGuestCartResult!
+  unvoteReviewHelpful(reviewId: ID!): ProductReview!
   updateCartItem(cartItemId: ID!, input: UpdateCartItemInput!): CartItem!
   updateCategory(categoryId: ID!, input: UpdateCategoryInput!): Category!
   updateGuestCartItem(cartItemId: ID!, input: UpdateCartItemInput!): GuestCart!
@@ -265,6 +291,8 @@ type Mutation {
   updateProductVariant(input: UpdateProductVariantInput!, variantId: ID!): ProductVariant!
   updateUserRole(input: UpdateRoleInput, userId: ID!): User!
   updateWarehouse(input: UpdateWarehouseInput!, warehouseId: ID!): Warehouse!
+  upsertMyReview(body: String!, productId: ID!, stars: Int!, title: String!): ProductReview!
+  voteReviewHelpful(reviewId: ID!): ProductReview!
 }
 
 type Order {
@@ -375,6 +403,29 @@ type ProductImage {
   width: Int!
 }
 
+type ProductReview {
+  authorName: String!
+  body: String
+  createdAt: Instant!
+  helpfulCount: Int!
+  id: ID!
+  productId: ID!
+  stars: Int!
+  status: ReviewStatus!
+  title: String
+  updatedAt: Instant!
+  viewerHasVoted: Boolean!
+  viewerIsAuthor: Boolean!
+}
+
+type ProductReviewPage {
+  averageRating: Float
+  distribution: [RatingDistributionBucket!]!
+  items: [ProductReview!]!
+  pageInfo: SearchPageInfo!
+  ratingCount: Int!
+}
+
 type ProductSearchResult {
   facets: ProductFacets!
   items: [Product!]!
@@ -428,17 +479,25 @@ type Query {
   guestOrder(publicId: UUID, requestId: UUID): CheckoutOrder
   guestPaymentSession(requestId: UUID!): CheckoutPaymentSession!
   me: User!
+  moderationReviews(page: Int = 0, size: Int = 20, status: ReviewStatus): ModerationReviewPage!
   myCart: Cart!
   myOrders: [Order!]!
+  myReview(productId: ID!): ProductReview
   myWishlist: Wishlist!
   order(id: ID, publicId: UUID): Order
   product(id: ID, slug: String): Product
+  productReviews(page: Int = 0, productId: ID!, size: Int = 10, sort: ReviewSort = NEWEST): ProductReviewPage!
   productSearchSuggestions(limit: Int, query: String!): [ProductSuggestion!]!
   products: [Product!]!
   searchProducts(input: ProductSearchInput!): ProductSearchResult!
   user(id: ID!): User!
   warehouse(id: ID!): Warehouse
   warehouses: [Warehouse!]!
+}
+
+type RatingDistributionBucket {
+  count: Int!
+  stars: Int!
 }
 
 type SearchPageInfo {
@@ -825,6 +884,18 @@ enum ProductSort {
   PRICE_DESC
   RATING_DESC
   RELEVANCE
+}
+
+enum ReviewSort {
+  HELPFUL
+  NEWEST
+  RATING_HIGH
+  RATING_LOW
+}
+
+enum ReviewStatus {
+  HIDDEN
+  VISIBLE
 }
 
 enum Role {

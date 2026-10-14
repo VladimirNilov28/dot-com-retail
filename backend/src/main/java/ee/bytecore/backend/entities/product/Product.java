@@ -36,11 +36,11 @@ public class Product {
     private String description;
 
     @Setter(lombok.AccessLevel.NONE)
-    @Formula("(select avg(r.stars) from product_ratings r where r.product_id = id)")
+    @Formula("(select avg(r.stars) from product_ratings r where r.product_id = id and r.status = 'VISIBLE')")
     private Double averageRating;
 
     @Setter(lombok.AccessLevel.NONE)
-    @Formula("(select count(*) from product_ratings r where r.product_id = id)")
+    @Formula("(select count(*) from product_ratings r where r.product_id = id and r.status = 'VISIBLE')")
     private Integer ratingCount = 0;
 
     @ManyToMany(fetch = FetchType.LAZY)

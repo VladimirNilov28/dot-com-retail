@@ -231,6 +231,167 @@ class GuestCartHiveTransportTest {
                 .isEqualTo(2);
     }
 
+    @Test
+    void shouldServePublicReviewsAndEnforceOwnershipVotesAndModerationThroughHiveTest() throws Exception {
+        CatalogFixture fixture = createCatalogFixture();
+        String suffix = UUID.randomUUID().toString();
+        User alice = users.save(
+                User.create("review-alice-" + suffix, "ra-" + suffix + "@example.com", LocalDate.of(2000, 1, 1)));
+        User bob = users.save(
+                User.create("review-bob-" + suffix, "rb-" + suffix + "@example.com", LocalDate.of(2000, 1, 1)));
+        User staff = users.save(
+                User.create("review-staff-" + suffix, "rs-" + suffix + "@example.com", LocalDate.of(2000, 1, 1)));
+        String a = alice.getId().toString();
+        String b = bob.getId().toString();
+        String m = staff.getId().toString();
+        when(jwtDecoder.decode("review-alice")).thenReturn(jwt("review-alice", a, "USER", null, "rating:write"));
+        when(jwtDecoder.decode("review-bob")).thenReturn(jwt("review-bob", b, "USER", null, "rating:write"));
+        when(jwtDecoder.decode("review-bob-noscope")).thenReturn(jwt("review-bob-noscope", b, "USER", null, ""));
+        when(jwtDecoder.decode("review-user-moderate"))
+                .thenReturn(jwt("review-user-moderate", b, "USER", null, "review:moderate"));
+        when(jwtDecoder.decode("review-manager"))
+                .thenReturn(jwt("review-manager", m, "CATALOG_MANAGER", "aal2", "review:moderate"));
+        when(jwtDecoder.decode("review-manager-aal1"))
+                .thenReturn(jwt("review-manager-aal1", m, "CATALOG_MANAGER", "aal1", "review:moderate"));
+        when(jwtDecoder.decode("review-manager-noscope"))
+                .thenReturn(jwt("review-manager-noscope", m, "CATALOG_MANAGER", "aal2", "product:write"));
+        when(jwtDecoder.decode("review-support"))
+                .thenReturn(jwt("review-support", m, "SUPPORT", "aal2", "review:moderate"));
+
+        String upsert =
+                """
+                mutation Upsert($id: ID!, $stars: Int!, $title: String!, $body: String!) {
+                  upsertMyReview(productId: $id, stars: $stars, title: $title, body: $body) {
+                    id title body stars status authorName viewerIsAuthor
+                  }
+                }
+                """;
+        Map<String, Object> review = Map.of(
+                "id", fixture.productId(), "stars", 5, "title", "  Great  ", "body", "Works well for daily use.");
+        assertThat(postCatalog(upsert, null, review, null, null).body()).contains("Authentication is required");
+        assertThat(mapper.readTree(postCatalog(upsert, null, review, null, "review-bob-noscope")
+                                .body())
+                        .has("errors"))
+                .isTrue();
+        JsonNode created =
+                success(postCatalog(upsert, null, review, null, "review-alice")).at("/data/upsertMyReview");
+        String reviewId = created.path("id").asText();
+        assertThat(created.path("title").asText()).isEqualTo("Great");
+        assertThat(created.path("viewerIsAuthor").asBoolean()).isTrue();
+        assertThat(created.path("authorName").asText()).isEqualTo("review-alice-" + suffix);
+        Map<String, Object> html = new HashMap<>(review);
+        html.put("body", "<img src=x onerror=alert(1)> long enough");
+        assertThat(postCatalog(upsert, null, html, null, "review-alice").body()).contains("plain text without HTML");
+
+        String list =
+                """
+                query Reviews($id: ID!) {
+                  productReviews(productId: $id) {
+                    items { id title helpfulCount viewerHasVoted viewerIsAuthor }
+                    pageInfo { totalItems }
+                    averageRating ratingCount distribution { stars count }
+                  }
+                }
+                """;
+        Map<String, Object> listVars = Map.of("id", fixture.productId());
+        HttpResponse<String> anonymous = postCatalog(list, null, listVars, null, null);
+        JsonNode page = success(anonymous).at("/data/productReviews");
+        assertPublicCache(anonymous);
+        assertThat(page.at("/items/0/id").asText()).isEqualTo(reviewId);
+        assertThat(page.at("/items/0/viewerIsAuthor").asBoolean()).isFalse();
+        assertThat(page.at("/ratingCount").asInt()).isEqualTo(1);
+        assertThat(page.at("/distribution/0/stars").asInt()).isEqualTo(5);
+        assertThat(page.at("/distribution/0/count").asInt()).isEqualTo(1);
+
+        String vote = "mutation V($id: ID!) { voteReviewHelpful(reviewId: $id) { helpfulCount viewerHasVoted } }";
+        Map<String, Object> voteVars = Map.of("id", reviewId);
+        assertThat(postCatalog(vote, null, voteVars, null, "review-alice").body())
+                .contains("errors");
+        for (int i = 0; i < 2; i++) {
+            JsonNode voted = success(postCatalog(vote, null, voteVars, null, "review-bob"))
+                    .at("/data/voteReviewHelpful");
+            assertThat(voted.path("helpfulCount").asInt()).isEqualTo(1);
+            assertThat(voted.path("viewerHasVoted").asBoolean()).isTrue();
+        }
+        HttpResponse<String> bobView = postCatalog(list, null, listVars, null, "review-bob");
+        assertPrivateNoStore(bobView);
+        assertThat(success(bobView)
+                        .at("/data/productReviews/items/0/viewerHasVoted")
+                        .asBoolean())
+                .isTrue();
+
+        String delete = "mutation D($id: ID!) { deleteMyReview(productId: $id) }";
+        assertThat(success(postCatalog(delete, null, listVars, null, "review-bob"))
+                        .at("/data/deleteMyReview")
+                        .asBoolean())
+                .isFalse();
+        assertThat(jdbc.queryForObject(
+                        "SELECT count(*) FROM product_ratings WHERE id = ?", Long.class, Long.parseLong(reviewId)))
+                .isEqualTo(1);
+
+        String hide =
+                "mutation H($id: ID!) { hideReview(reviewId: $id, reason: \"Spam link\") { status moderationReason } }";
+        String moderation = "query M { moderationReviews(status: HIDDEN) { items { id } pageInfo { totalItems } } }";
+        for (String token : List.of(
+                "review-alice",
+                "review-user-moderate",
+                "review-manager-aal1",
+                "review-manager-noscope",
+                "review-support")) {
+            assertThat(mapper.readTree(postCatalog(hide, null, voteVars, null, token)
+                                    .body())
+                            .has("errors"))
+                    .as(token)
+                    .isTrue();
+            assertThat(mapper.readTree(postCatalog(moderation, null, Map.of(), null, token)
+                                    .body())
+                            .has("errors"))
+                    .as(token)
+                    .isTrue();
+        }
+        assertThat(postCatalog(hide, null, voteVars, null, null).body()).contains("Authentication is required");
+        JsonNode hidden = success(postCatalog(hide, null, voteVars, null, "review-manager"))
+                .at("/data/hideReview");
+        assertThat(hidden.path("status").asText()).isEqualTo("HIDDEN");
+        assertThat(hidden.path("moderationReason").asText()).isEqualTo("Spam link");
+        assertThat(containsFieldValue(
+                        success(postCatalog(moderation, null, Map.of(), null, "review-manager"))
+                                .at("/data/moderationReviews/items"),
+                        "id",
+                        reviewId))
+                .isTrue();
+        JsonNode afterHide =
+                success(postCatalog(list, null, listVars, null, null)).at("/data/productReviews");
+        assertThat(afterHide.at("/items").size()).isZero();
+        assertThat(afterHide.at("/ratingCount").asInt()).isZero();
+        assertThat(afterHide.at("/averageRating").isNull()).isTrue();
+        assertThat(jdbc.queryForObject(
+                        "SELECT actor_user_id FROM admin_audit_log WHERE operation = 'REVIEW_HIDE' AND target_id = ?",
+                        Long.class,
+                        reviewId))
+                .isEqualTo(staff.getId());
+
+        String restore = "mutation R($id: ID!) { restoreReview(reviewId: $id) { status } }";
+        assertThat(success(postCatalog(restore, null, voteVars, null, "review-manager"))
+                        .at("/data/restoreReview/status")
+                        .asText())
+                .isEqualTo("VISIBLE");
+        assertThat(success(postCatalog(delete, null, listVars, null, "review-alice"))
+                        .at("/data/deleteMyReview")
+                        .asBoolean())
+                .isTrue();
+    }
+
+    private Jwt jwt(String token, String subject, String role, String aal, String scope) {
+        Jwt.Builder builder = Jwt.withTokenValue(token)
+                .header("alg", "RS256")
+                .subject(subject)
+                .claim("role", role)
+                .claim("scope", scope);
+        if (aal != null) builder.claim("aal", aal);
+        return builder.build();
+    }
+
     private Jwt ratingJwt(String token, String subject, String scope) {
         return Jwt.withTokenValue(token)
                 .header("alg", "RS256")
@@ -304,7 +465,22 @@ class GuestCartHiveTransportTest {
                         Map.of("term", fixture.name()),
                         "/data/productSearchSuggestions",
                         "productId",
-                        fixture.productId()));
+                        fixture.productId()),
+                new CatalogOperation(
+                        """
+                        query PublicReviews($id: ID!) {
+                          productReviews(productId: $id, size: 5, sort: HELPFUL) {
+                            items { id }
+                            pageInfo { totalItems }
+                            ratingCount
+                            distribution { stars count }
+                          }
+                        }
+                        """,
+                        Map.of("id", fixture.productId()),
+                        "/data/productReviews/distribution",
+                        "stars",
+                        "5"));
 
         for (CatalogOperation operation : operations) {
             HttpResponse<String> response = postCatalog(operation.query(), null, operation.variables(), null, null);
