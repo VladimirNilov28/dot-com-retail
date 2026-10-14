@@ -1,0 +1,12 @@
+extend type Query {
+  warehouse(id: ID!): Warehouse
+  warehouses: [Warehouse!]!
+}
+
+extend type Warehouse {
+  inventory: [Inventory!]!
+}
+
+extend type ProductVariant {
+  inventory: [Inventory!]!
+}

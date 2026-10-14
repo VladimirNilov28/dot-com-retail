@@ -1,0 +1,125 @@
+"""
+Written product reviews extend the caller-owned 1-5 star rating (one row per
+user/product). Reviews are post-moderated: visible immediately, staff may hide or
+restore them. HIDDEN reviews never appear in public lists and are excluded from
+every product aggregate (averageRating, ratingCount, RATING_DESC). Creating a
+review or rating requires a qualifying purchase (paid, not refunded order of the
+product); otherwise the mutation fails with errorType REVIEW_PURCHASE_REQUIRED.
+"""
+enum ReviewStatus {
+  VISIBLE
+  HIDDEN
+}
+
+enum ReviewSort {
+  NEWEST
+  """Most helpful votes first, then newest, then highest id."""
+  HELPFUL
+  RATING_HIGH
+  RATING_LOW
+}
+
+type ProductReview {
+  id: ID!
+  productId: ID!
+  stars: Int!
+  """Plain text; null for a legacy star-only rating."""
+  title: String
+  """Plain text (newlines preserved); null for a legacy star-only rating."""
+  body: String
+  authorName: String!
+  status: ReviewStatus!
+  helpfulCount: Int!
+  """True when the authenticated caller marked this review helpful; false for anonymous callers."""
+  viewerHasVoted: Boolean!
+  """True when the authenticated caller wrote this review."""
+  viewerIsAuthor: Boolean!
+  """True when the author currently has a qualifying purchase of the product."""
+  verifiedPurchase: Boolean!
+  createdAt: Instant!
+  updatedAt: Instant!
+}
+
+enum ReviewIneligibleReason {
+  """No paid, non-refunded order containing this product."""
+  PURCHASE_REQUIRED
+}
+
+"""Whether the caller may write (or edit) a review for a product."""
+type ReviewEligibility {
+  canReview: Boolean!
+  """True when the caller already has a written review, which stays editable."""
+  hasReview: Boolean!
+  """Why canReview is false; null when allowed."""
+  reason: ReviewIneligibleReason
+}
+
+type RatingDistributionBucket {
+  stars: Int!
+  count: Int!
+}
+
+type ProductReviewPage {
+  """Visible written reviews only."""
+  items: [ProductReview!]!
+  pageInfo: SearchPageInfo!
+  """Average of all VISIBLE ratings (written and star-only); null when there are none."""
+  averageRating: Float
+  ratingCount: Int!
+  """Always five buckets, 5 stars first."""
+  distribution: [RatingDistributionBucket!]!
+}
+
+"""Staff moderation projection of a rating/review, including hidden ones."""
+type ModerationReview {
+  id: ID!
+  productId: ID!
+  productName: String!
+  productSlug: String!
+  stars: Int!
+  title: String
+  body: String
+  authorName: String!
+  status: ReviewStatus!
+  helpfulCount: Int!
+  moderationReason: String
+  moderatedAt: Instant
+  createdAt: Instant!
+  updatedAt: Instant!
+}
+
+type ModerationReviewPage {
+  items: [ModerationReview!]!
+  pageInfo: SearchPageInfo!
+}
+
+extend type Query {
+  """Public: visible written reviews with the product's visible rating distribution. size is 1-20."""
+  productReviews(productId: ID!, page: Int = 0, size: Int = 10, sort: ReviewSort = NEWEST): ProductReviewPage!
+  """The caller's own rating/review for a product (any status), or null. Requires rating:write."""
+  myReview(productId: ID!): ProductReview
+  """Whether the caller may create or edit a review for the product. Requires rating:write."""
+  myReviewEligibility(productId: ID!): ReviewEligibility!
+  """Staff: reviews filtered by status (all when null). Requires review:moderate and CATALOG_MANAGER or ADMIN."""
+  moderationReviews(status: ReviewStatus, page: Int = 0, size: Int = 20): ModerationReviewPage!
+}
+
+extend type Mutation {
+  """
+  Create or edit the caller's own review (and star rating). title 1-120 and body
+  10-4000 characters of plain text, trimmed; HTML markup is rejected. Editing keeps
+  the moderation status. Creating a new written review requires a qualifying purchase
+  (errorType REVIEW_PURCHASE_REQUIRED); editing an existing one does not. Requires rating:write.
+  """
+  upsertMyReview(productId: ID!, stars: Int!, title: String!, body: String!): ProductReview!
+  """Delete the caller's own rating and review for the product. False when none existed."""
+  deleteMyReview(productId: ID!): Boolean!
+  """Mark a visible review helpful (idempotent). Authors cannot vote on their own review."""
+  voteReviewHelpful(reviewId: ID!): ProductReview!
+  """Remove the caller's helpful vote (idempotent)."""
+  unvoteReviewHelpful(reviewId: ID!): ProductReview!
+  """Staff: hide a review with a 3-500 character reason. Audited."""
+  hideReview(reviewId: ID!, reason: String!): ModerationReview!
+  """Staff: make a hidden review visible again. Audited."""
+  restoreReview(reviewId: ID!): ModerationReview!
+}

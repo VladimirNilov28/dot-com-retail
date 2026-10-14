@@ -1,0 +1,50 @@
+serve:
+  public:
+    port: 4444
+
+  admin:
+    port: 4445
+
+urls:
+  self:
+    issuer: http://127.0.0.1:4444
+
+  login: http://127.0.0.1:4446/login
+  consent: http://127.0.0.1:4446/consent
+  logout: http://127.0.0.1:3000/account
+
+log:
+  level: info
+  format: text
+
+oauth2:
+  expose_internal_errors: false
+  # Custom claims set via the consent session's access_token data are nested
+  # under the "ext" claim unless explicitly whitelisted here — this promotes
+  # "role" to a genuine top-level JWT claim so Spring's JWT authority
+  # conversion (which reads a top-level `role` claim) can find it. `aal` is
+  # promoted too: the backend and the admin gate require a top-level aal2
+  # claim before granting staff authorities.
+  allowed_top_level_claims:
+    - role
+    - aal
+
+# Short-lived access token (project requirement: 15-60 min) and a
+# refresh-token lifetime bounded to a week (project requirement: 3-7
+# days). Hydra's own defaults are 1h / 720h (30 days) — the refresh
+# default is outside the target range, so both are pinned explicitly.
+# Go duration syntax only supports ns/us/ms/s/m/h (no day unit), hence
+# "168h" rather than "7d". NOTE: "ttl" is a root-level config key, not
+# nested under "oauth2" (confirmed against Hydra's config.schema.json —
+# oauth2 has additionalProperties: false and rejects an "ttl" key there).
+ttl:
+  access_token: 30m
+  refresh_token: 168h
+
+# JWT access tokens: the Spring resource server validates them locally via
+# the issuer's JWKS (signature/issuer/expiry/role/scope/AAL2) and then checks
+# revocation through the admin introspection endpoint, which reports a JWT as
+# inactive once its refresh chain or the subject's consent is revoked
+# (docs/auth/browser-contract.md "Token revocation").
+strategies:
+  access_token: jwt

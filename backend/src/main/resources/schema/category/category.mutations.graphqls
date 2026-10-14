@@ -1,0 +1,19 @@
+input CreateCategoryInput {
+  name: String!
+  slug: String!
+  parentId: ID
+}
+
+input UpdateCategoryInput {
+  name: String
+  slug: String
+  parentId: ID
+  "Move the category to the root of the tree. Cannot be combined with parentId."
+  clearParent: Boolean
+}
+
+extend type Mutation {
+  createCategory(input: CreateCategoryInput!): Category!
+  updateCategory(categoryId: ID!, input: UpdateCategoryInput!): Category!
+  deleteCategory(categoryId: ID!): Boolean!
+}

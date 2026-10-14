@@ -1,0 +1,43 @@
+{
+  "$id": "https://bytecore.ee/schemas/customer-v1.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Customer",
+  "type": "object",
+  "properties": {
+    "traits": {
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 255,
+          "title": "Email",
+          "ory.sh/kratos": {
+            "credentials": {
+              "password": { "identifier": true },
+              "totp": { "account_name": true }
+            },
+            "recovery": { "via": "email" },
+            "verification": { "via": "email" }
+          }
+        },
+        "username": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "\\S",
+          "title": "Username"
+        },
+        "dateOfBirth": {
+          "type": "string",
+          "format": "date",
+          "title": "Date of birth"
+        }
+      },
+      "required": ["email", "username", "dateOfBirth"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["traits"],
+  "additionalProperties": false
+}

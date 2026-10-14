@@ -1,0 +1,66 @@
+input CreateProductInput {
+  name: String!
+  slug: String!
+  description: String
+  categoryIds: [ID!]
+  brandId: ID
+}
+
+input UpdateProductInput {
+  name: String
+  slug: String
+  description: String
+  categoryIds: [ID!]
+  brandId: ID
+  clearBrand: Boolean
+}
+
+input CreateProductVariantInput {
+  productId: ID!
+  sku: String!
+  price: BigDecimal!
+  attributes: JSON
+  barcode: String
+  weightGrams: Int
+  lengthMm: Int
+  widthMm: Int
+  heightMm: Int
+}
+
+input UpdateProductVariantInput {
+  sku: String
+  price: BigDecimal
+  attributes: JSON
+  barcode: String
+  weightGrams: Int
+  lengthMm: Int
+  widthMm: Int
+  heightMm: Int
+  clearDimensions: Boolean
+  isActive: Boolean
+}
+
+extend type Mutation {
+  """
+  Submit/update the caller's integer 1-5 star rating. Requires rating:write and an
+  active canonical account. One rating per user/product; no verified-purchase rule.
+  No user ID is accepted, so callers cannot edit another user's rating.
+  """
+  rateProduct(productId: ID!, stars: Int!): Product!
+  createProduct(input: CreateProductInput!): Product!
+  updateProduct(productId: ID!, input: UpdateProductInput!): Product!
+  deleteProduct(productId: ID!): Boolean!
+
+  createProductVariant(input: CreateProductVariantInput!): ProductVariant!
+  updateProductVariant(variantId: ID!, input: UpdateProductVariantInput!): ProductVariant!
+  deleteProductVariant(variantId: ID!): Boolean!
+
+  """Get-or-create a brand by case-insensitive name."""
+  createBrand(name: String!): Brand!
+  updateProductImage(imageId: ID!, altText: String!): ProductImage!
+  """Moves the image to position 0, keeping the others' relative order."""
+  setPrimaryProductImage(imageId: ID!): [ProductImage!]!
+  """imageIds must list each of the product's images exactly once."""
+  reorderProductImages(productId: ID!, imageIds: [ID!]!): [ProductImage!]!
+  deleteProductImage(imageId: ID!): Boolean!
+}

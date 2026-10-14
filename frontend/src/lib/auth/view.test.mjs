@@ -1,0 +1,169 @@
+import { describe, expect, test } from "bun:test";
+import { authFieldId, captchaFailure, formMessages, formMethods, googleProfileErrors, methodNeedsCaptcha, temporaryAuthMessage } from "./view";
+
+const input = (name, value, group = "default", type = "text", messages = []) => ({
+  type: "input", group, attributes: { name, value, type, required: true }, messages,
+});
+const csrf = input("csrf_token", "provider-csrf-control", "default", "hidden");
+const password = input("method", "password", "password", "submit");
+
+test("verified Google onboarding is passwordless, immutable-email and error-free until actually submitted", () => {
+  const nodes = [csrf, input("provider", "google", "oidc", "submit"),
+    input("traits.username", "", "default", "text", [{ id: 4000002, type: "error" }]),
+    input("traits.dateOfBirth", "", "default", "text", [{ id: 4000002, type: "error" }]), password];
+  const context = { flow: "fixture", email: "verified@example.test", submitted: false };
+  const initial = formMethods(nodes, "registration", context);
+  expect(initial.map((method) => method.name)).toEqual(["oidc"]);
+  expect(initial[0].fields.some((field) => field.error)).toBe(false);
+  expect(initial[0].fields.find((field) => field.name === "traits.email")).toMatchObject({
+    value: "verified@example.test", readOnly: true });
+  const retry = formMethods(nodes, "registration", { ...context, submitted: true,
+    username: "chosen-name", dateOfBirth: "" })[0];
+  expect(retry.fields.find((field) => field.name === "traits.username").value).toBe("chosen-name");
+  expect(retry.fields.find((field) => field.name === "traits.username").error).toBeUndefined();
+  expect(retry.fields.find((field) => field.name === "traits.dateOfBirth").error).toBeTruthy();
+  expect(googleProfileErrors("chosen-name", "1990-02-28")).toEqual({});
+  expect(googleProfileErrors(" ", "1990-02-30")["traits.dateOfBirth"]).toBeTruthy();
+  expect(googleProfileErrors("chosen-name", "2990-02-28")["traits.dateOfBirth"]).toBeTruthy();
+});
+
+test("initial registration: Google entry has no profile fields or CAPTCHA, ordinary form has one of each field", () => {
+  const nodes = [csrf, password, input("provider", "google", "oidc", "submit"), input("password", "", "password", "password"),
+    input("traits.dateOfBirth", "", "default"), input("traits.username", "", "default"), input("traits.email", "", "default", "email")];
+  const methods = formMethods(nodes, "registration");
+  expect(methods.map((method) => method.name)).toEqual(["oidc", "password"]);
+  expect(methods[0].fields.map((field) => field.name)).toEqual(["csrf_token"]);
+  expect(methodNeedsCaptcha("registration", methods[0])).toBe(false);
+  expect(methods[1].fields.filter((field) => field.type !== "hidden").map((field) => field.name))
+    .toEqual(["traits.email", "traits.username", "traits.dateOfBirth", "password"]);
+  expect(methodNeedsCaptcha("registration", methods[1])).toBe(true);
+  const completion = formMethods(nodes, "registration", { flow: "f", email: "v@example.test", submitted: false });
+  expect(completion).toHaveLength(1);
+  expect(methodNeedsCaptcha("registration", completion[0])).toBe(true);
+  expect(completion[0].fields.some((field) => field.name === "password")).toBe(false);
+});
+
+describe("safe provider form projection", () => {
+  test("recovery and reset use provider controls without exposing proofs or unrelated settings", () => {
+    const recovery = formMethods([csrf, input("code", "never-echo", "code"),
+      input("method", "code", "code", "submit")], "recovery")[0];
+    expect(recovery.label).toBe("Continue to password reset");
+    expect(recovery.fields.find((field) => field.name === "code").value).toBe("");
+    const reset = formMethods([csrf, input("password", "never-echo", "password", "password"),
+      password, input("method", "profile", "profile", "submit")], "reset");
+    expect(reset.map((method) => method.name)).toEqual(["password"]);
+    expect(reset[0].fields.find((field) => field.name === "password").autocomplete).toBe("new-password");
+    expect(formMessages([{ id: 4060006, type: "error", text: "raw" }], "recovery")[0]).toContain("already used");
+    expect(formMessages([{ id: 5000001, type: "error", text: "raw" }], "recovery")[0]).toContain("temporarily unavailable");
+  });
+  test("retains required controls and actual schema fields but never echoes credential values", () => {
+    const methods = formMethods([
+      csrf, input("traits.email", "customer@bytecore.example"),
+      input("traits.username", "customer"), input("traits.dateOfBirth", "1990-06-01"),
+      input("password", "must-not-be-rendered", "password", "password"), password,
+    ], "registration");
+    expect(methods).toHaveLength(1);
+    expect(methods[0].fields.find((field) => field.name === "csrf_token").value).toBe("provider-csrf-control");
+    expect(methods[0].fields.find((field) => field.name === "traits.username").value).toBe("customer");
+    expect(methods[0].fields.find((field) => field.name === "traits.dateOfBirth").type).toBe("date");
+    expect(methods[0].fields.find((field) => field.name === "password").value).toBe("");
+    expect(JSON.stringify(methods)).not.toContain("must-not-be-rendered");
+  });
+  test("keeps real enrolled factor controls separate rather than requiring both", () => {
+    const methods = formMethods([
+      csrf, input("totp_code", "must-not-echo-otp", "totp"),
+      input("method", "totp", "totp", "submit"),
+      input("lookup_secret", "must-not-echo-recovery", "lookup_secret"),
+      input("method", "lookup_secret", "lookup_secret", "submit"),
+    ], "login");
+    expect(methods.map((method) => method.name)).toEqual(["totp", "lookup_secret"]);
+    expect(methods[0].fields.some((field) => field.name === "lookup_secret")).toBe(false);
+    expect(methods[1].fields.some((field) => field.name === "totp_code")).toBe(false);
+    expect(JSON.stringify(methods)).not.toContain("must-not-echo");
+  });
+  test("projects sent-email verification without duplicating its hidden method or turning resend into an email field", () => {
+    const methods = formMethods([
+      input("method", "code", "code", "hidden"), input("code", "must-not-echo", "code"),
+      input("method", "code", "code", "submit"), csrf,
+      { ...input("email", "customer@bytecore.example", "code", "submit"), attributes: {
+        name: "email", value: "customer@bytecore.example", type: "submit",
+      } },
+    ], "verification");
+    expect(methods).toHaveLength(1);
+    expect(methods[0].label).toBe("Verify email");
+    expect(methods[0].fields.map((field) => field.name)).toEqual(["code", "csrf_token"]);
+    expect(methods[0].fields[0].value).toBe("");
+    expect(methods[0].resendEmail).toBe("customer@bytecore.example");
+  });
+  test("fails explicitly for missing provider CSRF or an unsupported required node", () => {
+    expect(() => formMethods([password], "login")).toThrow();
+    expect(() => formMethods([csrf, input("identity.role", "ADMIN"), password], "registration")).toThrow();
+    expect(() => formMethods([csrf, input("method", "profile", "profile", "submit")], "registration")).toThrow();
+  });
+  test("does not display raw infrastructure diagnostics or arbitrary provider markup", () => {
+    expect(formMessages([{ id: 5000001, type: "error", text: "http://private-service failed: credential" }]))
+      .toEqual([temporaryAuthMessage]);
+    expect(formMessages([{ id: 4000006, type: "error", text: "arbitrary <script>markup</script>" }]))
+      .toEqual(["Email or password is incorrect. Please try again."]);
+  });
+  test("maps actual Kratos policy IDs without rendering raw text or untrusted reasons", () => {
+    for (const [id, context, fragment] of [
+      [4000032, { min_length: 8 }, "at least 8 UTF-8 bytes"],
+      [4000033, { max_length: 72 }, "no more than 72 UTF-8 bytes"],
+      [4000031, {}, "unlike your email"],
+      [4000034, { breaches: 100 }, "known to be breached"],
+      [4000005, { reason: "http://internal/?password=private-value" }, "rejected by the account security policy"],
+    ]) {
+      const messages = [{ id, context, type: "error", text: "private-value" }];
+      const expected = id === 4000005 ? "does not meet the security policy" : fragment;
+      expect(formMessages(messages, "registration")[0]).toContain(expected);
+      const field = formMethods([csrf, input("password", "private-value", "password", "password", messages), password], "registration")[0].fields;
+      expect(field.find((value) => value.name === "password").error).toContain(expected);
+      expect(JSON.stringify(field)).not.toContain("private-value");
+    }
+    expect(formMessages([{ id: 4000032, context: { min_length: "secret" }, type: "error" }])[0])
+      .toBe("This password was rejected. Choose another.");
+  });
+  test("breach mapping never implies that another user chose the password", () => {
+    const message = formMessages([{ id: 4000034, type: "error", context: { breaches: 100 } }], "registration")[0];
+    expect(message).toBe("This password is known to be breached. Choose another.");
+    expect(message).not.toMatch(/unique|another user|already used/i);
+  });
+  test("infrastructure failures are form-level, never invalid-password errors", () => {
+    for (const message of [
+      { id: 5000001, type: "error", text: "private failure" },
+      { id: 4000001, type: "error", text: "Authentication is unavailable. Try again." },
+    ]) {
+      expect(formMessages([message], "registration")).toEqual([temporaryAuthMessage]);
+      expect(formMethods([csrf, input("password", "", "password", "password", [message]), password], "registration")[0]
+        .fields.find((value) => value.name === "password").error).toBeUndefined();
+    }
+  });
+  test("rejects malformed field messages rather than silently dropping validation", () => {
+    expect(() => formMethods([csrf, input("password", "", "password", "password", {}), password], "registration"))
+      .toThrow("Invalid provider messages");
+  });
+  test("login credential/account/policy rejections stay generic", () => {
+    for (const id of [4000006, 4000037, 4010010, 4000034, 4000031]) {
+      expect(formMessages([{ id, type: "error", text: "account exists", context: { reason: "private" } }], "login"))
+        .toEqual(["Email or password is incorrect. Please try again."]);
+    }
+  });
+  test("preserves safe CAPTCHA/expiry recovery and stable field targets", () => {
+    expect(formMessages([{ id: 4070002, type: "error" }], "verification")[0]).toContain("already completed");
+    expect(formMessages([{ id: 4070003, type: "error" }], "verification")[0]).not.toContain("code is incorrect");
+    expect(formMessages([{ id: 4000012, type: "error" }], "verification")[0]).not.toContain("code is incorrect");
+    expect(formMessages([{ id: 4070001, type: "error" }], "verification")[0]).toContain("verification link");
+    expect(formMessages([{ id: 5000001, type: "error" }], "verification")).toEqual([temporaryAuthMessage]);
+    expect(formMessages([{ id: 1080003, type: "info" }], "verification")[0]).toContain("latest email");
+    expect(formMessages([{ id: 4000001, type: "error", text: "The security check expired. Try again." }], "registration"))
+      .toEqual(["The security check expired. Try again."]);
+    expect(formMessages([{ id: 4040001, type: "error" }], "registration")[0]).toContain("form has expired");
+    expect(authFieldId("password", "traits.email")).toBe("auth-password-traits-email");
+    expect(captchaFailure(401)).toBe("expired");
+    expect(captchaFailure(503)).toBe("service");
+    expect(captchaFailure(400)).toBe("captcha");
+    expect(formMessages([{ id: 4000038, type: "error", text: "private" }])[0]).toContain("security check failed");
+    expect(formMessages([{ id: 4000040, type: "error", text: "private" }])).toEqual(["Enter a valid email address."]);
+  });
+});

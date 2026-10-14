@@ -1,0 +1,312 @@
+# Production-mode override of compose.yml. Start it only through
+# scripts/prod.sh (`make prod`), which validates .env.prod, prepares the TLS
+# material and the Postgres storage key, and exports the derived public origins
+# (PROD_*_ORIGIN) used below:
+#
+#   docker compose -p bytecore-prod -f infrastructure/compose.yml \
+#     -f infrastructure/compose.prod.yml --env-file .env.prod up -d --build --wait
+#
+# Differences from the dev stack: production builds and profiles (Spring
+# `prod`, Next.js standalone, Hydra/Kratos without --dev), no dev-token
+# endpoint or dev OAuth client, no published ports except the Caddy TLS edge,
+# TLS-only Postgres on gocryptfs-encrypted storage, configurable SMTP (Mailpit
+# only under the opt-in `sandbox-mail` profile) and isolated volumes per
+# Compose project. See docs/production-setup.md.
+
+x-prod-ca: &prod-ca ${PROD_SECRETS_DIR:?run through scripts/prod.sh}/tls/ca.crt:/review-certs/ca.crt:ro
+
+services:
+  postgres:
+    # Whole data directory (tables, indexes, WAL, temp files) in a
+    # gocryptfs-encrypted volume, unlocked only inside this container with the
+    # key file kept outside the volume (docs/security/encryption-at-rest.md).
+    build: ./review/postgres-encrypted
+    image: bytecore/postgres-gocryptfs:17-review
+    container_name: !reset null
+    ports: !reset []
+    devices:
+      - /dev/fuse:/dev/fuse
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - apparmor:unconfined
+    entrypoint: ["encrypted-storage-entrypoint.sh", "/review/postgres-tls-entrypoint.sh"]
+    environment:
+      PGDATA_KEY_FILE: /run/secrets/pgdata_key
+    volumes: !override
+      - postgres_crypt_volume:/var/lib/postgresql/cipher
+      - ${PROD_SECRETS_DIR}/pgdata.key:/run/secrets/pgdata_key:ro
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+      - ./oauth/auth-store:/auth-store:ro
+      - ./review/postgres-tls-entrypoint.sh:/review/postgres-tls-entrypoint.sh:ro
+      - ./review/pg_hba.conf:/etc/postgresql/review/pg_hba.conf:ro
+      - ${PROD_SECRETS_DIR}/tls/postgres.crt:/review-certs/postgres.crt:ro
+      - ${PROD_SECRETS_DIR}/tls/postgres.key:/review-certs/postgres.key:ro
+
+  hydra-migrate:
+    container_name: !reset null
+    volumes:
+      - *prod-ca
+
+  hydra:
+    container_name: !reset null
+    ports: !reset []
+    # Same config as dev, without --dev.
+    command: ["serve", "all", "--config", "/etc/hydra/hydra.yml"]
+    environment:
+      URLS_SELF_ISSUER: ${PROD_HYDRA_ORIGIN:?run through scripts/prod.sh}
+      URLS_LOGIN: ${PROD_BRIDGE_ORIGIN:?run through scripts/prod.sh}/login
+      URLS_CONSENT: ${PROD_BRIDGE_ORIGIN}/consent
+      URLS_LOGOUT: ${PROD_STOREFRONT_ORIGIN:?run through scripts/prod.sh}/account
+      SERVE_COOKIES_SAME_SITE_MODE: Lax
+      SERVE_COOKIES_SECURE: "true"
+      SQA_OPT_OUT: "true"
+    volumes:
+      - *prod-ca
+
+  hydra-public:
+    ports: !reset []
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:4444/health/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  kratos-migrate:
+    container_name: !reset null
+    volumes:
+      - *prod-ca
+
+  kratos:
+    container_name: !reset null
+    ports: !reset []
+    # Same entrypoint/config as dev, without --dev.
+    command: ["serve", "--watch-courier", "--config", "/etc/kratos/kratos.yml"]
+    depends_on: !override
+      kratos-migrate:
+        condition: service_completed_successfully
+    environment:
+      PUBLIC_STOREFRONT_ORIGIN: ${PROD_STOREFRONT_ORIGIN}
+      PUBLIC_KRATOS_ORIGIN: ${PROD_KRATOS_ORIGIN:?run through scripts/prod.sh}
+      PUBLIC_BRIDGE_ORIGIN: ${PROD_BRIDGE_ORIGIN}
+      GOOGLE_CALLBACK_BASE_URL: ${PROD_STOREFRONT_ORIGIN}
+      SELFSERVICE_METHODS_PASSWORD_CONFIG_HAVEIBEENPWNED_ENABLED: "true"
+      SQA_OPT_OUT: "true"
+      SMTP_HOST: ${SMTP_HOST:?SMTP_HOST is required}
+      SMTP_PORT: ${SMTP_PORT:?SMTP_PORT is required}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-false}
+      SMTP_IMPLICIT_TLS: ${SMTP_IMPLICIT_TLS:-false}
+      SMTP_FROM: ${SMTP_FROM:?SMTP_FROM is required}
+    volumes:
+      - *prod-ca
+
+  # Local mail catcher, only with SMTP_HOST=mailpit (scripts/prod.sh enables the
+  # profile). Captures mail; it never delivers to real inboxes.
+  mailpit:
+    container_name: !reset null
+    profiles: [sandbox-mail]
+    ports: !override
+      - "127.0.0.1:${PROD_MAILPIT_UI_PORT:-18025}:8025"
+
+  oauth-service:
+    container_name: !reset null
+    ports: !reset []
+    environment:
+      KRATOS_BROWSER_URL: ${PROD_KRATOS_ORIGIN}
+      OAUTH_BRIDGE_BROWSER_URL: ${PROD_BRIDGE_ORIGIN}
+      BFF_REDIRECT_URI: ${PROD_STOREFRONT_ORIGIN}/auth/callback
+      # No dev-token server on 4447 and no `bytecore-web` dev client.
+      OAUTH_DEV_TOKEN_ENDPOINT: "disabled"
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-false}
+      SMTP_IMPLICIT_TLS: ${SMTP_IMPLICIT_TLS:-false}
+      SMTP_FROM: ${SMTP_FROM}
+    volumes:
+      - *prod-ca
+
+  hive-router:
+    container_name: !reset null
+    ports: !reset []
+    volumes:
+      # Introspection and the GraphQL IDE off; browsers never call the router.
+      - ./prod/router.config.yaml:/app/router.config.yaml:ro
+    networks:
+      default:
+        ipv4_address: ${PROD_HIVE_IP:-172.28.92.40}
+
+  backend:
+    container_name: !reset null
+    ports: !reset []
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: &prod-jdbc jdbc:postgresql://postgres:5432/retail?sslmode=verify-full&sslrootcert=/review-certs/ca.crt
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      SPRING_DATASOURCE_URL: *prod-jdbc
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${PROD_HYDRA_ORIGIN}
+      TOKEN_INTROSPECTION_ENABLED: "true"
+      GUEST_CART_ALLOWED_ORIGINS: ${PROD_STOREFRONT_ORIGIN}
+      CART_GUEST_SECURE: "true"
+      CART_GUEST_ALLOWEDORIGINS_0: ${PROD_STOREFRONT_ORIGIN}
+      RATE_LIMIT_TRUSTED_PROXIES: 127.0.0.1/32,::1/128,${PROD_HIVE_IP:-172.28.92.40}/32
+      SPRING_MAIL_USERNAME: ${SMTP_USERNAME:-}
+      SPRING_MAIL_PASSWORD: ${SMTP_PASSWORD:-}
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE: ${SMTP_STARTTLS:-false}
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_REQUIRED: ${SMTP_STARTTLS:-false}
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_SSL_ENABLE: ${SMTP_IMPLICIT_TLS:-false}
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH: ${PROD_SMTP_AUTH:-false}
+      SUPPORT_MAIL_TO: ${SUPPORT_MAIL_TO:?SUPPORT_MAIL_TO is required}
+    volumes:
+      - *prod-ca
+
+  kafka:
+    container_name: !reset null
+    ports: !reset []
+
+  payment-service:
+    container_name: !reset null
+    ports: !reset []
+    environment:
+      PAYMENT_INTERNAL_TOKEN: ${PAYMENT_INTERNAL_TOKEN:?PAYMENT_INTERNAL_TOKEN is required}
+    volumes:
+      - *prod-ca
+
+  # Optional Stripe test-mode webhook forwarder for hosts without a public URL
+  # (profile "stripe", enabled by scripts/prod.sh when it fetched the CLI secret).
+  stripe-listener:
+    image: stripe/stripe-cli:v1.53.1@sha256:11c46caeead82e329f14823dd622d494b4cc8c1b9766f724d122d2af42c97540
+    profiles: [stripe]
+    command: ["listen", "--forward-to", "http://payment-service:8081/webhooks/stripe",
+      "--events", "payment_intent.succeeded,payment_intent.payment_failed,payment_intent.processing,payment_intent.canceled"]
+    environment:
+      STRIPE_API_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_DEVICE_NAME: bytecore-prod
+    depends_on:
+      payment-service:
+        condition: service_started
+    restart: unless-stopped
+
+  # Next.js production server + server-side BFF (frontend/Dockerfile).
+  frontend:
+    build:
+      context: ../frontend
+      target: runtime
+    depends_on:
+      postgres:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+      hive-router:
+        condition: service_started
+      oauth-service:
+        condition: service_healthy
+    environment: &frontend-env
+      HIVE_GRAPHQL_URL: http://hive-router:4000/graphql
+      MEDIA_BACKEND_URL: http://backend:8080
+      STOREFRONT_ORIGIN: ${PROD_STOREFRONT_ORIGIN}
+      AUTH_OAUTH_ISSUER: ${PROD_HYDRA_ORIGIN}
+      AUTH_KRATOS_URL: ${PROD_KRATOS_ORIGIN}
+      AUTH_BRIDGE_URL: ${PROD_BRIDGE_ORIGIN}
+      AUTH_DATABASE_URL: postgres://${AUTH_DB_USER:?AUTH_DB_USER is required}:${AUTH_DB_PASSWORD:?AUTH_DB_PASSWORD is required}@postgres:5432/storefront_auth?sslmode=verify-full&sslrootcert=/review-certs/ca.crt
+      AUTH_CLIENT_ID: ${BFF_CLIENT_ID:?BFF_CLIENT_ID is required}
+      AUTH_CLIENT_SECRET: ${BFF_CLIENT_SECRET:?BFF_CLIENT_SECRET is required}
+      AUTH_BRIDGE_SECRET: ${AUTH_BRIDGE_SECRET:?AUTH_BRIDGE_SECRET is required}
+      AUTH_SEAL_KEYS: ${AUTH_SEAL_KEYS:?AUTH_SEAL_KEYS is required}
+      # Server-side calls to the public origins go through Caddy; the internal
+      # CA is name-constrained to PROD_HOST and `postgres`.
+      NODE_EXTRA_CA_CERTS: /review-certs/ca.crt
+    volumes:
+      - *prod-ca
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+      - /app/.next/cache:rw,noexec,nosuid,size=256m,uid=1000,gid=1000
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+
+  # Every minute: retires expired BFF sessions and retries pending Hydra grant
+  # revocations (docs/auth/browser-contract.md).
+  auth-maintenance:
+    build:
+      context: ../frontend
+      target: maintenance
+    depends_on:
+      frontend:
+        condition: service_healthy
+    environment: *frontend-env
+    volumes:
+      - *prod-ca
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+
+  # The only service with public ports: TLS edge for every public origin.
+  caddy:
+    image: caddy:2.10-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+    depends_on:
+      frontend:
+        condition: service_healthy
+      kratos:
+        condition: service_healthy
+      hydra-public:
+        condition: service_healthy
+      oauth-service:
+        condition: service_healthy
+      payment-service:
+        condition: service_healthy
+    environment:
+      PROD_HOST: ${PROD_HOST:?PROD_HOST is required}
+      PROD_HTTP_PORT: ${PROD_HTTP_PORT:-80}
+      PROD_HTTPS_PORT: ${PROD_HTTPS_PORT:-443}
+      PROD_KRATOS_PORT: ${PROD_KRATOS_PORT:-9433}
+      PROD_HYDRA_PORT: ${PROD_HYDRA_PORT:-9444}
+      PROD_BRIDGE_PORT: ${PROD_BRIDGE_PORT:-9446}
+      PROD_CADDY_TLS: ${PROD_CADDY_TLS:?run through scripts/prod.sh}
+      PROD_ACME_EMAIL: ${PROD_ACME_EMAIL:-}
+      PROD_HSTS_MAX_AGE: ${PROD_HSTS_MAX_AGE:-31536000}
+    ports:
+      - "${PROD_BIND:-127.0.0.1}:${PROD_HTTP_PORT:-80}:${PROD_HTTP_PORT:-80}"
+      - "${PROD_BIND:-127.0.0.1}:${PROD_HTTPS_PORT:-443}:${PROD_HTTPS_PORT:-443}"
+      - "${PROD_BIND:-127.0.0.1}:${PROD_KRATOS_PORT:-9433}:${PROD_KRATOS_PORT:-9433}"
+      - "${PROD_BIND:-127.0.0.1}:${PROD_HYDRA_PORT:-9444}:${PROD_HYDRA_PORT:-9444}"
+      - "${PROD_BIND:-127.0.0.1}:${PROD_BRIDGE_PORT:-9446}:${PROD_BRIDGE_PORT:-9446}"
+    volumes:
+      - ./prod/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./prod/tls-manual.caddy:/etc/caddy/tls-manual.caddy:ro
+      - ./prod/tls-acme.caddy:/etc/caddy/tls-acme.caddy:ro
+      - ${PROD_EDGE_CERT_FILE:?run through scripts/prod.sh}:/certs/server.crt:ro
+      - ${PROD_EDGE_KEY_FILE:?run through scripts/prod.sh}:/certs/server.key:ro
+      # ACME account and issued certificates survive restarts.
+      - caddy_data:/data
+      - caddy_config:/config
+    read_only: true
+    networks:
+      default:
+        aliases:
+          - ${PROD_HOST}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
+networks:
+  default:
+    ipam: !override
+      config:
+        - subnet: ${PROD_SUBNET:-172.28.92.0/24}
+
+volumes:
+  postgres_crypt_volume:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,362 @@
+query StorefrontMe {
+  me { id username email role }
+}
+
+fragment CheckoutDetailsFields on CheckoutDetails {
+  contactEmail contactPhone paymentSelection
+  shippingAddress { firstName lastName city countryCode postalCode addressLine1 addressLine2 phone }
+  billingAddress { firstName lastName city countryCode postalCode addressLine1 addressLine2 phone }
+  shipping {
+    method charge currency estimate supportedCountries
+    pickupLocation { name address { firstName lastName city countryCode postalCode addressLine1 addressLine2 phone } }
+  }
+}
+
+fragment CheckoutOrderFields on CheckoutOrder {
+  publicId requestId status cancellationReason createdAt paymentInteraction
+  payment { status declineReason }
+  refund { status amount currency failureReason }
+  cancellationEligibility { allowed reason }
+  lines { productVariantId productName sku attributes quantity unitPrice subtotal }
+  totals { merchandiseSubtotal shippingCharge total currency }
+  details { ...CheckoutDetailsFields }
+}
+
+fragment CheckoutPreviewFields on CheckoutPreview {
+  quoteVersion placeable
+  lines { productVariantId productName sku attributes quantity unitPrice subtotal }
+  totals { merchandiseSubtotal shippingCharge total currency }
+  details { ...CheckoutDetailsFields }
+  issues { code productVariantId message }
+  availableShippingOptions { method charge currency estimate supportedCountries }
+}
+
+query CheckoutConfiguration {
+  checkoutPaymentConfiguration { available publishableKey }
+}
+query CheckoutPrefill {
+  me {
+    email
+    addresses { id firstName lastName city country postalCode addressLine1 addressLine2 mobile }
+  }
+}
+query CustomerCheckoutPreview($input: CheckoutInput!) {
+  checkoutPreview(input: $input) { ...CheckoutPreviewFields }
+}
+query GuestCheckoutPreview($input: CheckoutInput!) {
+  guestCheckoutPreview(input: $input) { ...CheckoutPreviewFields }
+}
+mutation CustomerCheckoutPlace($input: PlaceOrderInput!) {
+  createOrder(input: $input) { checkout { ...CheckoutOrderFields } }
+}
+mutation GuestCheckoutPlace($input: PlaceOrderInput!) {
+  createGuestOrder(input: $input) { ...CheckoutOrderFields }
+}
+query CustomerCheckoutConfirmation($requestId: UUID!) {
+  checkoutOrder(requestId: $requestId) { ...CheckoutOrderFields }
+}
+query GuestCheckoutConfirmation($requestId: UUID!) {
+  guestOrder(requestId: $requestId) { ...CheckoutOrderFields }
+}
+query CustomerPaymentSession($requestId: UUID!) {
+  checkoutPaymentSession(requestId: $requestId) { status publishableKey clientSecret failureCode }
+}
+query GuestPaymentSession($requestId: UUID!) {
+  guestPaymentSession(requestId: $requestId) { status publishableKey clientSecret failureCode }
+}
+mutation CustomerCheckoutCancel($input: CancelOrderInput!) {
+  cancelOrder(input: $input) { requestId order { publicId status } }
+}
+mutation GuestCheckoutCancel($input: CancelOrderInput!) {
+  cancelGuestOrder(input: $input) { requestId order { publicId status } }
+}
+
+query IntegrationShippingOptions($countryCode: String) {
+  checkoutShippingOptions(countryCode: $countryCode) {
+    method
+    charge
+    currency
+    estimate
+    supportedCountries
+  }
+}
+
+query IntegrationGuestCart {
+  guestCart {
+    id
+    expiresAt
+    totals { subtotal currency }
+    items {
+      id
+      quantity
+      subtotal
+      productVariant { id sku price attributes isActive }
+    }
+  }
+}
+
+query IntegrationGuestOrder($publicId: UUID, $requestId: UUID) {
+  guestOrder(publicId: $publicId, requestId: $requestId) {
+    publicId
+    requestId
+    status
+    totals { merchandiseSubtotal shippingCharge total currency }
+  }
+
+}
+
+query CatalogCategories {
+  categories {
+    id
+    name
+    slug
+    parent { id }
+  }
+}
+
+query CatalogListing($input: ProductSearchInput!) {
+  searchProducts(input: $input) {
+    items {
+      id
+      name
+      slug
+      averageRating
+      ratingCount
+      images { url altText width height }
+      variants { id price isActive }
+    }
+    pageInfo { page size totalItems totalPages }
+    facets {
+      categories { id name count }
+      attributes { name values { value count } }
+      price { min max }
+    }
+  }
+}
+
+query CatalogSuggestions($query: String!, $limit: Int) {
+  productSearchSuggestions(query: $query, limit: $limit) {
+    productId
+    name
+    slug
+  }
+}
+
+query HomeDiscovery {
+  searchProducts(input: {page: 0, size: 1, sort: PRICE_ASC}) {
+    facets { categories { id name count } }
+  }
+}
+
+query HomeCategoryProducts($categoryId: ID!) {
+  searchProducts(input: {page: 0, size: 4, sort: PRICE_ASC, filters: {categoryId: $categoryId}}) {
+    items {
+      id
+      name
+      slug
+      averageRating
+      ratingCount
+      images { url altText width height }
+      variants { id price isActive }
+    }
+
+    pageInfo { page size totalItems totalPages }
+  }
+}
+
+query VariantAvailability($slug: String!) {
+  product(slug: $slug) {
+    slug
+    variants { id availability purchasableLimit }
+  }
+}
+
+query ProductDetail($slug: String!) {
+  product(slug: $slug) {
+    id
+    name
+    slug
+    description
+    categories { id name slug }
+    averageRating
+    ratingCount
+    brand { id name }
+    images { id url altText width height }
+    variants { id sku price attributes isActive barcode weightGrams lengthMm widthMm heightMm }
+  }
+}
+
+query GuestCartView {
+  guestCart {
+    id
+    totals { subtotal currency }
+    items {
+      id
+      quantity
+      subtotal
+      productVariant {
+        id sku price attributes isActive availability purchasableLimit
+        product { id name slug images { url altText width height } }
+      }
+    }
+  }
+}
+
+mutation GuestCartStart {
+  startGuestCart {
+    created
+    cart { id }
+  }
+}
+
+mutation GuestCartAdd($input: AddCartItemInput!) {
+  addGuestCartItem(input: $input) {
+    id
+    totals { subtotal currency }
+    items {
+      id
+      quantity
+      subtotal
+      productVariant {
+        id sku price attributes isActive availability purchasableLimit
+        product { id name slug images { url altText width height } }
+      }
+    }
+  }
+}
+
+mutation GuestCartUpdate($id: ID!, $input: UpdateCartItemInput!) {
+  updateGuestCartItem(cartItemId: $id, input: $input) {
+    id
+    totals { subtotal currency }
+    items {
+      id
+      quantity
+      subtotal
+      productVariant {
+        id sku price attributes isActive availability purchasableLimit
+        product { id name slug images { url altText width height } }
+      }
+    }
+  }
+}
+
+mutation GuestCartRemove($id: ID!) {
+  removeGuestCartItem(cartItemId: $id) {
+    id
+    totals { subtotal currency }
+    items {
+      id
+      quantity
+      subtotal
+      productVariant {
+        id sku price attributes isActive availability purchasableLimit
+        product { id name slug images { url altText width height } }
+      }
+    }
+  }
+}
+
+mutation GuestCartMerge($requestId: UUID!) {
+  mergeGuestCart(requestId: $requestId) {
+    status
+    conflicts { productVariantId code message }
+  }
+}
+
+query MyCartView {
+  myCart {
+    id
+    totals { subtotal currency }
+    items {
+      id
+      quantity
+      subtotal
+      productVariant {
+        id sku price attributes isActive availability purchasableLimit
+        product { id name slug images { url altText width height } }
+      }
+    }
+  }
+}
+
+mutation MyCartAdd($input: AddCartItemInput!) {
+  addCartItem(input: $input) { id }
+}
+
+mutation MyCartUpdate($id: ID!, $input: UpdateCartItemInput!) {
+  updateCartItem(cartItemId: $id, input: $input) { id }
+}
+
+mutation MyCartRemove($id: ID!) {
+  removeCartItem(cartItemId: $id)
+}
+
+query ProductReviews($productId: ID!, $page: Int, $size: Int, $sort: ReviewSort) {
+  productReviews(productId: $productId, page: $page, size: $size, sort: $sort) {
+    items { id stars title body authorName helpfulCount verifiedPurchase viewerHasVoted viewerIsAuthor createdAt updatedAt }
+    pageInfo { page size totalItems totalPages }
+    averageRating
+    ratingCount
+    distribution { stars count }
+  }
+}
+
+query MyReview($productId: ID!) {
+  myReview(productId: $productId) { id stars title body status createdAt updatedAt }
+  myReviewEligibility(productId: $productId) { canReview hasReview reason }
+}
+
+mutation UpsertMyReview($productId: ID!, $stars: Int!, $title: String!, $body: String!) {
+  upsertMyReview(productId: $productId, stars: $stars, title: $title, body: $body) { id stars title body status createdAt updatedAt }
+}
+
+mutation DeleteMyReview($productId: ID!) {
+  deleteMyReview(productId: $productId)
+}
+
+mutation VoteReviewHelpful($reviewId: ID!) {
+  voteReviewHelpful(reviewId: $reviewId) { id helpfulCount viewerHasVoted }
+}
+
+mutation UnvoteReviewHelpful($reviewId: ID!) {
+  unvoteReviewHelpful(reviewId: $reviewId) { id helpfulCount viewerHasVoted }
+}
+
+query MyAddresses {
+  me {
+    addresses { id firstName lastName city country postalCode addressLine1 addressLine2 mobile }
+  }
+}
+
+mutation AddMyAddress($input: CreateAddressInput!) {
+  addMyAddress(input: $input) { id }
+}
+
+mutation UpdateMyAddress($id: ID!, $input: UpdateAddressInput!) {
+  updateMyAddress(addressId: $id, input: $input) { id }
+}
+
+mutation DeleteMyAddress($id: ID!) {
+  deleteMyAddress(addressId: $id)
+}
+
+query RecommendedProducts($productIds: [ID!]!, $limit: Int) {
+  recommendedProducts(productIds: $productIds, limit: $limit) {
+    id
+    name
+    slug
+    averageRating
+    ratingCount
+    images { url altText width height }
+    variants { id price isActive }
+  }
+}
+
+mutation SubmitContactMessage($input: ContactMessageInput!) {
+  submitContactMessage(input: $input) {
+    accepted
+    reference
+    fieldErrors { field message }
+  }
+}

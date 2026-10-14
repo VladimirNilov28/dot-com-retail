@@ -1,0 +1,67 @@
+type Product {
+  id: ID!
+  name: String!
+  slug: String!
+  description: String
+  """Arithmetic mean of persisted 1-5 star ratings; null when there are no ratings."""
+  averageRating: Float
+  """Number of distinct authenticated users who rated this product."""
+  ratingCount: Int!
+  """Optional brand; null when not specified."""
+  brand: Brand
+  """Ordered gallery; the first image is the primary one. Empty when no image exists."""
+  images: [ProductImage!]!
+  categories: [Category!]!
+  variants: [ProductVariant!]!
+  createdAt: Instant!
+  updatedAt: Instant!
+}
+
+type ProductVariant {
+  id: ID!
+  product: Product!
+  sku: String!
+  price: BigDecimal!
+  attributes: JSON!
+  barcode: String
+  """Canonical weight in grams; null means not specified."""
+  weightGrams: Int
+  """Canonical dimensions in millimetres; all three are present, or all null (not specified)."""
+  lengthMm: Int
+  widthMm: Int
+  heightMm: Int
+  isActive: Boolean!
+  """
+  Public sellable state derived from stock a single order could actually be allocated.
+  Null means it could not be determined (treat as unknown, not as out of stock).
+  Informational only; checkout re-validates under lock.
+  """
+  availability: ProductAvailability
+  """Largest quantity currently purchasable in one order, capped at 10. Null when unknown."""
+  purchasableLimit: Int
+  createdAt: Instant!
+  updatedAt: Instant!
+}
+
+enum ProductAvailability {
+  AVAILABLE
+  OUT_OF_STOCK
+}
+
+type Brand {
+  id: ID!
+  name: String!
+}
+
+type ProductImage {
+  id: ID!
+  """Relative URL served by the storefront media route."""
+  url: String!
+  altText: String!
+  width: Int!
+  height: Int!
+  byteSize: Int!
+  contentType: String!
+  position: Int!
+  isPrimary: Boolean!
+}

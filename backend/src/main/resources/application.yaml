@@ -6,6 +6,50 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
+  graphql:
+    # Enables the WS transport for the "orderStatusChanged" subscription.
+    # Without this, the schema-declared Subscription field is unreachable:
+    # Spring GraphQL never upgrades the connection (405/timeout) even
+    # though the resolver + publisher are fully implemented.
+    websocket:
+      path: /graphql
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: backend-payment-results
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+  mail:
+    host: ${SMTP_HOST:localhost}
+    port: ${SMTP_PORT:1025}
+    properties:
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 5000
+      mail.smtp.writetimeout: 5000
+  docker:
+    compose:
+      file: ../infrastructure/compose.yml
+      # Spring's own docker-compose auto-management only looks for a .env
+      # file next to compose.yml, never at the repo root where ours lives
+      # (unrelated to Compose CLI's own .env discovery). infrastructure/
+      # is meant to be started explicitly and exclusively via `make dev`
+      # (docker compose --env-file .env ...), so disable the redundant,
+      # differently-configured auto-management path instead of routing
+      # around it with a duplicate/symlinked .env.
+      enabled: false
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://127.0.0.1:4444
 
 logging:
   level:
@@ -13,3 +57,98 @@ logging:
     org.hibernate: WARN
     org.springframework.orm.jpa: WARN
     org.springframework.boot.autoconfigure.orm.jpa: WARN
+
+oauth:
+  service:
+    client-id: ${OAUTH_SERVICE_CLIENT_ID:oauth-service-internal}
+
+# Encryption at rest for personal/order data. APP_DATA_KEYS is "<id>:<base64 32-byte key>[,...]" and must
+# come from private env (never Git). Append new keys and point APP_DATA_ACTIVE_KEY at them to rotate.
+app:
+  data-encryption:
+    keys: ${APP_DATA_KEYS:}
+    active-key: ${APP_DATA_ACTIVE_KEY:}
+    backfill: ${APP_DATA_BACKFILL:true}
+
+# Uploaded product images live here, outside the source tree (a volume in Docker).
+media:
+  storage-dir: ${MEDIA_STORAGE_DIR:./media-data}
+
+cart:
+  guest:
+    ttl: PT720H
+    cleanup-interval: PT1H
+    merge-receipt-ttl: PT720H
+    cleanup-batch-size: 100
+
+# Development catalog, not a carrier or a production pickup integration.
+checkout:
+  standard-charge: 4.99
+  express-charge: 9.99
+  pickup-charge: 0.00
+  supported-countries: [EE]
+  guest-order-ttl: PT720H
+
+# Contact form: support inbox (Mailpit catches it locally) and outbox poll interval.
+support:
+  mail-to: ${SUPPORT_MAIL_TO:vladimirnilov.it@gmail.com}
+contact:
+  mail-poll-ms: 5000
+
+payment:
+  service-url: ${PAYMENT_SERVICE_URL:http://localhost:8081}
+  internal-token: ${PAYMENT_INTERNAL_TOKEN:}
+
+# Access-token revocation (docs/auth/browser-contract.md "Token revocation"). After
+# local JWT validation every bearer token is introspected at Hydra's admin API
+# (hydra.admin-url) and must be active=true with a matching sub; errors/timeouts
+# reject the request (fail closed). Results are cached per token hash in a bounded
+# LRU map, so a revoked token is accepted for at most cache-ttl (max 30s) after
+# its last successful introspection.
+security:
+  token-introspection:
+    enabled: ${TOKEN_INTROSPECTION_ENABLED:true}
+    timeout: PT2S
+    cache-ttl: PT10S
+    cache-max-entries: 10000
+
+# Token-bucket rate limiting (docs/security/rate-limiting.md). Buckets live in
+# PostgreSQL (rate_limit_buckets) so limits hold across backend instances.
+# capacity = burst size; refill-tokens per refill-period = sustained rate.
+rate-limit:
+  enabled: true
+  # Header carrying the original client address, honoured only from trusted proxies.
+  client-ip-header: X-Forwarded-For
+  # Peers allowed to supply client-ip-header (Next BFF / Hive Router). Compose adds its network.
+  trusted-proxies: ${RATE_LIMIT_TRUSTED_PROXIES:127.0.0.1/32,::1/128}
+  cleanup-idle-after: PT1H
+  cleanup-interval: PT10M
+  policies:
+    # Every request, per JWT subject or client IP.
+    general:
+      capacity: 60
+      refill-tokens: 20
+      refill-period: PT1S
+    # Trusted-proxy traffic with no client address (shared, cached server-side catalog reads).
+    proxy:
+      capacity: 600
+      refill-tokens: 200
+      refill-period: PT1S
+    cart-write:
+      capacity: 30
+      refill-tokens: 1
+      refill-period: PT1S
+      operations: [addCartItem, updateCartItem, removeCartItem, addGuestCartItem, updateGuestCartItem,
+                   removeGuestCartItem, startGuestCart, mergeGuestCart, addWishlistItem, removeWishlistItem]
+    sensitive:
+      capacity: 10
+      refill-tokens: 1
+      refill-period: PT6S
+      operations: [createOrder, createGuestOrder, cancelOrder, cancelGuestOrder, rateProduct,
+                   submitContactMessage, upsertMyReview, deleteMyReview,
+                   voteReviewHelpful, unvoteReviewHelpful, addMyAddress, updateMyAddress, deleteMyAddress]
+    contact:
+      capacity: 5
+      refill-tokens: 5
+      refill-period: PT10M
+      operations: [submitContactMessage]

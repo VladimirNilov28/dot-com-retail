@@ -1,0 +1,70 @@
+# Review-stack TLS edge (infrastructure/compose.review.yml). Every public
+# origin is HTTPS on {$REVIEW_HOST}; each listener uses the same port inside
+# and outside the container, and containers reach these URLs through the
+# `{$REVIEW_HOST}` network alias of this service, so browser-facing URLs work
+# identically from the browser and from server-side code.
+{
+	# Manual certificates from scripts/gen-review-certs.sh; never ACME, no :80.
+	auto_https disable_redirects
+	# Admin API stays on the container loopback (used only by the healthcheck).
+	admin 127.0.0.1:2019
+}
+
+(edge) {
+	tls /certs/server.crt /certs/server.key {
+		protocols tls1.2 tls1.3
+	}
+	header {
+		Strict-Transport-Security "max-age=86400"
+		-Server
+	}
+	encode zstd gzip
+}
+
+# Storefront (Next.js BFF) + Stripe webhook endpoint for `stripe listen`.
+https://{$REVIEW_HOST}:{$REVIEW_STOREFRONT_PORT} {
+	import edge
+	@stripeWebhook {
+		method POST
+		path /webhooks/stripe
+	}
+	handle @stripeWebhook {
+		reverse_proxy payment-service:8081
+	}
+	handle /webhooks/stripe {
+		respond 405
+	}
+	handle {
+		# Caddy trusts no upstream proxies (default), so a client-supplied
+		# X-Forwarded-For is discarded and replaced by the TCP peer address;
+		# the BFF (BFF_TRUSTED_PROXY_HOPS=0) uses that single entry.
+		reverse_proxy frontend:3000 {
+			header_up -Forwarded
+			header_up -X-Real-IP
+		}
+	}
+}
+
+# Ory Kratos public API.
+https://{$REVIEW_HOST}:{$REVIEW_KRATOS_PORT} {
+	import edge
+	reverse_proxy kratos:4433
+}
+
+# Ory Hydra public API (through its form_post nginx shim).
+https://{$REVIEW_HOST}:{$REVIEW_HYDRA_PORT} {
+	import edge
+	reverse_proxy hydra-public:4444
+}
+
+# oauth-service login/consent bridge.
+https://{$REVIEW_HOST}:{$REVIEW_BRIDGE_PORT} {
+	import edge
+	reverse_proxy oauth-service:4446
+}
+
+# Mailpit web UI (review mail catcher).
+https://{$REVIEW_HOST}:{$REVIEW_MAILPIT_PORT} {
+	import edge
+	reverse_proxy mailpit:8025
+}

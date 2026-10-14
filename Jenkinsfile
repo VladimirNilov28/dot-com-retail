@@ -2,25 +2,109 @@ pipeline {
 
     agent any
 
-
     options {
-
         skipDefaultCheckout(true)
-
+        timestamps()
     }
 
+    environment {
+        // true  -> comment into PR on every run (testing ci comments)
+        commentTest = false
+    }
 
     stages {
 
-
         stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+
+        stage('Build context') {
+            steps {
+                sh '''
+                    echo "BRANCH_NAME=${BRANCH_NAME:-}"
+                    echo "CHANGE_ID=${CHANGE_ID:-}"
+                    echo "CHANGE_BRANCH=${CHANGE_BRANCH:-}"
+                    echo "CHANGE_TARGET=${CHANGE_TARGET:-}"
+                    echo "GIT_COMMIT=${GIT_COMMIT:-}"
+                    echo "BUILD_NUMBER=${BUILD_NUMBER:-}"
+                '''
+            }
+        }
+
+
+        stage('Mirror to Gitea') {
 
             steps {
 
-                checkout scm
+                script {
+                    env.MIRROR_BRANCH = env.CHANGE_BRANCH ?: env.BRANCH_NAME
+                }
 
+                sshagent(credentials: ['gitea-ssh']) {
+
+                    sh '''
+                        set -euo pipefail
+
+                        echo "Mirroring branch '${MIRROR_BRANCH}' to Gitea"
+
+                        git remote remove gitea 2>/dev/null || true
+
+                        git remote add gitea \
+                            git@gitea.kood.tech:vladimirnilov/i-love-shopping1.git
+
+                        git push \
+                            --force \
+                            gitea \
+                            "HEAD:refs/heads/${MIRROR_BRANCH}"
+
+                        echo "Mirror completed"
+                    '''
+                }
+            }
+        }
+
+
+        stage('Ensure pull request') {
+
+            when {
+
+                allOf {
+
+                    not {
+                        changeRequest()
+                    }
+
+                    anyOf {
+
+                        branch pattern: 'feature/.*', comparator: 'REGEXP'
+
+                        branch pattern: 'fix/.*', comparator: 'REGEXP'
+
+                        branch pattern: 'ci/.*', comparator: 'REGEXP'
+                    }
+                }
             }
 
+
+            steps {
+
+                withCredentials([
+
+                    string(
+                        credentialsId: 'github-token',
+                        variable: 'GITHUB_TOKEN'
+                    )
+
+                ]) {
+
+                    sh '''
+                        python infrastructure/jenkins/run.py ensure-pr
+                    '''
+                }
+            }
         }
 
 
@@ -31,15 +115,12 @@ pipeline {
                 sh '''
                     echo "Project structure"
 
-                    ls -la
-
                     test -d backend
                     test -d frontend
                     test -d infrastructure
+                    test -f backend/gradlew
                 '''
-
             }
-
         }
 
 
@@ -51,13 +132,10 @@ pipeline {
 
                     sh '''
                         chmod +x gradlew
-                        ./gradlew classes
+                        ./gradlew --no-daemon classes
                     '''
-
                 }
-
             }
-
         }
 
 
@@ -68,68 +146,128 @@ pipeline {
                 dir('backend') {
 
                     sh '''
-                        ./gradlew test
-                    '''
+                        set -o pipefail
 
-                }
+                        chmod +x gradlew
 
-            }
-
-        }
-
-        stage('Comment PR') {
-            steps {
-                withCredentials([
-                    string(
-                        credentialsId: 'github-token',
-                        variable: 'GITHUB_TOKEN'
-                    )
-                ]) {
-                    sh '''
-                        set -e
-
-                        curl --fail --silent --show-error \
-                            --request POST \
-                            -H "Authorization: Bearer $GITHUB_TOKEN" \
-                            -H "Accept: application/vnd.github+json" \
-                            -H "X-GitHub-Api-Version: 2022-11-28" \
-                            https://api.github.com/repos/VladimirNilov28/dot-com-retail/issues/1/comments \
-                            --data '{"body":"🤖 Jenkins CI finished successfully"}'
+                        ./gradlew test 2>&1 | tee gradle-test.log
                     '''
                 }
             }
         }
-
     }
 
 
     post {
 
-
         always {
 
-            junit 'backend/build/test-results/test/*.xml'
+            archiveArtifacts(
 
-            archiveArtifacts artifacts: 'backend/build/reports/**',
-            fingerprint: true
+                allowEmptyArchive: true,
 
+                artifacts: '''
+                    backend/gradle-test.log,
+                    backend/build/reports/**
+                ''',
+
+                fingerprint: true
+            )
+
+
+            junit(
+
+                allowEmptyResults: true,
+
+                testResults: 'backend/build/test-results/test/*.xml'
+            )
+
+
+            script {
+
+                if (!env.CHANGE_ID) {
+
+                    echo 'This is not a PR build; skipping CI comment.'
+
+                    return
+                }
+
+                def prevResult = currentBuild.previousBuild?.result
+                def currResult = currentBuild.currentResult
+
+                def prevPassing = (prevResult == 'SUCCESS')
+                def currPassing = (currResult == 'SUCCESS')
+
+                def action
+
+                if (env.commentTest == 'true') {
+
+                    action = 'create'
+
+                } else if (prevResult == null) {
+
+                    // Первая сборка этой джобы — не с чем сравнивать
+                    action = 'create'
+
+                } else if (currPassing && prevPassing) {
+
+                    // pass -> pass: молчим
+                    action = 'skip'
+
+                } else if (!currPassing && !prevPassing) {
+
+                    // fail -> fail: редактируем существующий коммент
+                    action = 'edit'
+
+                } else {
+
+                    // pass -> fail или fail -> pass: новый коммент
+                    action = 'create'
+                }
+
+                echo "prevResult=${prevResult}, currResult=${currResult}, action=${action}"
+
+                if (action == 'skip') {
+                    return
+                }
+
+                withCredentials([
+
+                    string(
+                        credentialsId: 'github-token',
+                        variable: 'GITHUB_TOKEN'
+                    )
+
+                ]) {
+
+                    withEnv([
+
+                        "BUILD_RESULT=${currResult}",
+
+                        "BUILD_DURATION=${currentBuild.durationString}",
+
+                        "CI_COMMENT_ACTION=${action}"
+
+                    ]) {
+
+                        sh '''
+                            python infrastructure/jenkins/run.py comment-ci
+                        '''
+                    }
+                }
+            }
         }
 
 
         success {
 
-            echo "Build successful"
-
+            echo 'Build successful'
         }
 
 
         failure {
 
-            echo "Build failed"
-
+            echo 'Build failed'
         }
-
-
     }
-
 }

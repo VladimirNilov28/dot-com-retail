@@ -1,0 +1,4 @@
+-r ../requirements.txt
+-r requirements-google.txt
+pyotp==2.9.0
+PyJWT[crypto]==2.10.1

@@ -6,10 +6,10 @@ This guide walks through setting up the ByteCore e-commerce application for loca
 
 | Tool | Version | Notes |
 |---|---|---|
-| JDK | 21 | Required by the backend toolchain |
+| JDK | 21 | Only for host Gradle build/tests; Spring startup builds/runs in Docker |
 | Node.js | 22+ | Required for Next.js 16 / TypeScript 5 |
 | bun | 1.4.2 | Frontend package manager (see `frontend/package.json#packageManager`) |
-| Docker | Latest | PostgreSQL container + Testcontainers |
+| Docker + Compose | Current | Spring and supporting services; Testcontainers for host integration tests |
 | Git | Latest | Version control |
 
 ## Project Structure
@@ -38,7 +38,20 @@ Spring MVC (blocking) and Gradle as the build system.
 - **Apache Kafka** for messaging (plain `spring-kafka` `@KafkaListener`s)
 - **SpringDoc OpenAPI** for REST API documentation
 
-### Setup
+### Container startup
+
+```bash
+cp .env.example .env # first run only; do not overwrite an existing .env
+make dev
+```
+
+Spring runs as the `backend` service on <http://localhost:8080>. The image uses
+Java 21 and builds `bytecore-backend.jar` with the repository Gradle wrapper.
+Flyway runs before application readiness; OAuth bootstrap waits for Spring.
+Use `make debug` and attach an IDE to `127.0.0.1:5005` for container debugging.
+Stop any manually started Spring instance first.
+
+### Host build and tests
 
 ```bash
 cd backend
@@ -49,18 +62,19 @@ This runs the full build pipeline: formatting (Spotless), compilation, tests (JU
 
 ### Database
 
-A `compose.yaml` at `backend/compose.yaml` defines the PostgreSQL service:
+The shared `infrastructure/compose.yml` defines PostgreSQL and the auth stack:
 
 | Setting | Value |
 |---|---|
-| Database | `mydatabase` |
-| Username | `myuser` |
-| Password | `secret` |
+| Database | `retail` |
+| Container credentials | `DB_USERNAME` / `DB_PASSWORD` from the root `.env` |
+| Spring container connection | `postgres:5432`, credentials passed from root `.env` by Compose |
 
-Spring Boot's `spring-boot-docker-compose` dev module auto-starts the container when you run the application. Alternatively, start it manually:
+Spring's Docker Compose auto-management is disabled. Compose owns startup,
+including Spring, and sets its internal database/auth/Kafka addresses explicitly:
 
 ```bash
-docker compose -f backend/compose.yaml up -d
+docker compose -f infrastructure/compose.yml --env-file .env up -d --build --wait
 ```
 
 ### Configuration
@@ -71,7 +85,8 @@ Application properties live in `backend/src/main/resources/application.yaml`. As
 
 | Command | What it does |
 |---|---|
-| `./gradlew bootRun` | Start the backend server |
+| `make dev` (repository root) | Build/start the containerized stack and wait for readiness |
+| `make debug` (repository root) | Start the stack with loopback-only Spring remote debugging |
 | `./gradlew build` | Full build (format, compile, test, coverage) |
 | `./gradlew test` | Run unit and integration tests |
 | `./gradlew jacocoTestReport` | Generate coverage report |
@@ -92,21 +107,29 @@ Tests use JUnit 5 with Testcontainers. The `TestcontainersConfiguration` class s
 
 ## Frontend
 
-The frontend is a Next.js 16 application (App Router, React 19) with
-Tailwind CSS 4. It's currently a minimal scaffold — see `frontend/AGENTS.md`.
+The frontend is a minimal Next.js App Router foundation with HeroUI v3,
+a fixed dark theme, and a working component demonstration. It does not yet
+implement storefront or authentication flows. See
+[`frontend/README.md`](../frontend/README.md) for setup, design conventions,
+and browser smoke checks, and `frontend/AGENTS.md` before changing Next.js APIs.
 
 ### Key dependencies
 
-- **Next.js 16** (App Router) with **React 19**
-- **Tailwind CSS 4.x** via PostCSS
-- **ESLint** for linting
+- **Next.js 16.3.6** (App Router) with **React 19.2.8** and React Compiler
+- **HeroUI 3.2.6**, fixed dark server/client rendering
+- **Tailwind CSS 4.3.3** via PostCSS, **TypeScript 5.9.3**, **ESLint 9.39.5**
+- **Bun 1.4.2** and a committed `bun.lock`
 
 ### Setup
 
 ```bash
 cd frontend
-bun install
+bun install --frozen-lockfile
 ```
+
+The #60 demonstration needs no environment variables or backend services.
+These host-development commands are not the Docker-only reviewer workflow;
+that separate work remains tracked in #59/#94.
 
 ### Common commands
 
@@ -116,27 +139,26 @@ bun install
 | `bun run build` | Production build |
 | `bun start` | Serve the production build |
 | `bun run lint` | Run ESLint |
+| `bun run typecheck` | Generate route types and run TypeScript without emitting files |
 
 ## Running the Full Stack
 
-1. **Start Docker** and ensure the PostgreSQL container is running:
+1. **Start Spring and the shared infrastructure** (PostgreSQL, Kratos,
+   Hydra, oauth-service, Hive, Kafka, Go Payment Service and Mailpit):
    ```bash
-   docker compose -f backend/compose.yaml up -d
+   make dev
    ```
 
-2. **Start the backend** (in one terminal):
+2. **Start the frontend** (in another terminal):
    ```bash
-   cd backend
-   ./gradlew bootRun
+   make front-dev
    ```
 
-3. **Start the frontend** (in another terminal):
-   ```bash
-   cd frontend
-   bun dev
-   ```
+3. Open `http://localhost:3000/` in your browser.
 
-4. Open `http://localhost:3000/` in your browser.
+`make dev` returns after readiness. Use `make logs` for container output.
+Do not launch a second Spring process on port 8080. Normal restart/down retains
+volumes; the explicitly named clean targets are destructive.
 
 For a production-style run, build then start instead:
 ```bash
@@ -174,6 +196,37 @@ Once registered, the user logs in through the existing Kratos/Hydra flow
 (see "Get a dev JWT" below for the headless dev-token shortcut, or the
 browser login flow via Hive Router/`bytecore-web`) — no separate
 registration-specific login path exists.
+
+## Guest Cart
+
+Anonymous shopping uses the [Guest Cart GraphQL contract](api/guest-cart.md)
+through Hive at `http://localhost:4002/graphql`, not the registration REST
+endpoint. Browser requests from `http://localhost:3000` use POST JSON,
+`credentials: "include"` and `X-Guest-Cart-Request: 1`; the server manages an
+HttpOnly guest cookie. Use consistent hostnames and never log the cookie.
+
+After registration, complete the existing Hydra/Kratos login, then invoke
+`mergeGuestCart(requestId: UUID!)` with the JWT and guest cookie. Keep that
+UUID across retries. Merge conflicts preserve both carts; stock remains
+checkout-only. No Next.js page/callback integration is implemented here.
+
+## Optional TOTP two-factor authentication
+
+Users can enroll any standard RFC 6238 authenticator through Kratos's native
+authenticated settings flow. Kratos manages secrets, QR/setup data, verification
+and single-use backup codes. Spring still owns users/roles and Hydra still issues
+JWTs; no frontend authentication UI or CAPTCHA is added.
+
+An enrolled user's password-only dev-token request returns
+`403 second_factor_required`. Complete Kratos's native AAL2 login and then send
+only `{"kratos_session_token": ...}` to `POST http://127.0.0.1:4447/internal/token`.
+Both bridges enforce the highest available assurance, including remembered Hydra
+logins. Disabling all 2FA requires privileged removal of both TOTP and lookup codes.
+Old JWTs/refresh grants are not retroactively invalidated by enrollment.
+
+The [TOTP runbook](../infrastructure/oauth/service/README.md#totp-runbook) contains
+actual enrollment/challenge/disable/recovery commands, JWT checks, the manual
+checklist and the runnable real-infrastructure smoke sequence.
 
 ## GraphQL API access
 
@@ -236,7 +289,7 @@ validation error propagates with its original message (not masked).
 | Symptom | Likely cause |
 |---|---|
 | `readiness` returns non-200 | `supergraph.graphql` missing/stale — run `compose-supergraph.sh` |
-| Query returns `SUBREQUEST_HTTP_ERROR` / `Connect` | Spring isn't running on `:8080`, or the firewall rule from "One-time firewall setup" is missing (router reaches Spring via `host.docker.internal`, same path as `oauth-service`) |
+| Query returns `SUBREQUEST_HTTP_ERROR` / `Connect` | Check readiness/logs of the Compose `backend` service; Hive and OAuth use `backend:8080`, not a host gateway |
 | `401`/`Unexpected error` on every operation | No `Authorization` header set in the IDE, or the dev JWT expired — fetch a new one |
 | IDE loads but Docs panel is empty | Router's local `supergraph.graphql` is out of date — regenerate it |
 
@@ -259,17 +312,20 @@ cd frontend && bun run lint && bun run build
 
 ### Environment variables
 
-No `.env.example` exists yet. As the project matures, create one at the project root (`.gitignore` already excludes `.env*` files except `.env.example`). Typical variables to expect:
-
-- `DATABASE_URL` — PostgreSQL connection string
-- `KAFKA_BOOTSTRAP_SERVERS` — Kafka broker addresses
-- `OAUTH2_CLIENT_ID` / `OAUTH2_CLIENT_SECRET` — OAuth2 credentials
+Copy the committed root `.env.example` to `.env` on first setup. Compose passes
+database credentials to Spring and sets internal service URLs; it does not
+automatically source `.env` into optional host Gradle processes. Do not commit
+real secrets. Existing `.env` files need `HYDRA_PUBLIC_URL=http://hydra:4444` if
+that variable is missing. `DB_URL` and `KAFKA_BOOTSTRAP_SERVERS` host values do
+not override Spring's explicitly configured Compose addresses.
 
 ## Troubleshooting
 
 ### Docker isn't running
 
-The backend will fail to start if Docker isn't available (the `spring-boot-docker-compose` module tries to start the PostgreSQL container). Start Docker and try again.
+`make dev` uses Docker Compose to build/start Spring and its dependencies.
+Start the Docker daemon and try again; Spring's own Compose auto-management
+is disabled.
 
 ### Port conflicts
 
@@ -277,8 +333,16 @@ The backend will fail to start if Docker isn't available (the `spring-boot-docke
 |---|---|
 | 3000 | Next.js dev/prod server |
 | 4002 | Hive Router (GraphQL entry point + IDE) |
+| 8080 | Spring backend (loopback-only publication) |
+| 5005 | Spring remote debugger (`make debug` only; loopback-only) |
 | 5432 | PostgreSQL |
-| 9092 | Kafka (via Testcontainers) |
+| 9092 | Compose Kafka's host listener |
+
+### GraphQL IDE
+
+Spring/DGS GraphiQL is **disabled** (`dgs.graphql.graphiql.enabled: false` in
+`application-dev.yaml`). Use Hive Router's built-in GraphQL IDE instead —
+see "GraphQL API access" below.
 
 ### GraphQL IDE
 
@@ -303,3 +367,42 @@ declared in `frontend/package.json`'s `packageManager` field:
 ```bash
 curl -fsSL https://bun.sh/install | bash -s "bun-v1.4.2"
 ```
+## Account deletion
+
+`deleteUser(userId: ...)` remains an ADMIN-only GraphQL mutation requiring
+`user:write`. There is no customer self-delete or alternate authorization path.
+Spring uses the Kratos and Hydra admin APIs (dev loopback ports 4434 and 4445;
+production requires `KRATOS_ADMIN_URL` and `HYDRA_ADMIN_URL`).
+
+Deletion first enumerates Kratos identities and proves the unique
+`metadata_admin.spring_user_id` link. Email alone is never sufficient. Missing,
+ambiguous, or changed links fail closed and require support to repair the link.
+The verified identity UUID is committed as a retry coordinate before external
+side effects; it is not a credential. Profile/role changes and ordinary canonical
+user lookups are blocked once deletion starts.
+
+Spring then deletes that identity's sessions and the identity itself, and revokes
+all Hydra consent/token chains and login sessions for the canonical numeric
+subject. No client-wide or unrelated-user revocation is used. Only after both
+providers succeed does a database transaction remove addresses, saved payment
+methods, carts, and wishlists (including their items), replace username/email/DOB
+with anonymous values, reset the role to USER, and mark deletion complete.
+Historical orders, order items, monetary values, inventory, and payment outbox
+events remain untouched. Their required user FK points to an anonymized,
+non-authenticatable tombstone rather than cascading history away.
+
+This is not a distributed ACID transaction. Upstream failure never returns
+success. A provider may already have revoked the account when another step fails.
+Retry the same mutation/id: the committed coordinate permits an already-absent
+identity, repeats subject-scoped revocation safely, and retries the final database
+transaction. Do not manually remove the pending user/coordinate. Completed
+deletion is idempotent; deleting a never-existing id still reports not found.
+Pending deletion deliberately keeps the original unique email/username reserved;
+after completion both can be registered again as a new canonical user and identity.
+Registration provider conflicts return actionable 409 responses; provider outages
+return actionable 502 responses, not an empty authentication failure.
+
+Previously issued self-contained access JWTs can remain cryptographically valid
+until their normal expiry (currently 30 minutes); there is no new denylist.
+Refresh grants and native sessions are revoked immediately. Existing authorization
+and applicable upstream MFA requirements are unchanged.

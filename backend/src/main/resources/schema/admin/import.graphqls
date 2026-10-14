@@ -1,0 +1,25 @@
+enum ProductImportFormat {
+  CSV
+  JSON
+}
+
+type ProductImportError {
+  "1-based CSV data row (header excluded) or 1-based JSON product index."
+  row: Int!
+  field: String!
+  message: String!
+}
+
+"Atomic import result: either everything was created or nothing was (errors non-empty)."
+type ProductImportResult {
+  success: Boolean!
+  productsCreated: Int!
+  variantsCreated: Int!
+  brandsCreated: Int!
+  errors: [ProductImportError!]!
+}
+
+extend type Mutation {
+  "Validate and create products/variants from CSV or JSON text (max 1 MB, 500 variant rows). See docs/api/bulk-import.md."
+  importProducts(format: ProductImportFormat!, content: String!): ProductImportResult!
+}

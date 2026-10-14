@@ -1,0 +1,231 @@
+"use client";
+
+import { ChevronDown, SlidersHorizontal, X } from "lucide-react";
+import { Button, Disclosure, Drawer } from "@heroui/react";
+import { useId, useState, type MouseEvent } from "react";
+import { categoryTree, isPlainClick, type CategoryNode } from "./category-navigation";
+import { CatalogLink } from "./catalog-link";
+import {
+  ATTRIBUTE_PARAM_PREFIX, DEFAULT_SORT, attributeLabel, catalogHref, categoryIndex, hasActiveFilters, resultsHref,
+  type AttributeFilter, type Category, type CatalogFacets, type ResultsState,
+} from "@/lib/catalog/model";
+
+function facetCount(facets: CatalogFacets | null, id: string) {
+  return facets?.categories.find((entry) => entry.id === id)?.count;
+}
+
+function navClick(onNavigate: () => void) {
+  return (event: MouseEvent<HTMLAnchorElement>) => {
+    if (isPlainClick(event)) onNavigate();
+  };
+}
+
+function PreserveParams({ state, omit }: { state: ResultsState; omit: readonly string[] }) {
+  const defaultSort = state.query ? "RELEVANCE" : DEFAULT_SORT;
+  return <>
+    {!omit.includes("view") && state.view !== "grid" && <input type="hidden" name="view" value={state.view} />}
+    {!omit.includes("sort") && state.sort !== defaultSort && <input type="hidden" name="sort" value={state.sort} />}
+    {!omit.includes("query") && state.query && <input type="hidden" name="q" value={state.query} />}
+    {!omit.includes("attributes") && state.attributes.map((attribute) =>
+      <input key={attribute.name} type="hidden" name={`${ATTRIBUTE_PARAM_PREFIX}${attribute.name}`} value={attribute.value} />)}
+  </>;
+}
+
+function CategoryContext({ state, category, categories, facets, onNavigate }: {
+  state: ResultsState; category?: Category; categories: Category[];
+  facets: CatalogFacets | null; onNavigate: () => void;
+}) {
+  const expanded = new Set(category
+    ? [category.id, ...categoryIndex(categories).ancestors(category).map((entry) => entry.id)]
+    : []);
+  function branch(node: CategoryNode): React.ReactNode {
+    const entry = node.category;
+    const count = facetCount(facets, entry.id);
+    const link = <CatalogLink href={catalogHref(entry.slug, 1, state.view)} className="results-nav-link"
+      aria-current={entry.id === category?.id ? "page" : undefined} onClick={navClick(onNavigate)}>
+      {entry.name}{count !== undefined && <span className="results-nav-count"> ({count})</span>}
+    </CatalogLink>;
+    return <li key={entry.id}>
+      {node.children.length === 0 ? link : (
+        <Disclosure defaultExpanded={expanded.has(entry.id)}>
+          <Disclosure.Heading className="results-category-row">
+            {link}
+            <Disclosure.Trigger className="store-category-toggle" aria-label={`Subcategories of ${entry.name}`}>
+              <Disclosure.Indicator>
+                <ChevronDown size={18} strokeWidth={2} aria-hidden="true" focusable="false" />
+              </Disclosure.Indicator>
+            </Disclosure.Trigger>
+          </Disclosure.Heading>
+          <Disclosure.Content>
+            <Disclosure.Body className="results-category-children">
+              <ul>{node.children.map(branch)}</ul>
+            </Disclosure.Body>
+          </Disclosure.Content>
+        </Disclosure>
+      )}
+    </li>;
+  }
+  return (
+    <section className="results-section" aria-label="Category navigation">
+      <h2 className="results-section-heading">Categories</h2>
+      <nav aria-label="Category navigation" className="results-nav">
+        <CatalogLink href={catalogHref(undefined, 1, state.view)} className="results-nav-link"
+          aria-current={!category ? "page" : undefined} onClick={navClick(onNavigate)}>All products</CatalogLink>
+        <p className="results-nav-group-label">Browse by category</p>
+        <ul>{categoryTree(categories).map(branch)}</ul>
+      </nav>
+    </section>
+  );
+}
+
+/** Real filters only (§9.4): price range and single-value-per-name attribute
+ * facets, as removable chips. No in-stock toggle — availability is not a
+ * public contract. Counts come straight from `facets`, never invented. */
+function Filters({ route, state, facets, onNavigate }: {
+  route: string; state: ResultsState; facets: CatalogFacets | null; onNavigate: () => void;
+}) {
+  if (!facets) return null;
+  const active = hasActiveFilters(state);
+  const hasPriceFacet = facets.price.min !== null || facets.price.max !== null;
+  const hasPrice = state.minPrice !== undefined || state.maxPrice !== undefined;
+  return (
+    <section className="results-section" aria-label="Filters">
+      <div className="results-section-header">
+        <h2 className="results-section-heading">Filters</h2>
+        {active && (
+          <CatalogLink href={resultsHref(route, state, { minPrice: undefined, maxPrice: undefined, attributes: [] })}
+            className="results-clear-link" onClick={navClick(onNavigate)}>
+            Clear all
+          </CatalogLink>
+        )}
+      </div>
+      {active && (
+        <ul className="results-chips" aria-label="Applied filters">
+          {hasPrice && (
+            <li>
+              <CatalogLink href={resultsHref(route, state, { minPrice: undefined, maxPrice: undefined })}
+                className="results-chip" onClick={navClick(onNavigate)}>
+                Price: {state.minPrice ?? "0"}–{state.maxPrice ?? "∞"} EUR <span aria-hidden="true">×</span>
+              </CatalogLink>
+            </li>
+          )}
+          {state.attributes.map((attribute) => (
+            <li key={attribute.name}>
+              <CatalogLink
+                href={resultsHref(route, state, { attributes: state.attributes.filter((entry) => entry.name !== attribute.name) })}
+                className="results-chip" onClick={navClick(onNavigate)}>
+                {attribute.name}: {attribute.value} <span aria-hidden="true">×</span>
+              </CatalogLink>
+            </li>
+          ))}
+        </ul>
+      )}
+      {hasPriceFacet && (
+        <div className="results-filter-block">
+          <h3 className="results-filter-heading">Price (EUR)</h3>
+          <form action={route} method="get" className="results-price-form" aria-label="Price range in EUR">
+            <PreserveParams state={state} omit={["minPrice", "maxPrice"]} />
+            <label className="results-price-label">
+              Min
+              <input type="number" min="0" step="1" name="minPrice" defaultValue={state.minPrice ?? ""} inputMode="numeric"
+                aria-label="Minimum price in EUR" className="results-price-input" />
+            </label>
+            <label className="results-price-label">
+              Max
+              <input type="number" min="0" step="1" name="maxPrice" defaultValue={state.maxPrice ?? ""} inputMode="numeric"
+                aria-label="Maximum price in EUR" className="results-price-input" />
+            </label>
+            <button type="submit" className="store-cta results-price-submit">Apply</button>
+          </form>
+        </div>
+      )}
+      {facets.attributes.map((attribute) => {
+        // A group starts expanded only while it already has an applied value
+        // (derived fresh from the URL state every render, not remembered
+        // client-side), so disclosure state never drifts from what is
+        // actually active and never resets unexpectedly on its own.
+        const hasActiveValue = state.attributes.some((entry) => entry.name === attribute.name);
+        return (
+          <Disclosure key={attribute.name} defaultExpanded={hasActiveValue} className="results-filter-block">
+            <Disclosure.Heading level={3} className="results-filter-row">
+              <Disclosure.Trigger className="results-filter-toggle">
+                <span className="results-filter-heading">{attributeLabel(attribute.name)}</span>
+                <Disclosure.Indicator>
+                  <ChevronDown size={16} strokeWidth={2} aria-hidden="true" focusable="false" className="store-icon" />
+                </Disclosure.Indicator>
+              </Disclosure.Trigger>
+            </Disclosure.Heading>
+            <Disclosure.Content>
+              <Disclosure.Body>
+                <ul className="results-filter-group" role="list">
+                  {attribute.values.map((value) => {
+                    const isActive = state.attributes.some((entry) => entry.name === attribute.name && entry.value === value.value);
+                    const nextAttributes: AttributeFilter[] = isActive
+                      ? state.attributes.filter((entry) => entry.name !== attribute.name)
+                      : [...state.attributes.filter((entry) => entry.name !== attribute.name), { name: attribute.name, value: value.value }];
+                    return (
+                      <li key={value.value}>
+                        <CatalogLink href={resultsHref(route, state, { attributes: nextAttributes })}
+                          className="results-filter-option" aria-pressed={isActive} onClick={navClick(onNavigate)}>
+                          {value.value} <span className="results-filter-count">({value.count})</span>
+                        </CatalogLink>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </Disclosure.Body>
+            </Disclosure.Content>
+          </Disclosure>
+        );
+      })}
+    </section>
+  );
+}
+
+export interface CatalogSidebarProps {
+  route: string; state: ResultsState; category?: Category; categories: Category[];
+  facets: CatalogFacets | null;
+}
+
+/** One sidebar implementation, rendered twice: a static desktop `<aside>`
+ * (≥48rem) and inside an accessible HeroUI `Drawer` for narrower viewports
+ * (§9.4) — never two different navigation/filter interfaces to maintain. */
+export function ResultsSidebar(props: CatalogSidebarProps) {
+  const [open, setOpen] = useState(false);
+  const drawerId = useId();
+  const close = () => setOpen(false);
+  const badge = props.state.attributes.length + (props.state.minPrice !== undefined || props.state.maxPrice !== undefined ? 1 : 0);
+  return (
+    <>
+      <aside className="results-sidebar" aria-label="Category navigation and filters">
+        <CategoryContext key={props.category?.id ?? "all"} {...props} onNavigate={() => {}} />
+        <Filters {...props} onNavigate={() => {}} />
+      </aside>
+      <div className="results-drawer-trigger-wrap">
+        <Drawer isOpen={open} onOpenChange={setOpen}>
+          <Button variant="ghost" className="results-drawer-trigger" aria-haspopup="dialog">
+            <SlidersHorizontal size={20} strokeWidth={2} aria-hidden="true" focusable="false" />
+            Categories &amp; filters
+            {badge > 0 && <span className="results-drawer-badge" aria-hidden="true">{badge}</span>}
+          </Button>
+          <Drawer.Backdrop className="store-drawer-backdrop">
+            <Drawer.Content placement="right" className="store-drawer-content">
+              <Drawer.Dialog id={drawerId} className="store-drawer-dialog">
+                <Drawer.Header className="store-drawer-header">
+                  <Drawer.Heading className="text-lg font-semibold">Categories &amp; filters</Drawer.Heading>
+                  <Drawer.CloseTrigger aria-label="Close categories and filters" className="store-close">
+                    <X size={20} strokeWidth={2} aria-hidden="true" focusable="false" />
+                  </Drawer.CloseTrigger>
+                </Drawer.Header>
+                <Drawer.Body className="store-drawer-body">
+                  <CategoryContext key={props.category?.id ?? "all"} {...props} onNavigate={close} />
+                  <Filters {...props} onNavigate={close} />
+                </Drawer.Body>
+              </Drawer.Dialog>
+            </Drawer.Content>
+          </Drawer.Backdrop>
+        </Drawer>
+      </div>
+    </>
+  );
+}

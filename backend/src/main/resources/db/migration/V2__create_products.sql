@@ -1,6 +1,7 @@
 CREATE TABLE products (
     id bigserial PRIMARY KEY,
     name varchar(255) NOT NULL,
+    slug varchar(255) NOT NULL UNIQUE,
     description text,
     created_at timestamptz NOT NULL DEFAULT NOW(),
     updated_at timestamptz NOT NULL DEFAULT NOW()

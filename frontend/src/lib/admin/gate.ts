@@ -1,0 +1,61 @@
+import "server-only";
+import { headers } from "next/headers";
+import { cache } from "react";
+import { authConfig } from "@/lib/auth/config";
+import { AuthError, authCookie, hasSessionCookie } from "@/lib/auth/model";
+import { authenticatedState } from "@/lib/auth/session";
+import { hiveConfig } from "@/lib/graphql/server";
+import { adminPolicy, adminRoles, unverifiedClaim } from "./policy";
+
+export type AdminSession = { accessToken: string; username: string; role: string };
+export type AdminAccess =
+  | { kind: "ok"; session: AdminSession }
+  | { kind: "anonymous" }
+  | { kind: "forbidden"; reason: "role" | "assurance" }
+  | { kind: "unavailable" };
+
+function localOnlyAal1(): boolean {
+  if (process.env.ADMIN_ALLOW_AAL1 !== "1" || process.env.NODE_ENV === "production") return false;
+  const origin = new URL(process.env.STOREFRONT_ORIGIN ?? "http://invalid");
+  return origin.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(origin.hostname);
+}
+
+// The admin layout and page both check access; share one session lookup per request.
+const sessionState = cache((cookie: string) => authenticatedState(cookie));
+
+/** `roles` selects the staff area: catalog (default) or orders. */
+export async function adminAccess(roles: ReadonlySet<string> = adminRoles): Promise<AdminAccess> {
+  const request = await headers();
+  if (!hasSessionCookie(request.get("cookie"))) return { kind: "anonymous" };
+  try {
+    const cookie = authCookie(request.get("cookie"), authConfig().sessionCookie);
+    if (!cookie) return { kind: "anonymous" };
+    const { state, user } = await sessionState(cookie);
+    // The session and the issued token must both be aal2; the token is what the API checks.
+    const aal = state.provider?.aal === "aal2" && unverifiedClaim(state.tokens?.accessToken, "aal") === "aal2" ? "aal2" : "aal1";
+    const verdict = adminPolicy(user.role, aal, localOnlyAal1(), roles);
+    if (verdict !== "ok") return { kind: "forbidden", reason: verdict };
+    if (!state.tokens) return { kind: "anonymous" };
+    return { kind: "ok", session: { accessToken: state.tokens.accessToken, username: user.username, role: user.role } };
+  } catch (error) {
+    if (error instanceof AuthError && error.status === 401) return { kind: "anonymous" };
+    console.error("admin access check failed", error instanceof AuthError ? error.code : "upstream");
+    return { kind: "unavailable" };
+  }
+}
+
+export async function adminGraphql<T>(accessToken: string, query: string, variables: Record<string, unknown> = {}): Promise<T> {
+  const { endpoint, origin } = hiveConfig(process.env);
+  const response = await fetch(endpoint, {
+    method: "POST",
+    cache: "no-store",
+    headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: `Bearer ${accessToken}`, Origin: origin },
+    body: JSON.stringify({ query, variables }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!response.ok) throw new Error(`Admin request failed (${response.status})`);
+  const body = (await response.json()) as { data?: T; errors?: { message: string }[] };
+  if (body.errors?.length) throw new Error(body.errors[0].message);
+  if (!body.data) throw new Error("Empty GraphQL response");
+  return body.data;
+}

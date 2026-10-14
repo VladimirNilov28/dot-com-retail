@@ -1,0 +1,24 @@
+{
+  "products": [
+    {
+      "slug": "sample-gaming-monitor",
+      "name": "Sample 27\" gaming monitor",
+      "description": "27-inch 1440p IPS panel, 165 Hz.",
+      "brand": "Sample Displays",
+      "categories": ["monitorid", "mangurid"],
+      "variants": [
+        {
+          "sku": "SAMPLE-MON-27-165",
+          "price": "299.99",
+          "attributes": { "size": "27\"", "refreshRate": "165 Hz" },
+          "barcode": "4740000000035",
+          "weightGrams": 5400,
+          "lengthMm": 615,
+          "widthMm": 210,
+          "heightMm": 460,
+          "active": true
+        }
+      ]
+    }
+  ]
+}

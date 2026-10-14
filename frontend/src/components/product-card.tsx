@@ -1,0 +1,35 @@
+import Link from "next/link";
+import { Star } from "lucide-react";
+import { ProductImage } from "./product-image";
+import { productPrice, type CatalogProduct } from "@/lib/catalog/model";
+
+function Rating({ product }: { product: CatalogProduct }) {
+  if (product.averageRating === null || product.ratingCount === 0) {
+    return <p className="text-xs text-muted">No ratings yet</p>;
+  }
+  return (
+    <p className="product-rating text-xs text-muted">
+      <Star size={14} strokeWidth={2} aria-hidden="true" focusable="false" className="product-rating-icon" />
+      {product.averageRating.toFixed(1)} ({product.ratingCount} {product.ratingCount === 1 ? "rating" : "ratings"})
+    </p>
+  );
+}
+
+export function ProductCard({ product, headingLevel = 2 }: { product: CatalogProduct; headingLevel?: 2 | 3 }) {
+  const Heading = headingLevel === 3 ? "h3" : "h2";
+  return (
+    <li className="product-card">
+      <ProductImage image={product.images?.[0]} />
+      <div className="product-card-copy">
+        <Heading className="product-card-heading font-semibold tracking-tight">
+          <Link href={`/products/${encodeURIComponent(product.slug)}`} prefetch={false} className="product-name">
+            {product.name}
+          </Link>
+        </Heading>
+        <p className="product-price">{productPrice(product)}</p>
+        <Rating product={product} />
+        <p className="text-sm text-muted">Availability unknown</p>
+      </div>
+    </li>
+  );
+}

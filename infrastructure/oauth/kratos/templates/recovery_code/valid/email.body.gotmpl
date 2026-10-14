@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en"><body>
+<h1>Reset your password</h1>
+<p>If you requested password recovery, enter this code in the browser where you requested it:</p>
+<p><strong>{{ .RecoveryCode }}</strong></p>
+{{ $flow := regexFind "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" (printf "%v" (index .TransientPayload "storefront_flow_id")) }}
+{{ if $flow }}
+<p><a href="http://127.0.0.1:3000/recover?flow={{ $flow }}#code={{ .RecoveryCode }}">Open your recovery form</a>, then choose Continue to password reset.</p>
+{{ end }}
+<p>Use the latest email. Resending replaces the previous code. This code expires in {{ .ExpiresInMinutes }} minutes.</p>
+<p>In another browser, return to the browser where you requested recovery or start a new request. Without JavaScript, enter the code manually.</p>
+<p>If you did not request this, ignore this email.</p>
+</body></html>

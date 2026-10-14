@@ -3,5 +3,26 @@ spring:
     url: ${DB_URL}
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
-jwt:
-  secret: ${JWT_SECRET}
+  graphql:
+    graphiql:
+      enabled: false
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+
+kratos:
+  admin-url: ${KRATOS_ADMIN_URL}
+
+hydra:
+  admin-url: ${HYDRA_ADMIN_URL}
+
+cart:
+  guest:
+    secure: true
+    allowed-origins: ${GUEST_CART_ALLOWED_ORIGINS:}
+
+dgs:
+  graphql:
+    introspection:
+      enabled: false
+    graphiql:
+      enabled: false
