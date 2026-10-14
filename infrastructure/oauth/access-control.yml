@@ -39,7 +39,15 @@ scopes:
       (createProduct, updateProduct, deleteProduct, createProductVariant,
       updateProductVariant, deleteProductVariant).
   - name: rating:write
-    description: Submit or update the caller's own product star rating (rateProduct).
+    description: >
+      Submit, update or delete the caller's own product star rating and written
+      review, read it back, and mark other customers' reviews helpful
+      (rateProduct, upsertMyReview, deleteMyReview, myReview,
+      voteReviewHelpful, unvoteReviewHelpful).
+  - name: review:moderate
+    description: >
+      Staff moderation of customer reviews (moderationReviews, hideReview,
+      restoreReview). Spring additionally requires CATALOG_MANAGER or ADMIN.
   - name: category:read
     description: Query categories (category, categories).
   - name: category:write
@@ -135,6 +143,7 @@ roles:
       - product:write
       - category:read
       - category:write
+      - review:moderate
 
   - name: ORDER_MANAGER
     description: Manages order lifecycle and payment status operationally.
@@ -168,6 +177,7 @@ clients:
       - product:read
       - product:write
       - rating:write
+      - review:moderate
       - category:read
       - category:write
       - cart:read
@@ -207,6 +217,8 @@ clients:
       - cart:write
       - order:read
       - order:write
+      - rating:write
+      - review:moderate
     additional_scopes:
       - openid
       - offline_access

@@ -30,6 +30,16 @@ describe("storefront authentication return contract", () => {
         expect(() => grantTokens({ ...grant, scope })).not.toThrow();
       }
     });
+    test("accepts review scopes only as optional role-filtered grants (#78 #85)", () => {
+      for (const scope of ["openid user:read offline_access rating:write",
+        "openid user:read offline_access cart:read rating:write review:moderate"]) {
+        expect(() => grantTokens({ ...grant, scope })).not.toThrow();
+      }
+      for (const scope of ["openid offline_access rating:write", "openid user:read offline_access rating:write rating:write",
+        "openid user:read offline_access product:write"]) {
+        expect(() => grantTokens({ ...grant, scope })).toThrow(AuthError);
+      }
+    });
     test("rejects invalid lifetimes, missing rotation and expanded or repeated scopes", () => {
       for (const expires_in of [0, -1, 1.5, NaN, Infinity, 86401, "45"]) {
         expect(() => grantTokens({ ...grant, expires_in })).toThrow(AuthError);
