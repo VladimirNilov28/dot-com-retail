@@ -89,6 +89,10 @@ if [ "${REVIEW_SEED:-1}" != "0" ]; then
   if [ "$products" = 0 ] && [ "$users" -le 1 ]; then
     info "Empty catalog: loading the demo dataset (one transaction)"
     "${psql[@]}" -1 -f - <"$SEED_FILE" >/dev/null
+    # The seed inserts plaintext personal data; the backend's startup backfill encrypts it at rest.
+    info "Encrypting seeded personal data at rest (backend restart)"
+    "${COMPOSE[@]}" restart backend >/dev/null
+    "${COMPOSE[@]}" up -d --wait --wait-timeout "${REVIEW_WAIT_TIMEOUT:-900}" backend >/dev/null
   else
     info "Catalog already has data ($products products); seed skipped"
   fi

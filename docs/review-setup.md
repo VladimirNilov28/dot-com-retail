@@ -204,6 +204,16 @@ The stack was verified against a disposable project
 - The bootstrap admin can sign in and reaches the TOTP gate.
 - Postgres rejects non-TLS connections.
 - Products, accounts and media survive a `review-down` / `review-up` cycle.
+- Re-checked on 14 Oct after the commerce, admin, reviews, customer and encryption
+  merges (disposable project `dcr-review-check`):
+  - all 12 services became healthy;
+  - Flyway reached V25;
+  - the seeded addresses are stored encrypted (`enc:v1:`);
+  - `/`, `/about`, `/contact`, `/cart` and `/catalog/all-products` returned 200, and
+    an unknown path returned 404;
+  - GraphQL catalog search works through the TLS edge;
+  - a contact form submission delivered both the support email and the
+    acknowledgement to Mailpit.
 
 ## Troubleshooting
 

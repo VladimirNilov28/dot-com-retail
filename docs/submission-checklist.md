@@ -33,7 +33,7 @@
 | Tokens not in persistent browser storage | Verified | The BFF keeps tokens server-side in an encrypted session store. The browser holds only an HttpOnly session cookie (`docs/auth/browser-contract.md`). This is stricter than the "in memory" example. |
 | Catalog, search and product data | Verified | **Tests:** `CatalogSearchServiceIntegrationTest`, `ProductServiceIntegrationTest`, `lib/catalog/model.test.mjs`. |
 | JWT, injection and security tests | Verified | **Tests:** `JwtDecoderConfigurationTest`, `ForeignKeyViolationTest`, `*AuthorizationTest`, `GraphQlHttpTransportTest`. |
-| Docker-only, one command | Verified (pre-merge) | `make review` → `scripts/review-up.sh` was verified on a disposable project. A re-check after the merges is in the "Re-checks" section. |
+| Docker-only, one command | Verified | `make review` → `scripts/review-up.sh`. Re-checked after all merges on a disposable project: healthy services, Flyway at V25, encrypted seed data, TLS pages and the contact email (`docs/review-setup.md`, "Verified behaviour"). |
 | README with overview, ERD, setup, usage, extras | Verified | `README.md`, `docs/database/FLYWAY_DB.md`. |
 
 ## Commerce
