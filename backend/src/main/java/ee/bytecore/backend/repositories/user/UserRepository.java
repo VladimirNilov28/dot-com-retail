@@ -1,8 +1,11 @@
 package ee.bytecore.backend.repositories.user;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
@@ -33,6 +36,24 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select u from User u where u.id = :id and u.deleted = false and u.deletionIdentityId is null")
     Optional<User> findActiveByIdForUpdate(@Param("id") Long id);
+
+    /** Locks every active ADMIN row in id order (consistent ordering avoids lock-order deadlocks). */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from User u where u.role = ee.bytecore.backend.enums.UserRole.ADMIN"
+            + " and u.deleted = false and u.deletionIdentityId is null order by u.id")
+    List<User> findActiveAdminsForUpdate();
+
+    @Query(
+            value = "select u from User u where u.deleted = false and u.deletionIdentityId is null"
+                    + " and (:role is null or u.role = :role)"
+                    + " and (lower(u.username) like :pattern escape '\\' or lower(u.email) like :pattern escape '\\')",
+            countQuery = "select count(u) from User u where u.deleted = false and u.deletionIdentityId is null"
+                    + " and (:role is null or u.role = :role)"
+                    + " and (lower(u.username) like :pattern escape '\\' or lower(u.email) like :pattern escape '\\')")
+    Page<User> searchActive(
+            @Param("pattern") String pattern,
+            @Param("role") ee.bytecore.backend.enums.UserRole role,
+            Pageable pageable);
 
     @Modifying
     @Query(value = "DELETE FROM user_address WHERE user_id = :id", nativeQuery = true)

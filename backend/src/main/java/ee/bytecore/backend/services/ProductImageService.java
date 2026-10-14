@@ -32,6 +32,9 @@ public class ProductImageService {
     private final ProductRepository products;
     private final MediaStorage storage;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private ee.bytecore.backend.services.audit.AuditService audit;
+
     public ProductImageService(ProductImageRepository images, ProductRepository products, MediaStorage storage) {
         this.images = images;
         this.products = products;
@@ -59,7 +62,7 @@ public class ProductImageService {
         String key = UUID.randomUUID() + "." + inspected.extension();
         storage.store(key, bytes);
         try {
-            return images.saveAndFlush(ProductImage.create(
+            ProductImage saved = images.saveAndFlush(ProductImage.create(
                     productId,
                     key,
                     inspected.contentType(),
@@ -68,6 +71,19 @@ public class ProductImageService {
                     inspected.height(),
                     alt,
                     (int) count));
+            if (audit != null)
+                audit.record(
+                        "uploadProductImage",
+                        "PRODUCT_IMAGE",
+                        saved.getId(),
+                        java.util.Map.of(
+                                "productId",
+                                productId,
+                                "contentType",
+                                inspected.contentType(),
+                                "byteSize",
+                                bytes.length));
+            return saved;
         } catch (RuntimeException e) {
             storage.delete(key);
             throw e;

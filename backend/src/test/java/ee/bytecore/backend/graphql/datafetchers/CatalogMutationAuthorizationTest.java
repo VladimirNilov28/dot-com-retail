@@ -73,6 +73,9 @@ class CatalogMutationAuthorizationTest {
     JwtAuthenticationConverter jwtAuthenticationConverter;
 
     @MockitoBean
+    ee.bytecore.backend.services.audit.AuditService auditService;
+
+    @MockitoBean
     CategoryRepository categoryRepository;
 
     @MockitoBean

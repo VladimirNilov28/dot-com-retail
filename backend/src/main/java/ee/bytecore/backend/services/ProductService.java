@@ -61,11 +61,18 @@ public class ProductService {
         return save(existing);
     }
 
+    @Transactional
     public boolean deleteById(Long id) {
         if (productRepository.findById(id).isEmpty()) {
             return false;
         }
-        productRepository.deleteById(id);
+        try {
+            productRepository.deleteById(id);
+            productRepository.flush();
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            throw new IllegalArgumentException(
+                    "Product has order or cart history and cannot be deleted; deactivate its variants instead");
+        }
         return true;
     }
 

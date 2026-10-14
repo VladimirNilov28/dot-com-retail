@@ -1,6 +1,9 @@
 package ee.bytecore.backend.graphql.datafetchers.user;
 
+import static ee.bytecore.backend.services.audit.AuditDetails.details;
+
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.transaction.annotation.Transactional;
 
 import ee.bytecore.backend.enums.UserRole;
 import ee.bytecore.backend.graphql.mappers.UserInputMapper;
@@ -11,6 +14,7 @@ import ee.bytecore.backend.security.CurrentUserProvider;
 import ee.bytecore.backend.services.UserAddressService;
 import ee.bytecore.backend.services.UserPaymentMethodService;
 import ee.bytecore.backend.services.UserService;
+import ee.bytecore.backend.services.audit.AuditService;
 
 import com.netflix.dgs.codegen.generated.types.*;
 import com.netflix.graphql.dgs.DgsComponent;
@@ -26,6 +30,7 @@ public class UserMutation {
     private final UserAddressService userAddressService;
     private final UserPaymentMethodService userPaymentMethodService;
     private final CurrentUserProvider currentUserProvider;
+    private final AuditService auditService;
 
     public UserMutation(
             UserRepository userRepository,
@@ -33,13 +38,15 @@ public class UserMutation {
             UserPaymentMethodRepository userPaymentMethodRepository,
             UserAddressService userAddressService,
             UserPaymentMethodService userPaymentMethodService,
-            CurrentUserProvider currentUserProvider) {
+            CurrentUserProvider currentUserProvider,
+            AuditService auditService) {
         this.userRepository = userRepository;
         this.userService = userService;
         this.userPaymentMethodRepository = userPaymentMethodRepository;
         this.userAddressService = userAddressService;
         this.userPaymentMethodService = userPaymentMethodService;
         this.currentUserProvider = currentUserProvider;
+        this.auditService = auditService;
     }
 
     // User
@@ -50,17 +57,26 @@ public class UserMutation {
         long id = parseId(userId, "user");
 
         userService.deleteById(id);
+        // Deletion commits its own transactions and external calls; record once it succeeded.
+        auditService.record("deleteUser", "USER", id, details());
         return true;
     }
 
     @DgsMutation
     @PreAuthorize(
             "hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).USER_MANAGE_ROLE) && hasRole('ADMIN')")
+    @Transactional
     public User updateUserRole(@InputArgument String userId, @InputArgument UpdateRoleInput input) {
         long id = parseId(userId, "user");
+        UserRole role = UserInputMapper.mapEnum(UserRole.class, input.getRole());
 
-        ee.bytecore.backend.entities.user.User updated =
-                userService.updateRole(id, UserInputMapper.mapEnum(UserRole.class, input.getRole()));
+        UserService.RoleChange change = userService.updateRole(currentUserProvider.getCurrentUserId(), id, role);
+        ee.bytecore.backend.entities.user.User updated = change.user();
+        auditService.record(
+                "updateUserRole",
+                "USER",
+                id,
+                details("previousRole", change.previousRole().name(), "newRole", role.name()));
 
         return UserMapper.toGraphQlType(updated);
     }
@@ -103,11 +119,14 @@ public class UserMutation {
 
     @DgsMutation
     @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).USER_WRITE) && hasRole('ADMIN')")
+    @Transactional
     public Boolean deleteUserAddress(@InputArgument String userId, @InputArgument String addressId) {
         long uId = parseId(userId, "user");
         long id = parseId(addressId, "address");
 
-        return userAddressService.deleteOwned(uId, id);
+        boolean deleted = userAddressService.deleteOwned(uId, id);
+        if (deleted) auditService.record("deleteUserAddress", "USER_ADDRESS", id, details("userId", uId));
+        return deleted;
     }
 
     // Payment method
@@ -136,6 +155,7 @@ public class UserMutation {
 
     @DgsMutation
     @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).USER_WRITE) && hasRole('ADMIN')")
+    @Transactional
     public UserPaymentMethod addUserPaymentMethod(
             @InputArgument String userId, @InputArgument CreatePaymentMethodInput input) {
         long id = parseId(userId, "user");
@@ -147,17 +167,25 @@ public class UserMutation {
 
         ee.bytecore.backend.entities.user.UserPaymentMethod savedPaymentMethod =
                 userPaymentMethodRepository.save(newPaymentMethod);
+        auditService.record(
+                "addUserPaymentMethod",
+                "USER_PAYMENT_METHOD",
+                savedPaymentMethod.getId(),
+                details("userId", id, "provider", input.getProvider(), "type", String.valueOf(input.getType())));
 
         return UserMapper.toGraphQlType(savedPaymentMethod);
     }
 
     @DgsMutation
     @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).USER_WRITE) && hasRole('ADMIN')")
+    @Transactional
     public Boolean deleteUserPaymentMethod(@InputArgument String userId, @InputArgument String paymentMethodId) {
         long uId = parseId(userId, "user");
         long id = parseId(paymentMethodId, "paymentMethod");
 
-        return userPaymentMethodService.deleteOwned(uId, id);
+        boolean deleted = userPaymentMethodService.deleteOwned(uId, id);
+        if (deleted) auditService.record("deleteUserPaymentMethod", "USER_PAYMENT_METHOD", id, details("userId", uId));
+        return deleted;
     }
 
     // Helpers

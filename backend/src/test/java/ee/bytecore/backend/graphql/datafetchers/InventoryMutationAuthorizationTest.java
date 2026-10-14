@@ -71,6 +71,9 @@ class InventoryMutationAuthorizationTest {
     JwtAuthenticationConverter jwtAuthenticationConverter;
 
     @MockitoBean
+    ee.bytecore.backend.services.audit.AuditService auditService;
+
+    @MockitoBean
     WarehouseRepository warehouseRepository;
 
     @MockitoBean

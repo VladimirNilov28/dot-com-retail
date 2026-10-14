@@ -1,14 +1,18 @@
 package ee.bytecore.backend.graphql.datafetchers.product;
 
+import static ee.bytecore.backend.services.audit.AuditDetails.details;
+
 import java.util.List;
 
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.transaction.annotation.Transactional;
 
 import ee.bytecore.backend.graphql.mappers.ProductMapper;
 import ee.bytecore.backend.services.BrandService;
 import ee.bytecore.backend.services.ProductImageService;
 import ee.bytecore.backend.services.ProductService;
 import ee.bytecore.backend.services.ProductVariantService;
+import ee.bytecore.backend.services.audit.AuditService;
 
 import com.netflix.dgs.codegen.generated.types.Brand;
 import com.netflix.dgs.codegen.generated.types.CreateProductInput;
@@ -30,19 +34,23 @@ public class ProductMutation {
 
     private final BrandService brandService;
     private final ProductImageService productImageService;
+    private final AuditService auditService;
 
     public ProductMutation(
             ProductService productService,
             ProductVariantService productVariantService,
             BrandService brandService,
-            ProductImageService productImageService) {
+            ProductImageService productImageService,
+            AuditService auditService) {
         this.productService = productService;
         this.productVariantService = productVariantService;
         this.brandService = brandService;
         this.productImageService = productImageService;
+        this.auditService = auditService;
     }
 
     @DgsMutation
+    @Transactional
     @PreAuthorize(
             "hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).PRODUCT_WRITE) && hasAnyRole('CATALOG_MANAGER','ADMIN')")
     public Product createProduct(@InputArgument CreateProductInput input) {
@@ -52,10 +60,20 @@ public class ProductMutation {
         ee.bytecore.backend.entities.product.Product created = productService.create(
                 input.getName(), input.getSlug(), input.getDescription(), toLongIds(input.getCategoryIds()));
         if (brandId != null) brandService.assign(created.getId(), brandId);
+        auditService.record(
+                "createProduct",
+                "PRODUCT",
+                created.getId(),
+                details(
+                        "name", created.getName(),
+                        "slug", created.getSlug(),
+                        "brandId", brandId,
+                        "categoryIds", input.getCategoryIds()));
         return ProductMapper.toGraphQlType(created);
     }
 
     @DgsMutation
+    @Transactional
     @PreAuthorize(
             "hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).PRODUCT_WRITE) && hasAnyRole('CATALOG_MANAGER','ADMIN')")
     public Product updateProduct(@InputArgument String productId, @InputArgument UpdateProductInput input) {
@@ -68,22 +86,38 @@ public class ProductMutation {
                 id, input.getName(), input.getSlug(), input.getDescription(), toLongIds(input.getCategoryIds()));
         if (input.getBrandId() != null) brandService.assign(id, parseId(input.getBrandId(), "brand"));
         else if (Boolean.TRUE.equals(input.getClearBrand())) brandService.assign(id, null);
+        auditService.record(
+                "updateProduct",
+                "PRODUCT",
+                id,
+                details(
+                        "name", input.getName(),
+                        "slug", input.getSlug(),
+                        "descriptionChanged", input.getDescription() != null ? true : null,
+                        "brandId", input.getBrandId(),
+                        "clearBrand", input.getClearBrand(),
+                        "categoryIds", input.getCategoryIds()));
         return ProductMapper.toGraphQlType(updated);
     }
 
     @DgsMutation
+    @Transactional
     @PreAuthorize(
             "hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).PRODUCT_WRITE) && hasAnyRole('CATALOG_MANAGER','ADMIN')")
     public Boolean deleteProduct(@InputArgument String productId) {
-        return productService.deleteById(parseId(productId, "product"));
+        long id = parseId(productId, "product");
+        boolean deleted = productService.deleteById(id);
+        if (deleted) auditService.record("deleteProduct", "PRODUCT", id, details());
+        return deleted;
     }
 
     @DgsMutation
+    @Transactional
     @PreAuthorize(
             "hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).PRODUCT_WRITE) && hasAnyRole('CATALOG_MANAGER','ADMIN')")
     public ProductVariant createProductVariant(@InputArgument CreateProductVariantInput input) {
         long productId = parseId(input.getProductId(), "product");
-        return ProductMapper.toGraphQlType(productVariantService.create(
+        var created = productVariantService.create(
                 productId,
                 input.getSku(),
                 input.getPrice(),
@@ -92,16 +126,23 @@ public class ProductMutation {
                 input.getWeightGrams(),
                 input.getLengthMm(),
                 input.getWidthMm(),
-                input.getHeightMm()));
+                input.getHeightMm());
+        auditService.record(
+                "createProductVariant",
+                "PRODUCT_VARIANT",
+                created.getId(),
+                details("productId", productId, "sku", created.getSku(), "price", created.getPrice()));
+        return ProductMapper.toGraphQlType(created);
     }
 
     @DgsMutation
+    @Transactional
     @PreAuthorize(
             "hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).PRODUCT_WRITE) && hasAnyRole('CATALOG_MANAGER','ADMIN')")
     public ProductVariant updateProductVariant(
             @InputArgument String variantId, @InputArgument UpdateProductVariantInput input) {
         long id = parseId(variantId, "productVariant");
-        return ProductMapper.toGraphQlType(productVariantService.update(
+        var updated = productVariantService.update(
                 id,
                 input.getSku(),
                 input.getPrice(),
@@ -112,58 +153,90 @@ public class ProductMutation {
                 input.getLengthMm(),
                 input.getWidthMm(),
                 input.getHeightMm(),
-                Boolean.TRUE.equals(input.getClearDimensions())));
+                Boolean.TRUE.equals(input.getClearDimensions()));
+        auditService.record(
+                "updateProductVariant",
+                "PRODUCT_VARIANT",
+                id,
+                details(
+                        "sku", input.getSku(),
+                        "price", input.getPrice(),
+                        "attributesChanged", input.getAttributes() != null ? true : null,
+                        "barcode", input.getBarcode(),
+                        "weightGrams", input.getWeightGrams(),
+                        "isActive", input.getIsActive(),
+                        "lengthMm", input.getLengthMm(),
+                        "widthMm", input.getWidthMm(),
+                        "heightMm", input.getHeightMm(),
+                        "clearDimensions", input.getClearDimensions()));
+        return ProductMapper.toGraphQlType(updated);
     }
 
     @DgsMutation
+    @Transactional
     @PreAuthorize(
             "hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).PRODUCT_WRITE) && hasAnyRole('CATALOG_MANAGER','ADMIN')")
     public Boolean deleteProductVariant(@InputArgument String variantId) {
-        return productVariantService.deleteById(parseId(variantId, "productVariant"));
+        long id = parseId(variantId, "productVariant");
+        boolean deleted = productVariantService.deleteById(id);
+        if (deleted) auditService.record("deleteProductVariant", "PRODUCT_VARIANT", id, details());
+        return deleted;
     }
 
     @DgsMutation
+    @Transactional
     @PreAuthorize(
             "hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).PRODUCT_WRITE) && hasAnyRole('CATALOG_MANAGER','ADMIN')")
     public Brand createBrand(@InputArgument String name) {
-        return ProductMapper.toGraphQlType(brandService.getOrCreate(name));
+        var brand = brandService.getOrCreate(name);
+        auditService.record("createBrand", "BRAND", brand.getId(), details("name", brand.getName()));
+        return ProductMapper.toGraphQlType(brand);
     }
 
     @DgsMutation
+    @Transactional
     @PreAuthorize(
             "hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).PRODUCT_WRITE) && hasAnyRole('CATALOG_MANAGER','ADMIN')")
     public ProductImage updateProductImage(@InputArgument String imageId, @InputArgument String altText) {
-        return ProductMapper.toGraphQlType(productImageService.updateAlt(parseId(imageId, "productImage"), altText));
+        long id = parseId(imageId, "productImage");
+        var image = productImageService.updateAlt(id, altText);
+        auditService.record("updateProductImage", "PRODUCT_IMAGE", id, details("altText", image.getAltText()));
+        return ProductMapper.toGraphQlType(image);
     }
 
     @DgsMutation
+    @Transactional
     @PreAuthorize(
             "hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).PRODUCT_WRITE) && hasAnyRole('CATALOG_MANAGER','ADMIN')")
     public List<ProductImage> setPrimaryProductImage(@InputArgument String imageId) {
-        return productImageService.setPrimary(parseId(imageId, "productImage")).stream()
-                .map(ProductMapper::toGraphQlType)
-                .toList();
+        long id = parseId(imageId, "productImage");
+        var images = productImageService.setPrimary(id);
+        auditService.record("setPrimaryProductImage", "PRODUCT_IMAGE", id, details());
+        return images.stream().map(ProductMapper::toGraphQlType).toList();
     }
 
     @DgsMutation
+    @Transactional
     @PreAuthorize(
             "hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).PRODUCT_WRITE) && hasAnyRole('CATALOG_MANAGER','ADMIN')")
     public List<ProductImage> reorderProductImages(
             @InputArgument String productId, @InputArgument List<String> imageIds) {
-        return productImageService
-                .reorder(
-                        parseId(productId, "product"),
-                        imageIds.stream().map(i -> parseId(i, "productImage")).toList())
-                .stream()
-                .map(ProductMapper::toGraphQlType)
-                .toList();
+        long id = parseId(productId, "product");
+        List<Long> ids = imageIds.stream().map(i -> parseId(i, "productImage")).toList();
+        var images = productImageService.reorder(id, ids);
+        auditService.record("reorderProductImages", "PRODUCT", id, details("imageIds", ids));
+        return images.stream().map(ProductMapper::toGraphQlType).toList();
     }
 
     @DgsMutation
+    @Transactional
     @PreAuthorize(
             "hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).PRODUCT_WRITE) && hasAnyRole('CATALOG_MANAGER','ADMIN')")
     public Boolean deleteProductImage(@InputArgument String imageId) {
-        return productImageService.delete(parseId(imageId, "productImage"));
+        long id = parseId(imageId, "productImage");
+        boolean deleted = productImageService.delete(id);
+        if (deleted) auditService.record("deleteProductImage", "PRODUCT_IMAGE", id, details());
+        return deleted;
     }
 
     private List<Long> toLongIds(List<String> ids) {

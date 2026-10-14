@@ -292,6 +292,73 @@ class UserServiceTest {
     }
 
     @Test
+    void shouldRejectAdminDemotingThemselvesTest() {
+        User otherAdmin = User.create("other-admin", "other@example.com", LocalDate.of(1990, 1, 1));
+        otherAdmin.setId(2L);
+        otherAdmin.setRole(UserRole.ADMIN);
+        user.setRole(UserRole.ADMIN);
+        when(userRepository.findActiveAdminsForUpdate()).thenReturn(java.util.List.of(user, otherAdmin));
+        when(userRepository.findLockedById(1L)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> userService.updateRole(1L, 1L, UserRole.USER))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("your own ADMIN role");
+        assertThat(user.getRole()).isEqualTo(UserRole.ADMIN);
+    }
+
+    @Test
+    void shouldRejectDemotingLastActiveAdminTest() {
+        user.setRole(UserRole.ADMIN);
+        when(userRepository.findActiveAdminsForUpdate()).thenReturn(java.util.List.of(user));
+        when(userRepository.findLockedById(1L)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> userService.updateRole(99L, 1L, UserRole.CATALOG_MANAGER))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("last active administrator");
+        assertThat(user.getRole()).isEqualTo(UserRole.ADMIN);
+    }
+
+    @Test
+    void shouldAllowDemotingAnotherAdminWhenAnotherRemainsTest() {
+        User actor = User.create("actor-admin", "actor@example.com", LocalDate.of(1990, 1, 1));
+        actor.setId(2L);
+        actor.setRole(UserRole.ADMIN);
+        user.setRole(UserRole.ADMIN);
+        when(userRepository.findActiveAdminsForUpdate()).thenReturn(java.util.List.of(user, actor));
+        when(userRepository.findLockedById(1L)).thenReturn(Optional.of(user));
+
+        UserService.RoleChange change = userService.updateRole(2L, 1L, UserRole.SUPPORT);
+
+        assertThat(change.previousRole()).isEqualTo(UserRole.ADMIN);
+        assertThat(change.user().getRole()).isEqualTo(UserRole.SUPPORT);
+    }
+
+    @Test
+    void shouldAllowPromotingWithoutLockingAdminSetTest() {
+        when(userRepository.findLockedById(1L)).thenReturn(Optional.of(user));
+
+        UserService.RoleChange change = userService.updateRole(2L, 1L, UserRole.ADMIN);
+
+        assertThat(change.user().getRole()).isEqualTo(UserRole.ADMIN);
+        verify(userRepository, never()).findActiveAdminsForUpdate();
+    }
+
+    @Test
+    void shouldEscapeLikeWildcardsAndBoundSizeInUserSearchTest() {
+        when(userRepository.searchActive(any(), any(), any())).thenReturn(org.springframework.data.domain.Page.empty());
+
+        userService.searchActive(" 50%_A ", UserRole.ADMIN, 0, 25);
+
+        verify(userRepository)
+                .searchActive(
+                        org.mockito.ArgumentMatchers.eq("%50\\%\\_a%"),
+                        org.mockito.ArgumentMatchers.eq(UserRole.ADMIN),
+                        any());
+        assertThatThrownBy(() -> userService.searchActive(null, null, 0, 101))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void shouldThrowWhenUpdatingRoleOfMissingUserTest() {
         when(userRepository.findLockedById(999L)).thenReturn(Optional.empty());
 

@@ -36,6 +36,9 @@ public final class Scopes {
     public static final String PAYMENT_WRITE = "payment:write";
     public static final String PAYMENT_MANAGE_STATUS = "payment:manage-status";
 
+    public static final String AUDIT_READ = "audit:read";
+    public static final String SHIPPING_MANAGE = "shipping:manage";
+
     public static final String INTERNAL_PROVISION_USER = "internal:provision-user";
 
     private Scopes() {}

@@ -54,15 +54,33 @@ public class CheckoutSettings {
         pickupAddress = ee.bytecore.backend.services.CheckoutSupport.normalize(pickupAddress);
     }
 
+    /** Delivery-kind price/estimate pair; the staff-managed table supplies these at runtime. */
+    public record ConfiguredOption(String method, BigDecimal charge, String estimate) {}
+
+    /** Fallback options built from these configuration fixtures (used when no DB-backed source exists). */
     public List<ShippingOption> options(String countryCode) {
-        if (countryCode != null && !supportedCountries.contains(countryCode)) {
-            return List.of(
-                    option("PICKUP", pickupCharge, pickupEstimate, new PickupLocation(pickupName, pickupAddress)));
-        }
-        return List.of(
-                option("STANDARD", standardCharge, standardEstimate, null),
-                option("EXPRESS", expressCharge, expressEstimate, null),
-                option("PICKUP", pickupCharge, pickupEstimate, new PickupLocation(pickupName, pickupAddress)));
+        return options(
+                countryCode,
+                List.of(
+                        new ConfiguredOption("STANDARD", standardCharge, standardEstimate),
+                        new ConfiguredOption("EXPRESS", expressCharge, expressEstimate),
+                        new ConfiguredOption("PICKUP", pickupCharge, pickupEstimate)));
+    }
+
+    /**
+     * Builds the checkout options for a destination from the given active configured options
+     * (in display order). Unsupported destinations only offer pickup.
+     */
+    public List<ShippingOption> options(String countryCode, List<ConfiguredOption> configured) {
+        boolean unsupported = countryCode != null && !supportedCountries.contains(countryCode);
+        return configured.stream()
+                .filter(value -> !unsupported || "PICKUP".equals(value.method()))
+                .map(value -> option(
+                        value.method(),
+                        value.charge(),
+                        value.estimate(),
+                        "PICKUP".equals(value.method()) ? new PickupLocation(pickupName, pickupAddress) : null))
+                .toList();
     }
 
     private ShippingOption option(String method, BigDecimal charge, String estimate, PickupLocation location) {

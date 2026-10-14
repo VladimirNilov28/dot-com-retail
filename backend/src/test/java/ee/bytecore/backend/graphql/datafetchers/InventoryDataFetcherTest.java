@@ -61,6 +61,9 @@ import org.junit.jupiter.api.Test;
 class InventoryDataFetcherTest {
 
     @MockitoBean
+    ee.bytecore.backend.services.audit.AuditService auditService;
+
+    @MockitoBean
     WarehouseRepository warehouseRepository;
 
     @MockitoBean

@@ -44,6 +44,9 @@ import org.junit.jupiter.api.Test;
 class CategoryDataFetcherTest {
 
     @MockitoBean
+    ee.bytecore.backend.services.audit.AuditService auditService;
+
+    @MockitoBean
     CategoryRepository categoryRepository;
 
     private Category category;

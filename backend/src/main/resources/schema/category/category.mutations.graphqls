@@ -8,6 +8,8 @@ input UpdateCategoryInput {
   name: String
   slug: String
   parentId: ID
+  "Move the category to the root of the tree. Cannot be combined with parentId."
+  clearParent: Boolean
 }
 
 extend type Mutation {

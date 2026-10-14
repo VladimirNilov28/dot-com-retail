@@ -1,0 +1,37 @@
+"One append-only record of a privileged staff operation."
+type AuditLogEntry {
+  id: ID!
+  occurredAt: Instant!
+  actorUserId: ID
+  actorSubject: String!
+  "Current username of the actor, when the actor is a known user."
+  actorUsername: String
+  actorRoles: String
+  operation: String!
+  targetType: String!
+  targetId: String
+  outcome: String!
+  "Safe change metadata (ids, field names, non-secret values)."
+  details: JSON!
+}
+
+input AuditLogFilter {
+  "Exact operation name, e.g. updateProduct."
+  operation: String
+  "Exact target type, e.g. PRODUCT."
+  targetType: String
+  "Actor subject or username (case-insensitive)."
+  actor: String
+}
+
+type AuditLogPage {
+  items: [AuditLogEntry!]!
+  totalElements: Int!
+  page: Int!
+  size: Int!
+}
+
+extend type Query {
+  "Newest-first audit log page (size 1-100). ADMIN only."
+  adminAuditLog(filter: AuditLogFilter, page: Int = 0, size: Int = 25): AuditLogPage!
+}

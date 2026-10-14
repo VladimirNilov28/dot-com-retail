@@ -35,9 +35,11 @@ scopes:
     description: Query products and product variants (product, products).
   - name: product:write
     description: >
-      Create, update, or delete products and product variants
+      Create, update, or delete products and product variants, manage
+      brands and product images, and bulk-import products
       (createProduct, updateProduct, deleteProduct, createProductVariant,
-      updateProductVariant, deleteProductVariant).
+      updateProductVariant, deleteProductVariant, createBrand,
+      importProducts, product image mutations and uploads).
   - name: rating:write
     description: Submit or update the caller's own product star rating (rateProduct).
   - name: category:read
@@ -84,6 +86,15 @@ scopes:
     description: >
       Transition a payment's status (updatePaymentStatus). Kept separate
       from payment:write because it is a privileged operational action.
+  - name: audit:read
+    description: >
+      Read the append-only staff audit log (adminAuditLog). Granted to ADMIN
+      only (via the wildcard).
+  - name: shipping:manage
+    description: >
+      Read and manage checkout delivery options (adminDeliveryOptions,
+      createDeliveryOption, updateDeliveryOption, deleteDeliveryOption).
+      Granted to ADMIN only (via the wildcard).
   - name: internal:provision-user
     description: >
       Service-to-service only. Resolve or provision the canonical Spring
@@ -182,6 +193,8 @@ clients:
       - payment:read
       - payment:write
       - payment:manage-status
+      - audit:read
+      - shipping:manage
     # Reserved OAuth2/OIDC protocol scope, not a business resource scope —
     # granted on top of the application's explicit scopes. Hydra/Fosite look for
     # "offline_access" in the granted scope to decide whether to issue a
@@ -201,12 +214,23 @@ clients:
     token_endpoint_auth_method: client_secret_basic
     redirect_uris:
       - http://127.0.0.1:3000/auth/callback
+    # Staff scopes are only an allow-list: consent still intersects them with the
+    # signed-in user's role, so customers never receive catalog/admin scopes.
     scopes:
       - user:read
+      - user:manage-role
+      - product:read
+      - product:write
+      - category:read
+      - category:write
+      - warehouse:read
+      - warehouse:write
       - cart:read
       - cart:write
       - order:read
       - order:write
+      - audit:read
+      - shipping:manage
     additional_scopes:
       - openid
       - offline_access

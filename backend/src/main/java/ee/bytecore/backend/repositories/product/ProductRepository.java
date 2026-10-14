@@ -12,6 +12,9 @@ import ee.bytecore.backend.entities.product.Product;
 public interface ProductRepository extends JpaRepository<Product, Long> {
     Optional<Product> findBySlug(String slug);
 
+    @Query("select p.slug from Product p where p.slug in :slugs")
+    List<String> findExistingSlugs(@Param("slugs") java.util.Collection<String> slugs);
+
     @Query("SELECT DISTINCT p FROM Product p LEFT JOIN FETCH p.categories WHERE p.id IN :productIds")
     List<Product> findAllByIdInWithCategories(@Param("productIds") List<Long> productIds);
 }
