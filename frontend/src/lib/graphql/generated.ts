@@ -96,6 +96,17 @@ export type CheckoutInput = {
   shippingMethod: CheckoutShippingMethod;
 };
 
+export type CreateAddressInput = {
+  addressLine1?: string | null | undefined;
+  addressLine2?: string | null | undefined;
+  city?: string | null | undefined;
+  country?: string | null | undefined;
+  firstName?: string | null | undefined;
+  lastName?: string | null | undefined;
+  mobile?: string | null | undefined;
+  postalCode?: string | null | undefined;
+};
+
 export type PlaceOrderInput = {
   acceptedQuoteVersion: string;
   checkout: CheckoutInput;
@@ -137,6 +148,17 @@ export type ProductSearchInput = {
   query?: string | null | undefined;
   size?: number | null | undefined;
   sort?: ProductSort | null | undefined;
+};
+
+export type UpdateAddressInput = {
+  addressLine1?: string | null | undefined;
+  addressLine2?: string | null | undefined;
+  city?: string | null | undefined;
+  country?: string | null | undefined;
+  firstName?: string | null | undefined;
+  lastName?: string | null | undefined;
+  mobile?: string | null | undefined;
+  postalCode?: string | null | undefined;
 };
 
 export type UpdateCartItemInput = {
@@ -366,6 +388,33 @@ export type MyCartRemoveMutationVariables = Exact<{
 
 export type MyCartRemoveMutation = { removeCartItem: boolean };
 
+export type MyAddressesQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type MyAddressesQuery = { me: { addresses: Array<{ id: string, firstName: string | null, lastName: string | null, city: string | null, country: string | null, postalCode: string | null, addressLine1: string | null, addressLine2: string | null, mobile: string | null }> } };
+
+export type AddMyAddressMutationVariables = Exact<{
+  input: CreateAddressInput;
+}>;
+
+
+export type AddMyAddressMutation = { addMyAddress: { id: string } };
+
+export type UpdateMyAddressMutationVariables = Exact<{
+  id: string | number;
+  input: UpdateAddressInput;
+}>;
+
+
+export type UpdateMyAddressMutation = { updateMyAddress: { id: string } };
+
+export type DeleteMyAddressMutationVariables = Exact<{
+  id: string | number;
+}>;
+
+
+export type DeleteMyAddressMutation = { deleteMyAddress: boolean };
+
 export const StorefrontMeSource = "query StorefrontMe {\n  me {\n    id\n    username\n    email\n    role\n  }\n}";
 export const CheckoutConfigurationSource = "query CheckoutConfiguration {\n  checkoutPaymentConfiguration {\n    available\n    publishableKey\n  }\n}";
 export const CheckoutPrefillSource = "query CheckoutPrefill {\n  me {\n    email\n    addresses {\n      id\n      firstName\n      lastName\n      city\n      country\n      postalCode\n      addressLine1\n      addressLine2\n      mobile\n    }\n  }\n}";
@@ -399,3 +448,7 @@ export const MyCartViewSource = "query MyCartView {\n  myCart {\n    id\n    tot
 export const MyCartAddSource = "mutation MyCartAdd($input: AddCartItemInput!) {\n  addCartItem(input: $input) {\n    id\n  }\n}";
 export const MyCartUpdateSource = "mutation MyCartUpdate($id: ID!, $input: UpdateCartItemInput!) {\n  updateCartItem(cartItemId: $id, input: $input) {\n    id\n  }\n}";
 export const MyCartRemoveSource = "mutation MyCartRemove($id: ID!) {\n  removeCartItem(cartItemId: $id)\n}";
+export const MyAddressesSource = "query MyAddresses {\n  me {\n    addresses {\n      id\n      firstName\n      lastName\n      city\n      country\n      postalCode\n      addressLine1\n      addressLine2\n      mobile\n    }\n  }\n}";
+export const AddMyAddressSource = "mutation AddMyAddress($input: CreateAddressInput!) {\n  addMyAddress(input: $input) {\n    id\n  }\n}";
+export const UpdateMyAddressSource = "mutation UpdateMyAddress($id: ID!, $input: UpdateAddressInput!) {\n  updateMyAddress(addressId: $id, input: $input) {\n    id\n  }\n}";
+export const DeleteMyAddressSource = "mutation DeleteMyAddress($id: ID!) {\n  deleteMyAddress(addressId: $id)\n}";

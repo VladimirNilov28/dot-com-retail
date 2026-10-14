@@ -291,3 +291,21 @@ mutation MyCartUpdate($id: ID!, $input: UpdateCartItemInput!) {
 mutation MyCartRemove($id: ID!) {
   removeCartItem(cartItemId: $id)
 }
+
+query MyAddresses {
+  me {
+    addresses { id firstName lastName city country postalCode addressLine1 addressLine2 mobile }
+  }
+}
+
+mutation AddMyAddress($input: CreateAddressInput!) {
+  addMyAddress(input: $input) { id }
+}
+
+mutation UpdateMyAddress($id: ID!, $input: UpdateAddressInput!) {
+  updateMyAddress(addressId: $id, input: $input) { id }
+}
+
+mutation DeleteMyAddress($id: ID!) {
+  deleteMyAddress(addressId: $id)
+}
