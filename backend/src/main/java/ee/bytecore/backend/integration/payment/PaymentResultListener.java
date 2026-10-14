@@ -3,6 +3,7 @@ package ee.bytecore.backend.integration.payment;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
@@ -10,6 +11,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import ee.bytecore.backend.enums.OrderStatus;
+import ee.bytecore.backend.integration.payment.event.PaymentDeclinedEvent;
 import ee.bytecore.backend.integration.payment.event.PaymentFailedEvent;
 import ee.bytecore.backend.integration.payment.event.PaymentRequestedEvent;
 import ee.bytecore.backend.integration.payment.event.PaymentSucceededEvent;
@@ -33,6 +35,8 @@ public class PaymentResultListener {
 
     private static final Logger log = LoggerFactory.getLogger(PaymentResultListener.class);
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper().findAndRegisterModules();
+    private static final Pattern ATTEMPT_ID = Pattern.compile("[A-Za-z0-9_]{1,64}");
+    private static final Pattern REASON = Pattern.compile("[a-z_]{1,32}");
 
     private final OrderService orderService;
     private final PaymentOutboxEventRepository paymentRequests;
@@ -92,6 +96,59 @@ public class PaymentResultListener {
                 event.requestEventId(),
                 event.paymentId(),
                 null);
+    }
+
+    /**
+     * A definite decline of one attempt. Not terminal: no result receipt is recorded, the order
+     * stays PENDING with its reservation, and a later payment.succeeded still settles it.
+     */
+    @KafkaListener(topics = PaymentTopics.PAYMENT_DECLINED)
+    public void onPaymentDeclined(String payload) {
+        var event = parse(payload, PaymentDeclinedEvent.class);
+        validateResult(event.eventId(), event.requestEventId(), event.orderId(), event.paymentId(), event.occurredAt());
+        if (event.attemptId() == null
+                || !ATTEMPT_ID.matcher(event.attemptId()).matches()
+                || event.reason() == null
+                || !REASON.matcher(event.reason()).matches())
+            throw new IllegalStateException("Malformed payment decline: attempt and reason codes are required");
+        try {
+            transaction.executeWithoutResult(status -> {
+                var order = orderService.lockForFinancialResult(event.orderId());
+                correlate(event.orderId(), event.requestEventId());
+                // A recorded terminal result (late/out-of-order decline) wins.
+                if (paymentRequests
+                        .findResultByRequestEventId(event.requestEventId())
+                        .isPresent()) return;
+                orderService.applyPaymentDecline(
+                        order, event.paymentId(), event.eventId(), event.attemptId(), event.reason());
+            });
+            log.info(
+                    "Applied payment decline eventId={} orderId={} paymentId={} reason={}",
+                    event.eventId(),
+                    event.orderId(),
+                    event.paymentId(),
+                    event.reason());
+        } catch (IllegalArgumentException e) {
+            log.warn(
+                    "Ignoring rejected payment decline eventId={} orderId={} paymentId={} reason={}",
+                    event.eventId(),
+                    event.orderId(),
+                    event.paymentId(),
+                    e.getMessage());
+        }
+    }
+
+    private PaymentRequestedEvent correlate(Long orderId, UUID requestEventId) {
+        var persisted = paymentRequests
+                .findRequestForUpdate(requestEventId)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown payment requestEventId"));
+        PaymentRequestedEvent requested = parse(persisted.getPayload(), PaymentRequestedEvent.class);
+        if (!Objects.equals(persisted.getOrderId(), orderId)
+                || !Objects.equals(requested.orderId(), orderId)
+                || !Objects.equals(requested.eventId(), requestEventId)) {
+            throw new IllegalArgumentException("Payment result does not match its persisted request/order");
+        }
+        return requested;
     }
 
     private <T> T parse(String payload, Class<T> type) {

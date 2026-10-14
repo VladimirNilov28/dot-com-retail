@@ -10,6 +10,7 @@ import { OrderSummary } from "./order-summary";
 import { StripePayment } from "./stripe-payment";
 import { useCheckoutIdentity } from "./identity-boundary";
 import { requestCheckout } from "@/lib/checkout/identity";
+import { declineReasonText, paymentStatusLabel } from "@/lib/orders/model";
 
 function Address({ title, address }: { title: string; address: CheckoutOrder["details"]["shippingAddress"] }) {
   if (!address) return null;
@@ -68,9 +69,10 @@ export function ConfirmationPageView({ reference, guest }: { reference: string; 
 
   const paid = order?.payment.status === "SUCCEEDED";
   const failed = order?.payment.status === "FAILED";
+  const declined = order?.status === "PENDING" && order.payment.status === "DECLINED";
   const title = order?.status === "CANCELLED" ? "Order cancelled" :
-    paid ? "Payment confirmed" : failed ? "Payment failed" :
-      order?.payment.status === "UNRESOLVED" ? "Payment needs attention" : "Payment pending";
+    paid ? "Payment confirmed" : failed ? "Payment failed" : declined ? "Payment declined" :
+      order?.payment.status === "UNRESOLVED" ? "Payment being confirmed" : "Payment pending";
   return <div className="checkout-page">
     <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Order confirmation</h1>
     {loading ? <p className="checkout-skeleton" role="status">Loading your protected order…</p> : null}
@@ -81,8 +83,12 @@ export function ConfirmationPageView({ reference, guest }: { reference: string; 
       <section className="checkout-section" aria-live="polite">
         <h2 className="text-xl font-semibold">{title}</h2>
         <p className="checkout-reference">Order reference: {order.publicId}</p>
-        <p>Order: {order.status.toLowerCase()} · Payment: {order.payment.status.toLowerCase()}</p>
-        {!paid && order.status === "PENDING" ? <p className="text-sm text-muted">Placement is not payment confirmation. Verified provider events and the queue update this order; do not place another order while waiting.</p> : null}
+        <p>Order: {order.status.toLowerCase()} · {paymentStatusLabel(order.payment.status)}</p>
+        {declined ? <div className="cart-notice" data-tone="error" role="alert">
+          <p>{declineReasonText(order.payment.declineReason)} Your order and reserved items are kept — retry below with the same or another card. No new order is needed.</p>
+        </div> : null}
+        {order.status === "PENDING" && order.payment.status === "UNRESOLVED" ? <p className="text-sm text-muted">The payment provider has not confirmed the outcome yet. We keep checking automatically; do not place another order.</p> : null}
+        {!paid && !declined && order.status === "PENDING" ? <p className="text-sm text-muted">Placement is not payment confirmation. Verified provider events and the queue update this order; do not place another order while waiting.</p> : null}
         {order.refund.status !== "NONE" ? <p>Refund: {order.refund.status.toLowerCase()}{order.refund.failureReason ? " — contact support if this remains unresolved." : ""}</p> : null}
         {stopped ? <p role="status">Automatic refresh has paused. You can check again without placing an order or starting a charge.</p> : null}
         <Button variant="secondary" onPress={refresh}>Refresh order status</Button>

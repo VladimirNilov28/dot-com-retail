@@ -457,6 +457,7 @@ type OrderPage @join__type(graph: RETAIL) {
 }
 
 type OrderPayment @join__type(graph: RETAIL) {
+  declineReason: String
   status: OrderPaymentStatus!
 }
 
@@ -1028,6 +1029,7 @@ enum GuestCartMergeStatus @join__type(graph: RETAIL) {
 }
 
 enum OrderPaymentStatus @join__type(graph: RETAIL) {
+  DECLINED @join__enumValue(graph: RETAIL)
   FAILED @join__enumValue(graph: RETAIL)
   PENDING @join__enumValue(graph: RETAIL)
   SUCCEEDED @join__enumValue(graph: RETAIL)

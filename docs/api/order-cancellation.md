@@ -73,15 +73,19 @@ transaction, deduplicated by `(order_id, kind, ref)`.
 | Successful payment before cancellation | PAID | SUCCEEDED | NONE |
 | Cancel a confirmed paid order | CANCELLED | SUCCEEDED | PENDING full refund |
 | Successful charge after cancellation | Remains CANCELLED | SUCCEEDED | One PENDING full refund |
-| Confirmed decline | CANCELLED | FAILED | NONE |
-| Decline after customer cancellation | Remains CANCELLED | FAILED | NONE |
+| Card declined (retryable attempt) | Remains PENDING, reservation kept | DECLINED (+ `declineReason`) | NONE |
+| Card declined after customer cancellation | Remains CANCELLED | unchanged | NONE |
+| PaymentIntent canceled (terminal failure) | CANCELLED | FAILED | NONE |
+| Terminal failure after customer cancellation | Remains CANCELLED | FAILED | NONE |
 | Charge timeout/error | No automatic cancellation | UNRESOLVED | NONE until charge confirmed |
 | Confirmed refund | Remains CANCELLED | SUCCEEDED | SUCCEEDED |
 | Refund timeout/error | Remains CANCELLED | SUCCEEDED | UNRESOLVED, same-key recovery |
 | Confirmed refund rejection | Remains CANCELLED | SUCCEEDED | FAILED |
 
 PENDING means no terminal financial outcome is known. UNRESOLVED explicitly
-reports an uncertain provider attempt; timeouts are not declines. UNKNOWN
+reports an uncertain provider attempt; timeouts are not declines. DECLINED is a
+definite, non-terminal card decline the customer can retry on the same order
+(see [Checkout payment outcome states](checkout.md#payment-outcome-states-declines-and-retry)). UNKNOWN
 represents legacy history without enough evidence. `refund.status: NONE` with
 pending/unknown payment does **not** prove that no refund will be needed.
 `cancellation.awaitingPaymentOutcome` makes this visible.

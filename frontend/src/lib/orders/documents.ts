@@ -4,7 +4,7 @@ const address = "firstName lastName addressLine1 addressLine2 postalCode city co
 
 export const orderDetailFields = `
   id publicId status createdAt updatedAt totalAmount cancellationReason
-  payment { status }
+  payment { status declineReason }
   refund { status amount currency failureReason }
   cancellationEligibility { allowed reason }
   refundEligibility { allowed reason }
@@ -13,6 +13,7 @@ export const orderDetailFields = `
   tracking { carrier trackingNumber trackingUrl shippedAt }
   items { id quantity priceAtPurchase snapshot { productName sku quantity unitPrice subtotal } }
   checkout {
+    requestId
     totals { merchandiseSubtotal shippingCharge total currency }
     details {
       contactEmail contactPhone
@@ -74,7 +75,7 @@ type Address = { firstName: string; lastName: string; addressLine1: string; addr
 export type OrderDetail = {
   id: string; publicId: string; status: string; createdAt: string; updatedAt: string; totalAmount: string;
   cancellationReason: string | null;
-  payment: { status: string };
+  payment: { status: string; declineReason: string | null };
   refund: { status: string; amount: string | null; currency: string | null; failureReason: string | null };
   cancellationEligibility: { allowed: boolean; reason: string | null };
   refundEligibility: { allowed: boolean; reason: string | null };
@@ -84,6 +85,7 @@ export type OrderDetail = {
   items: { id: string; quantity: number; priceAtPurchase: string;
     snapshot: { productName: string; sku: string; quantity: number; unitPrice: string; subtotal: string } | null }[];
   checkout: {
+    requestId: string;
     totals: { merchandiseSubtotal: string; shippingCharge: string; total: string; currency: string };
     details: { contactEmail: string; contactPhone: string | null; shippingAddress: Address | null; billingAddress: Address | null;
       shipping: { method: string; estimate: string; charge: string; currency: string;

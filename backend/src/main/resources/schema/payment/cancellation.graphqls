@@ -1,6 +1,8 @@
 enum OrderPaymentStatus {
   PENDING
   UNRESOLVED
+  # Last attempt definitively declined; the order stays pending and can be paid again.
+  DECLINED
   SUCCEEDED
   FAILED
   UNKNOWN
@@ -27,6 +29,8 @@ type OrderCancellation {
 
 type OrderPayment {
   status: OrderPaymentStatus!
+  # Allow-listed decline code (e.g. insufficient_funds); set only when status is DECLINED.
+  declineReason: String
 }
 
 type OrderRefund {

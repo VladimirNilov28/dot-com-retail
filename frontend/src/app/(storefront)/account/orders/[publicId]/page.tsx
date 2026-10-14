@@ -66,7 +66,7 @@ export default async function AccountOrder({ params, searchParams }: {
       </section>
       <OrderItems order={order} />
       <OrderDelivery order={order} />
-      <PaymentState order={order} />
+      <PaymentState order={order} retryHref={order.checkout && isOrderReference(order.checkout.requestId) ? `/order-confirmation/${order.checkout.requestId}` : undefined} />
       <OrderTimeline order={order} />
       <section className="account-card" aria-labelledby="help-heading">
         <h2 id="help-heading" className="text-lg font-semibold">Need to change something?</h2>

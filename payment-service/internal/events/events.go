@@ -20,6 +20,7 @@ const (
 	PaymentSucceeded  = "payment.succeeded"
 	PaymentFailed     = "payment.failed"
 	PaymentUnresolved = "payment.unresolved"
+	PaymentDeclined   = "payment.declined"
 	RefundRequested   = "refund.requested"
 	RefundSucceeded   = "refund.succeeded"
 	RefundFailed      = "refund.failed"
@@ -63,6 +64,22 @@ type PaymentFailedEvent struct {
 }
 
 type PaymentUnresolvedEvent PaymentFailedEvent
+
+// PaymentDeclinedEvent mirrors
+// ee.bytecore.backend.integration.payment.event.PaymentDeclinedEvent. It is a
+// definite, non-terminal decline of one provider attempt: the payment stays
+// retryable on the same intent. AttemptID is the provider attempt reference
+// (charge id) used for per-attempt deduplication; Reason is an allow-listed
+// code such as insufficient_funds, never card data or provider free text.
+type PaymentDeclinedEvent struct {
+	EventID        uuid.UUID         `json:"eventId"`
+	RequestEventID uuid.UUID         `json:"requestEventId"`
+	OrderID        int64             `json:"orderId"`
+	PaymentID      uuid.UUID         `json:"paymentId"`
+	AttemptID      string            `json:"attemptId"`
+	Reason         string            `json:"reason"`
+	OccurredAt     eventtime.Instant `json:"occurredAt"`
+}
 
 type RefundRequestedEvent struct {
 	EventID               uuid.UUID         `json:"eventId"`

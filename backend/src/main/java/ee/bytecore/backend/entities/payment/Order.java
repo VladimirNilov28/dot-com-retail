@@ -67,6 +67,10 @@ public class Order {
     @Column(name = "payment_status", nullable = false)
     private String paymentStatus = "UNKNOWN";
 
+    /** Latest allow-listed decline reason; only meaningful while paymentStatus is DECLINED. */
+    @Column(name = "payment_decline_reason")
+    private String paymentDeclineReason;
+
     @Column(name = "payment_id", unique = true)
     private UUID paymentId;
 
