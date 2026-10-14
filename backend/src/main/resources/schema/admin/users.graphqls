@@ -1,0 +1,11 @@
+type AdminUserPage {
+  items: [User!]!
+  totalElements: Int!
+  page: Int!
+  size: Int!
+}
+
+extend type Query {
+  "Active users matching a username/email substring and optional role (size 1-100). ADMIN only."
+  adminUsers(query: String, role: Role, page: Int = 0, size: Int = 25): AdminUserPage!
+}

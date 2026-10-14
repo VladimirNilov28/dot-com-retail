@@ -1,0 +1,50 @@
+"A staff-managed checkout delivery option. Placed orders keep their own snapshot."
+type DeliveryOption {
+  id: ID!
+  code: CheckoutShippingMethod!
+  name: String!
+  description: String
+  price: BigDecimal!
+  currency: String!
+  estimatedMinDays: Int!
+  estimatedMaxDays: Int!
+  active: Boolean!
+  sortOrder: Int!
+  createdAt: Instant!
+  updatedAt: Instant!
+}
+
+input CreateDeliveryOptionInput {
+  code: CheckoutShippingMethod!
+  name: String!
+  description: String
+  price: BigDecimal!
+  currency: String = "EUR"
+  estimatedMinDays: Int!
+  estimatedMaxDays: Int!
+  active: Boolean = true
+  sortOrder: Int = 0
+}
+
+input UpdateDeliveryOptionInput {
+  name: String
+  "Empty string clears the description (estimate text then derives from the day range)."
+  description: String
+  price: BigDecimal
+  currency: String
+  estimatedMinDays: Int
+  estimatedMaxDays: Int
+  active: Boolean
+  sortOrder: Int
+}
+
+extend type Query {
+  "All delivery options including inactive ones. ADMIN only."
+  adminDeliveryOptions: [DeliveryOption!]!
+}
+
+extend type Mutation {
+  createDeliveryOption(input: CreateDeliveryOptionInput!): DeliveryOption!
+  updateDeliveryOption(id: ID!, input: UpdateDeliveryOptionInput!): DeliveryOption!
+  deleteDeliveryOption(id: ID!): Boolean!
+}

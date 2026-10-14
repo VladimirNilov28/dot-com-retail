@@ -56,6 +56,9 @@ import org.junit.jupiter.api.Test;
 class UserDataFetcherTest {
 
     @MockitoBean
+    ee.bytecore.backend.services.audit.AuditService auditService;
+
+    @MockitoBean
     UserRepository userRepository;
 
     @MockitoBean
@@ -662,7 +665,11 @@ class UserDataFetcherTest {
     void shouldUpdateUserRoleTest() {
         Long userId = user.getId();
         user.setRole(UserRole.SUPPORT);
-        when(userService.updateRole(userId, UserRole.SUPPORT)).thenReturn(user);
+        when(userService.updateRole(
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.eq(userId),
+                        org.mockito.ArgumentMatchers.eq(UserRole.SUPPORT)))
+                .thenReturn(new ee.bytecore.backend.services.UserService.RoleChange(user, UserRole.USER));
 
         @Language("GraphQl")
         var mutation =

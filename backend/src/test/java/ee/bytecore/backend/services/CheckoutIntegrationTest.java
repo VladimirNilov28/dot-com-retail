@@ -209,9 +209,10 @@ class CheckoutIntegrationTest {
         assertThatThrownBy(() -> orders.placeCheckout(f.user().getId(), null, null, refreshed))
                 .hasMessageContaining("quote changed");
         var third = placement(f, s);
-        BigDecimal original = settings.getStandardCharge();
+        BigDecimal original =
+                jdbc.queryForObject("SELECT price FROM shipping_options WHERE code='STANDARD'", BigDecimal.class);
         try {
-            settings.setStandardCharge(new BigDecimal("5.99"));
+            jdbc.update("UPDATE shipping_options SET price=? WHERE code='STANDARD'", new BigDecimal("5.99"));
             assertThatThrownBy(() -> orders.placeCheckout(f.user().getId(), null, null, third))
                     .hasMessageContaining("quote changed");
             var accepted = placement(f, s);
@@ -219,7 +220,34 @@ class CheckoutIntegrationTest {
                             .getTotalAmount())
                     .isEqualByComparingTo("45.99");
         } finally {
-            settings.setStandardCharge(original);
+            jdbc.update("UPDATE shipping_options SET price=? WHERE code='STANDARD'", original);
+        }
+    }
+
+    @Test
+    void checkoutPreviewReadsActiveDeliveryOptionsFromTable() {
+        var f = fixture(1, 10);
+        try {
+            jdbc.update("UPDATE shipping_options SET price=7.25, description='Next week' WHERE code='STANDARD'");
+            jdbc.update("UPDATE shipping_options SET active=false WHERE code='EXPRESS'");
+            var preview = orders.previewCheckout(f.user().getId(), null, selection("STANDARD"));
+            assertThat(preview.availableShippingOptions())
+                    .extracting(o -> o.method())
+                    .doesNotContain("EXPRESS")
+                    .contains("STANDARD");
+            var standard = preview.availableShippingOptions().stream()
+                    .filter(o -> o.method().equals("STANDARD"))
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(standard.charge()).isEqualByComparingTo("7.25");
+            assertThat(standard.estimate()).isEqualTo("Next week");
+            assertThat(preview.totals().shippingCharge()).isEqualByComparingTo("7.25");
+            assertThatThrownBy(() -> orders.previewCheckout(f.user().getId(), null, selection("EXPRESS")))
+                    .hasMessageContaining("unsupported");
+        } finally {
+            jdbc.update("UPDATE shipping_options SET price=4.99, description='3-5 business days (development estimate)'"
+                    + " WHERE code='STANDARD'");
+            jdbc.update("UPDATE shipping_options SET active=true WHERE code='EXPRESS'");
         }
     }
 

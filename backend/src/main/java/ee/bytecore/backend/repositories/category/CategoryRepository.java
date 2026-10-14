@@ -1,5 +1,6 @@
 package ee.bytecore.backend.repositories.category;
 
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -15,4 +16,11 @@ public interface CategoryRepository extends JpaRepository<Category, Long> {
     void lockHierarchy();
 
     Optional<Category> findBySlug(String slug);
+
+    boolean existsByParentId(Long parentId);
+
+    List<Category> findAllBySlugIn(java.util.Collection<String> slugs);
+
+    @Query(value = "SELECT count(*) FROM product_categories WHERE category_id = :categoryId", nativeQuery = true)
+    long countProductLinks(@org.springframework.data.repository.query.Param("categoryId") Long categoryId);
 }

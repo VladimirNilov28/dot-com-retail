@@ -5,6 +5,8 @@ const nextConfig: NextConfig = {
   ...(process.env.NEXT_OUTPUT === "standalone" ? { output: "standalone" as const } : {}),
   allowedDevOrigins: ["127.0.0.1"],
   reactCompiler: true,
+  // Bulk product import posts files of up to 1 MB through a server action (multipart overhead included).
+  experimental: { serverActions: { bodySizeLimit: "2mb" } },
   logging: {
     incomingRequests: { ignore: [/^\/auth(?:\/|$)/, /^\/self-service\/methods\/oidc\/callback(?:\/|$)/] },
   },

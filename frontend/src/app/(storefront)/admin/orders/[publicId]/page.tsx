@@ -36,7 +36,7 @@ export default async function AdminOrder({ params, searchParams }: {
   const query = await searchParams;
   if (!isOrderReference(publicId)) return <Problem text="This order could not be found." />;
   const access = await adminAccess(orderRoles);
-  if (access.kind !== "ok") return <AdminDenied access={access} next={`/admin/orders/${publicId}`} area="order management" />;
+  if (access.kind !== "ok") return <AdminDenied access={access} next={`/admin/orders/${publicId}`} area="Order management" />;
   let order: OrderDetail | null;
   try {
     order = (await orderGraphql<{ order: OrderDetail | null }>(access.session.accessToken, staffOrderQuery, { publicId })).order;

@@ -53,6 +53,9 @@ import org.junit.jupiter.params.provider.ValueSource;
 class ProductDataFetcherTest {
 
     @MockitoBean
+    ee.bytecore.backend.services.audit.AuditService auditService;
+
+    @MockitoBean
     ProductRepository productRepository;
 
     @MockitoBean

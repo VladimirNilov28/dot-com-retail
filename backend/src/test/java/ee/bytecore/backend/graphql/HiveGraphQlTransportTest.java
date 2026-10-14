@@ -89,6 +89,9 @@ class HiveGraphQlTransportTest {
     OrderStatusPublisher publisher;
 
     @MockitoBean
+    ee.bytecore.backend.services.audit.AuditService auditService;
+
+    @MockitoBean
     JwtDecoder jwtDecoder;
 
     @MockitoBean

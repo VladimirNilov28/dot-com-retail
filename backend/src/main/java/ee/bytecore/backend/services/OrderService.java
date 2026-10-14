@@ -75,6 +75,9 @@ public class OrderService {
     private ObjectProvider<CheckoutSettings> checkoutSettings;
 
     @Autowired
+    private ObjectProvider<DeliveryOptionService> deliveryOptions;
+
+    @Autowired
     private ObjectProvider<CheckoutRequestRepository> checkoutRequests;
 
     @Autowired
@@ -351,7 +354,12 @@ public class OrderService {
         if (code != null
                 && !java.util.Set.of(java.util.Locale.getISOCountries()).contains(code))
             throw new IllegalArgumentException("Country must be an ISO alpha-2 code");
-        return checkoutSettings.getObject().options(code);
+        return deliveryOptionsFor(code, checkoutSettings.getObject());
+    }
+
+    private List<ShippingOption> deliveryOptionsFor(String countryCode, CheckoutSettings settings) {
+        DeliveryOptionService service = deliveryOptions == null ? null : deliveryOptions.getIfAvailable();
+        return service == null ? settings.options(countryCode) : service.checkoutOptions(countryCode);
     }
 
     @Transactional(readOnly = true)
@@ -976,7 +984,7 @@ public class OrderService {
                         "Saved payment method is not compatible with the simulated provider");
             methodType = method.getType().name();
         }
-        List<ShippingOption> options = settings.options(shipping == null ? null : shipping.countryCode());
+        List<ShippingOption> options = deliveryOptionsFor(shipping == null ? null : shipping.countryCode(), settings);
         ShippingOption option = options.stream()
                 .filter(value -> value.method().equals(selection.shippingMethod()))
                 .findFirst()

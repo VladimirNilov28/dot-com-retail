@@ -33,6 +33,12 @@ public class CategoryService {
         return categoryRepository.findBySlug(slug);
     }
 
+    /** Number of products linked to the category (links are removed when it is deleted). */
+    @Transactional(readOnly = true)
+    public long countProductLinks(Long id) {
+        return categoryRepository.countProductLinks(id);
+    }
+
     public List<Category> findAll() {
         return categoryRepository.findAll();
     }
@@ -48,20 +54,28 @@ public class CategoryService {
 
     @Transactional
     public Category update(Long id, String name, String slug, Long parentId) {
+        return update(id, name, slug, parentId, false);
+    }
+
+    /** Like {@link #update(Long, String, String, Long)}; {@code clearParent} moves the category to the root. */
+    @Transactional
+    public Category update(Long id, String name, String slug, Long parentId, boolean clearParent) {
+        if (clearParent && parentId != null)
+            throw new IllegalArgumentException("Parent cannot be both set and cleared");
         categoryRepository.lockHierarchy();
         Category existing = categoryRepository
                 .findById(id)
                 .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException(
                         String.format("Category with id %s not found", id)));
 
-        Category parent = parentId == null ? existing.getParent() : resolveParent(parentId);
+        Category parent = clearParent ? null : parentId == null ? existing.getParent() : resolveParent(parentId);
         validateParent(id, parent);
         if (name != null) {
             validateName(name);
             existing.setName(name);
         }
         if (slug != null) existing.setSlug(slug);
-        if (parentId != null) existing.setParent(parent);
+        if (parentId != null || clearParent) existing.setParent(parent);
 
         return save(existing);
     }
@@ -72,6 +86,10 @@ public class CategoryService {
         if (categoryRepository.findById(id).isEmpty()) {
             return false;
         }
+        // The parent FK cascades; refuse instead of silently deleting a whole subtree.
+        if (categoryRepository.existsByParentId(id))
+            throw new IllegalArgumentException(
+                    "Category has subcategories; move or delete them before deleting this category");
         categoryRepository.deleteById(id);
         return true;
     }

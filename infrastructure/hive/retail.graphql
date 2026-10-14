@@ -4,9 +4,40 @@ schema {
   subscription: Subscription
 }
 
+type AdminUserPage {
+  items: [User!]!
+  page: Int!
+  size: Int!
+  totalElements: Int!
+}
+
 type AttributeValueFacet {
   count: Int!
   value: String!
+}
+
+"One append-only record of a privileged staff operation."
+type AuditLogEntry {
+  actorRoles: String
+  actorSubject: String!
+  actorUserId: ID
+  "Current username of the actor, when the actor is a known user."
+  actorUsername: String
+  "Safe change metadata (ids, field names, non-secret values)."
+  details: JSON!
+  id: ID!
+  occurredAt: Instant!
+  operation: String!
+  outcome: String!
+  targetId: String
+  targetType: String!
+}
+
+type AuditLogPage {
+  items: [AuditLogEntry!]!
+  page: Int!
+  size: Int!
+  totalElements: Int!
 }
 
 type Brand {
@@ -164,6 +195,22 @@ type CheckoutTotals {
   total: BigDecimal!
 }
 
+"A staff-managed checkout delivery option. Placed orders keep their own snapshot."
+type DeliveryOption {
+  active: Boolean!
+  code: CheckoutShippingMethod!
+  createdAt: Instant!
+  currency: String!
+  description: String
+  estimatedMaxDays: Int!
+  estimatedMinDays: Int!
+  id: ID!
+  name: String!
+  price: BigDecimal!
+  sortOrder: Int!
+  updatedAt: Instant!
+}
+
 type GuestCart {
   createdAt: Instant!
   expiresAt: Instant!
@@ -248,12 +295,14 @@ type Mutation {
   "Get-or-create a brand by case-insensitive name."
   createBrand(name: String!): Brand!
   createCategory(input: CreateCategoryInput!): Category!
+  createDeliveryOption(input: CreateDeliveryOptionInput!): DeliveryOption!
   createGuestOrder(input: PlaceOrderInput!): CheckoutOrder!
   createOrder(input: PlaceOrderInput!): Order!
   createProduct(input: CreateProductInput!): Product!
   createProductVariant(input: CreateProductVariantInput!): ProductVariant!
   createWarehouse(input: CreateWarehouseInput!): Warehouse!
   deleteCategory(categoryId: ID!): Boolean!
+  deleteDeliveryOption(id: ID!): Boolean!
   deleteMyAddress(addressId: ID!): Boolean!
   deleteMyPaymentMethod(paymentMethodId: ID!): Boolean!
   deleteMyReview(productId: ID!): Boolean!
@@ -266,6 +315,8 @@ type Mutation {
   deleteUserPaymentMethod(paymentMethodId: ID!, userId: ID!): Boolean!
   deleteWarehouse(warehouseId: ID!): Boolean!
   hideReview(reason: String!, reviewId: ID!): ModerationReview!
+  "Validate and create products/variants from CSV or JSON text (max 1 MB, 500 variant rows). See docs/api/bulk-import.md."
+  importProducts(content: String!, format: ProductImportFormat!): ProductImportResult!
   mergeGuestCart(requestId: UUID!): GuestCartMergeResult!
   """
   Submit/update the caller's integer 1-5 star rating. Requires rating:write and an
@@ -289,6 +340,7 @@ type Mutation {
   unvoteReviewHelpful(reviewId: ID!): ProductReview!
   updateCartItem(cartItemId: ID!, input: UpdateCartItemInput!): CartItem!
   updateCategory(categoryId: ID!, input: UpdateCategoryInput!): Category!
+  updateDeliveryOption(id: ID!, input: UpdateDeliveryOptionInput!): DeliveryOption!
   updateGuestCartItem(cartItemId: ID!, input: UpdateCartItemInput!): GuestCart!
   updateMyAddress(addressId: ID!, input: UpdateAddressInput!): UserAddress!
   updateOrderStatus(input: UpdateOrderStatusInput!, orderId: ID!): Order!
@@ -452,6 +504,22 @@ type ProductImage {
   width: Int!
 }
 
+type ProductImportError {
+  field: String!
+  message: String!
+  "1-based CSV data row (header excluded) or 1-based JSON product index."
+  row: Int!
+}
+
+"Atomic import result: either everything was created or nothing was (errors non-empty)."
+type ProductImportResult {
+  brandsCreated: Int!
+  errors: [ProductImportError!]!
+  productsCreated: Int!
+  success: Boolean!
+  variantsCreated: Int!
+}
+
 type ProductReview {
   authorName: String!
   body: String
@@ -515,6 +583,12 @@ type ProductVariant {
 }
 
 type Query {
+  "Newest-first audit log page (size 1-100). ADMIN only."
+  adminAuditLog(filter: AuditLogFilter, page: Int = 0, size: Int = 25): AuditLogPage!
+  "All delivery options including inactive ones. ADMIN only."
+  adminDeliveryOptions: [DeliveryOption!]!
+  "Active users matching a username/email substring and optional role (size 1-100). ADMIN only."
+  adminUsers(page: Int = 0, query: String, role: Role, size: Int = 25): AdminUserPage!
   brands: [Brand!]!
   categories: [Category!]!
   category(id: ID, slug: String): Category
@@ -945,6 +1019,11 @@ enum ProductAvailability {
   OUT_OF_STOCK
 }
 
+enum ProductImportFormat {
+  CSV
+  JSON
+}
+
 enum ProductSort {
   PRICE_ASC
   PRICE_DESC
@@ -998,6 +1077,15 @@ input AddWishlistItemInput {
   productVariantId: ID!
 }
 
+input AuditLogFilter {
+  "Actor subject or username (case-insensitive)."
+  actor: String
+  "Exact operation name, e.g. updateProduct."
+  operation: String
+  "Exact target type, e.g. PRODUCT."
+  targetType: String
+}
+
 input CancelOrderInput {
   publicId: UUID!
   requestId: UUID!
@@ -1042,6 +1130,18 @@ input CreateCategoryInput {
   name: String!
   parentId: ID
   slug: String!
+}
+
+input CreateDeliveryOptionInput {
+  active: Boolean = true
+  code: CheckoutShippingMethod!
+  currency: String = "EUR"
+  description: String
+  estimatedMaxDays: Int!
+  estimatedMinDays: Int!
+  name: String!
+  price: BigDecimal!
+  sortOrder: Int = 0
 }
 
 input CreatePaymentMethodInput {
@@ -1175,9 +1275,23 @@ input UpdateCartItemInput {
 }
 
 input UpdateCategoryInput {
+  "Move the category to the root of the tree. Cannot be combined with parentId."
+  clearParent: Boolean
   name: String
   parentId: ID
   slug: String
+}
+
+input UpdateDeliveryOptionInput {
+  active: Boolean
+  currency: String
+  "Empty string clears the description (estimate text then derives from the day range)."
+  description: String
+  estimatedMaxDays: Int
+  estimatedMinDays: Int
+  name: String
+  price: BigDecimal
+  sortOrder: Int
 }
 
 input UpdateOrderStatusInput {

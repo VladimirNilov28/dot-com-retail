@@ -6,7 +6,7 @@ import { authenticatedState } from "@/lib/auth/session";
 import { hiveConfig } from "@/lib/graphql/server";
 import { adminPolicy, adminRoles, unverifiedClaim } from "./policy";
 
-export type AdminSession = { accessToken: string; username: string };
+export type AdminSession = { accessToken: string; username: string; role: string };
 export type AdminAccess =
   | { kind: "ok"; session: AdminSession }
   | { kind: "anonymous" }
@@ -32,7 +32,7 @@ export async function adminAccess(roles: ReadonlySet<string> = adminRoles): Prom
     const verdict = adminPolicy(user.role, aal, localOnlyAal1(), roles);
     if (verdict !== "ok") return { kind: "forbidden", reason: verdict };
     if (!state.tokens) return { kind: "anonymous" };
-    return { kind: "ok", session: { accessToken: state.tokens.accessToken, username: user.username } };
+    return { kind: "ok", session: { accessToken: state.tokens.accessToken, username: user.username, role: user.role } };
   } catch (error) {
     if (error instanceof AuthError && error.status === 401) return { kind: "anonymous" };
     console.error("admin access check failed", error instanceof AuthError ? error.code : "upstream");

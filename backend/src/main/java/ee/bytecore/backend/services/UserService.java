@@ -3,6 +3,7 @@ package ee.bytecore.backend.services;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -389,12 +390,48 @@ public class UserService {
 
     @Transactional
     public User updateRole(Long id, UserRole role) {
+        return updateRole(null, id, role).user();
+    }
+
+    public record RoleChange(User user, UserRole previousRole) {}
+
+    /**
+     * Changes a user's role on behalf of {@code actorId}. An administrator cannot demote
+     * themselves and the last active ADMIN can never be demoted. The new role only reaches
+     * the user's tokens on their next token issuance.
+     */
+    @Transactional
+    public RoleChange updateRole(Long actorId, Long id, UserRole role) {
+        if (role == null) throw new IllegalArgumentException("Role is required");
+        // Lock the admin set first (in id order) so concurrent demotions serialize without deadlocks.
+        List<User> activeAdmins = role == UserRole.ADMIN ? List.of() : userRepository.findActiveAdminsForUpdate();
         User user = userRepository
                 .findLockedById(id)
                 .orElseThrow(() -> new UserNotFoundException(String.format("User with id %s not found", id)));
         requireActive(user);
+        UserRole previous = user.getRole();
+        if (previous == UserRole.ADMIN && role != UserRole.ADMIN) {
+            if (Objects.equals(actorId, id))
+                throw new IllegalArgumentException("You cannot remove your own ADMIN role");
+            if (activeAdmins.size() <= 1)
+                throw new IllegalArgumentException("Cannot remove the ADMIN role from the last active administrator");
+        }
         user.setRole(role);
-        return user;
+        return new RoleChange(user, previous);
+    }
+
+    @Transactional(readOnly = true)
+    public org.springframework.data.domain.Page<User> searchActive(String query, UserRole role, int page, int size) {
+        if (page < 0) throw new IllegalArgumentException("Page must not be negative");
+        if (size < 1 || size > 100) throw new IllegalArgumentException("Size must be between 1 and 100");
+        String trimmed = query == null ? "" : query.trim().toLowerCase(java.util.Locale.ROOT);
+        if (trimmed.length() > 100) throw new IllegalArgumentException("Search query must be at most 100 characters");
+        String escaped = trimmed.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+        return userRepository.searchActive(
+                "%" + escaped + "%",
+                role,
+                org.springframework.data.domain.PageRequest.of(
+                        page, size, org.springframework.data.domain.Sort.by("id")));
     }
 
     private void requireActive(User user) {

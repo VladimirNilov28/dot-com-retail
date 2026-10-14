@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { adminPolicy, moveId, optionalInt, orderRoles, unverifiedClaim } from "./policy";
+import { adminOnly, adminPolicy, moveId, optionalInt, orderRoles, unverifiedClaim } from "./policy";
 
 test("admin policy needs a staff role and aal2 unless locally opted in", () => {
   expect(adminPolicy("USER", "aal2", true)).toBe("role");
@@ -34,4 +34,9 @@ test("unverified claim reader tolerates malformed tokens", () => {
   expect(unverifiedClaim(token, "n")).toBeUndefined();
   expect(unverifiedClaim("garbage", "aal")).toBeUndefined();
   expect(unverifiedClaim(undefined, "aal")).toBeUndefined();
+});
+test("admin-only areas refuse catalog managers (#80)", () => {
+  expect(adminPolicy("CATALOG_MANAGER", "aal2", false, adminOnly)).toBe("role");
+  expect(adminPolicy("ADMIN", "aal2", false, adminOnly)).toBe("ok");
+  expect(adminPolicy("ADMIN", "aal1", false, adminOnly)).toBe("assurance");
 });

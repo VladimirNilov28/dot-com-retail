@@ -16,7 +16,7 @@ const base = "/admin/orders";
 export default async function AdminOrders({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const search = parseOrderSearch(await searchParams, { staff: true });
   const access = await adminAccess(orderRoles);
-  if (access.kind !== "ok") return <AdminDenied access={access} next={base} area="order management" />;
+  if (access.kind !== "ok") return <AdminDenied access={access} next={base} area="Order management" />;
   let result: OrderPage | null = null;
   let denied = false;
   try {

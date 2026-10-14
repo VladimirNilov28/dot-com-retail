@@ -157,11 +157,18 @@ public class ProductVariantService {
         }
     }
 
+    @Transactional
     public boolean deleteById(Long id) {
         if (productVariantRepository.findById(id).isEmpty()) {
             return false;
         }
-        productVariantRepository.deleteById(id);
+        try {
+            productVariantRepository.deleteById(id);
+            productVariantRepository.flush();
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            throw new IllegalArgumentException(
+                    "Variant has order or cart history and cannot be deleted; deactivate it instead");
+        }
         return true;
     }
 

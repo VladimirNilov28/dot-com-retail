@@ -70,6 +70,9 @@ class UserMutationAuthorizationTest {
     JwtAuthenticationConverter jwtAuthenticationConverter;
 
     @MockitoBean
+    ee.bytecore.backend.services.audit.AuditService auditService;
+
+    @MockitoBean
     UserRepository userRepository;
 
     @MockitoBean
@@ -108,7 +111,11 @@ class UserMutationAuthorizationTest {
 
     @Test
     void shouldRejectUpdateUserRoleForNonAdminTest() throws Exception {
-        when(userService.updateRole(1L, UserRole.ADMIN)).thenReturn(user);
+        when(userService.updateRole(
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.eq(1L),
+                        org.mockito.ArgumentMatchers.eq(UserRole.ADMIN)))
+                .thenReturn(new ee.bytecore.backend.services.UserService.RoleChange(user, UserRole.USER));
 
         mockMvc.perform(
                         post("/graphql")
@@ -235,7 +242,11 @@ class UserMutationAuthorizationTest {
     @Test
     void shouldRejectUpdateUserRoleForAdminMissingScopeTest() throws Exception {
         // Regression: ADMIN must NOT bypass a missing user:manage-role scope.
-        when(userService.updateRole(1L, UserRole.ADMIN)).thenReturn(user);
+        when(userService.updateRole(
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.eq(1L),
+                        org.mockito.ArgumentMatchers.eq(UserRole.ADMIN)))
+                .thenReturn(new ee.bytecore.backend.services.UserService.RoleChange(user, UserRole.USER));
 
         mockMvc.perform(
                         post("/graphql")
@@ -250,7 +261,11 @@ class UserMutationAuthorizationTest {
 
     @Test
     void shouldAllowUpdateUserRoleForAdminWithScopeTest() throws Exception {
-        when(userService.updateRole(1L, UserRole.ADMIN)).thenReturn(user);
+        when(userService.updateRole(
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.eq(1L),
+                        org.mockito.ArgumentMatchers.eq(UserRole.ADMIN)))
+                .thenReturn(new ee.bytecore.backend.services.UserService.RoleChange(user, UserRole.USER));
 
         mockMvc.perform(
                         post("/graphql")

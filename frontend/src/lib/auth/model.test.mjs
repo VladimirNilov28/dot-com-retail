@@ -38,8 +38,15 @@ describe("storefront authentication return contract", () => {
         expect(() => grantTokens({ ...grant, scope })).not.toThrow();
       }
       for (const scope of ["openid offline_access rating:write", "openid user:read offline_access rating:write rating:write",
-        "openid user:read offline_access product:write"]) {
+        "openid user:read offline_access payment:write"]) {
         expect(() => grantTokens({ ...grant, scope })).toThrow(AuthError);
+      }
+    });
+
+    test("accepts role-filtered staff admin scopes (#80)", () => {
+      for (const scope of ["openid user:read offline_access product:read product:write category:read category:write",
+        "openid user:read offline_access user:manage-role audit:read shipping:manage warehouse:read warehouse:write"]) {
+        expect(() => grantTokens({ ...grant, scope })).not.toThrow();
       }
     });
     test("rejects invalid lifetimes, missing rotation and expanded or repeated scopes", () => {

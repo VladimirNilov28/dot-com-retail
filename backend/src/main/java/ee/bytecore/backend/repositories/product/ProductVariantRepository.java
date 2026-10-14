@@ -16,6 +16,10 @@ public interface ProductVariantRepository extends JpaRepository<ProductVariant, 
 
     List<ProductVariant> findAllByProductIdIn(List<Long> productIds);
 
+    @Query("select v.sku from ProductVariant v where v.sku in :skus")
+    List<String> findExistingSkus(
+            @org.springframework.data.repository.query.Param("skus") java.util.Collection<String> skus);
+
     @Lock(LockModeType.PESSIMISTIC_READ)
     @Query("select v from ProductVariant v where v.id = :id")
     Optional<ProductVariant> findByIdForCartValidation(Long id);
