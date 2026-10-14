@@ -70,7 +70,7 @@
 | Admin: shipping statuses and delivery options | Verified (tests) / Unverified (live) | **Tests:** `AdminOperationsAuthorizationTest`. UI at `/admin/shipping`, persisted in `shipping_options` (V21). |
 | Admin: users and roles (last-admin protection) | Verified (tests) / Unverified (live) | **Tests:** `AdminOperationsAuthorizationTest`, `UserMutationAuthorizationTest`. |
 | CSV/JSON bulk import (atomic, per-row errors) | Verified (tests) / Unverified (live) | **Tests:** `ProductImportServiceIntegrationTest`. Documented in `docs/api/bulk-import.md`, with samples in `docs/api/samples`. |
-| Mandatory admin 2FA; least privilege; server enforcement | Verified | **Tests:** `lib/admin/policy.test.mjs`, `*AuthorizationTest`. The resource server requires AAL2 for staff roles. There is no bypass. |
+| Mandatory admin 2FA; least privilege; server enforcement | Verified | **Tests:** `lib/admin/policy.test.mjs`, `*AuthorizationTest`. The resource server requires AAL2 for staff roles. There is no bypass. **Live (14 Oct):** a disposable staff identity enrolled TOTP on `/admin/security`, signed in with password + TOTP, and loaded `/admin/products` from the backend. Fix `0b36777` promotes the `aal` token claim. |
 | Audit log of admin operations | Verified (tests) / Unverified (live) | **Tests:** `AdminOperationsAuthorizationTest` (audit rows). Table `admin_audit_log` (V20). UI at `/admin/audit`. |
 | Customer pages: home, listing (grid/list, facets, paging), PDP, cart, checkout, confirmation | Verified | **Live:** pages return 200. **Live:** k6 browse scenario. |
 | Confirmation shows estimated delivery | Verified | The shipping option estimate is shown, labelled as configured data and not as a carrier commitment. |
@@ -86,9 +86,10 @@
 
 ## Known gaps and limitations
 
-- **No live admin-flow check.** No admin flow has been exercised live with a real AAL2
-  staff session. That needs the owner's authenticator. Use of `ADMIN_ALLOW_AAL1` as
-  evidence is deliberately avoided.
+- **Limited live admin check.** A real AAL2 staff session was exercised live: enrollment,
+  password + TOTP sign-in, and loading the admin product list. Admin mutations such as
+  media upload, refund approval and role changes still need a live run on the owner's
+  `admin@bytecore.ee` session. Use of `ADMIN_ALLOW_AAL1` as evidence is deliberately avoided.
 - **No Google login check.** The Google client credentials have not been verified on
   this machine.
 - **Limited profile fields.** The profile has no name or phone fields because the user
