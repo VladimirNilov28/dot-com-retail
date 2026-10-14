@@ -55,6 +55,9 @@ public class OrderNotifications {
                     case "PLACED" -> "Your order is placed. Payment is pending; this is not a payment receipt.";
                     case "PAID" -> "Your payment has been confirmed.";
                     case "PAYMENT_RETRY_REQUIRED" -> "Payment did not complete. Return to the same order in your browser to retry.";
+                    case "PAYMENT_FAILED" -> "Payment declined — " + declineReasonText(detail)
+                            + " Your order and reserved items are kept: you can retry with another card"
+                            + " from your original confirmation page. No new order is needed.";
                     case "CANCELLED" -> "Your order has been cancelled. Any pending payment/refund is handled separately.";
                     case "PROCESSING" -> "We have started preparing your order. It can no longer be cancelled.";
                     case "SHIPPED" -> "Your order has shipped.";
@@ -81,7 +84,7 @@ public class OrderNotifications {
             if (order.getTrackingUrl() != null) body.append("\nTrack: ").append(order.getTrackingUrl());
             body.append("\n");
         }
-        if (detail != null && !detail.isBlank())
+        if (detail != null && !detail.isBlank() && !"PAYMENT_FAILED".equals(kind))
             body.append("Note: ").append(detail).append("\n");
         body.append("\n");
         for (var line : snapshot.lines()) {
@@ -118,6 +121,20 @@ public class OrderNotifications {
                 FieldEncryption.seal(snapshot.details().contactEmail()),
                 "ByteCore order " + order.getPublicId() + " — " + kind.replace('_', ' '),
                 FieldEncryption.seal(body.toString()));
+    }
+
+    /** Customer-facing text for an allow-listed decline code; unknown codes stay generic. */
+    public static String declineReasonText(String reason) {
+        return switch (reason == null ? "" : reason) {
+            case "insufficient_funds" -> "the card has insufficient funds.";
+            case "expired_card" -> "the card has expired.";
+            case "incorrect_cvc" -> "the security code (CVC) was incorrect.";
+            case "incorrect_number" -> "the card number was incorrect.";
+            case "invalid_expiry" -> "the expiry date was invalid.";
+            case "card_not_supported" -> "this card does not support this purchase.";
+            case "authentication_failed" -> "the card authentication (3-D Secure) was not completed.";
+            default -> "the card issuer declined the payment.";
+        };
     }
 
     public record Pending(UUID id, String recipient, String subject, String body, int attempts) {}

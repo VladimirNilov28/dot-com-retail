@@ -28,11 +28,13 @@ import ee.bytecore.backend.integration.payment.OrderNotifications;
 import ee.bytecore.backend.integration.payment.PaymentOutboxPublisher;
 import ee.bytecore.backend.integration.payment.PaymentResultListener;
 import ee.bytecore.backend.integration.payment.StripePaymentClient;
+import ee.bytecore.backend.integration.payment.event.PaymentDeclinedEvent;
 import ee.bytecore.backend.integration.payment.event.PaymentRequestedEvent;
 import ee.bytecore.backend.integration.payment.event.PaymentSucceededEvent;
 import ee.bytecore.backend.integration.payment.event.PaymentUnresolvedEvent;
 import ee.bytecore.backend.repositories.user.UserRepository;
 import ee.bytecore.backend.security.GuestCartCredentials;
+import ee.bytecore.backend.security.crypto.FieldEncryption;
 import ee.bytecore.backend.services.CheckoutValues.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -180,6 +182,89 @@ class StripeCheckoutIntegrationTest {
         assertThat(jdbc.queryForList(
                         "SELECT kind FROM order_notifications WHERE order_id=?", String.class, order.getId()))
                 .containsExactlyInAnyOrder("PLACED", "PAYMENT_RETRY_REQUIRED", "PAID");
+    }
+
+    private String decline(PaymentRequestedEvent event, Long orderId, UUID payment, String attempt, String reason)
+            throws Exception {
+        return JSON.writeValueAsString(new PaymentDeclinedEvent(
+                UUID.randomUUID(), event.eventId(), orderId, payment, attempt, reason, Instant.now()));
+    }
+
+    @Test
+    void declineIsRetryableKeepsReservationAndLaterSuccessSettlesOnce() throws Exception {
+        var fixture = fixture();
+        var input = placement(fixture);
+        var order = orders.placeCheckout(fixture.user().getId(), null, null, input);
+        var event = request(order.getId());
+        UUID payment = UUID.randomUUID();
+        var declined = decline(event, order.getId(), payment, "ch_fixture_first", "insufficient_funds");
+        results.onPaymentDeclined(declined);
+        results.onPaymentDeclined(declined);
+        // Provider replay of the same attempt carries a fresh event id but the same attempt key.
+        results.onPaymentDeclined(decline(event, order.getId(), payment, "ch_fixture_first", "insufficient_funds"));
+        var pending = orders.checkoutOrder(input.requestId(), fixture.user().getId());
+        assertThat(pending.status()).isEqualTo("PENDING");
+        assertThat(pending.recovery().payment().status()).isEqualTo("DECLINED");
+        assertThat(pending.recovery().payment().declineReason()).isEqualTo("insufficient_funds");
+        assertThat(pending.recovery().cancellationEligibility().allowed()).isTrue();
+        assertThat(inventory.sellableQuantity(fixture.variant().getId())).isEqualTo(5);
+        assertThat(orders.paymentSession(input.requestId(), fixture.user().getId(), null)
+                        .clientSecret())
+                .as("retry stays on the same order and PaymentIntent")
+                .isNotBlank();
+
+        var success = JSON.writeValueAsString(new PaymentSucceededEvent(
+                UUID.randomUUID(), event.eventId(), order.getId(), payment, Instant.now(), "pi_fixture"));
+        results.onPaymentSucceeded(success);
+        results.onPaymentSucceeded(success);
+        // A stale decline delivered after settlement must not regress the order or notify.
+        results.onPaymentDeclined(decline(event, order.getId(), payment, "ch_fixture_late", "expired_card"));
+
+        var paid = orders.checkoutOrder(input.requestId(), fixture.user().getId());
+        assertThat(paid.status()).isEqualTo("PAID");
+        assertThat(paid.recovery().payment().status()).isEqualTo("SUCCEEDED");
+        assertThat(paid.recovery().payment().declineReason()).isNull();
+        assertThat(inventory.sellableQuantity(fixture.variant().getId())).isEqualTo(5);
+        assertThat(jdbc.queryForObject(
+                        "SELECT count(*) FROM order_payment_declines WHERE order_id=?", Integer.class, order.getId()))
+                .isEqualTo(1);
+        assertThat(jdbc.queryForObject(
+                        "SELECT count(*) FROM payment_result_receipts WHERE order_id=?", Integer.class, order.getId()))
+                .isEqualTo(1);
+        assertThat(jdbc.queryForList(
+                        "SELECT kind FROM order_notifications WHERE order_id=?", String.class, order.getId()))
+                .containsExactlyInAnyOrder("PLACED", "PAYMENT_FAILED", "PAID");
+        String body = FieldEncryption.open(jdbc.queryForObject(
+                "SELECT body FROM order_notifications WHERE order_id=? AND kind='PAYMENT_FAILED'",
+                String.class,
+                order.getId()));
+        assertThat(body).contains("Payment declined — the card has insufficient funds.", "retry");
+    }
+
+    @Test
+    void distinctDeclinedAttemptsNotifyPerAttemptAndRejectUnsafeCodes() throws Exception {
+        var fixture = fixture();
+        var input = placement(fixture);
+        var order = orders.placeCheckout(fixture.user().getId(), null, null, input);
+        var event = request(order.getId());
+        UUID payment = UUID.randomUUID();
+        results.onPaymentDeclined(decline(event, order.getId(), payment, "ch_fixture_a", "incorrect_cvc"));
+        results.onPaymentDeclined(decline(event, order.getId(), payment, "ch_fixture_b", "expired_card"));
+        assertThatThrownBy(() -> results.onPaymentDeclined(
+                        decline(event, order.getId(), payment, "ch_fixture_c", "Card 4242 was declined")))
+                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() ->
+                        results.onPaymentDeclined(decline(event, order.getId(), payment, "ch/../x", "card_declined")))
+                .isInstanceOf(IllegalStateException.class);
+        var pending = orders.checkoutOrder(input.requestId(), fixture.user().getId());
+        assertThat(pending.status()).isEqualTo("PENDING");
+        assertThat(pending.recovery().payment().declineReason()).isEqualTo("expired_card");
+        assertThat(jdbc.queryForList(
+                        "SELECT ref FROM order_notifications WHERE order_id=? AND kind='PAYMENT_FAILED'",
+                        String.class,
+                        order.getId()))
+                .containsExactlyInAnyOrder("ch_fixture_a", "ch_fixture_b");
+        assertThat(inventory.sellableQuantity(fixture.variant().getId())).isEqualTo(5);
     }
 
     @Test

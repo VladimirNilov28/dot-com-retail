@@ -195,6 +195,18 @@ type CheckoutTotals {
   total: BigDecimal!
 }
 
+type ContactFieldError {
+  field: String!
+  message: String!
+}
+
+type ContactMessageResult {
+  accepted: Boolean!
+  fieldErrors: [ContactFieldError!]!
+  "Reference quoted in both emails; null when not accepted."
+  reference: String
+}
+
 "A staff-managed checkout delivery option. Placed orders keep their own snapshot."
 type DeliveryOption {
   active: Boolean!
@@ -257,17 +269,7 @@ type Inventory {
   warehouse: Warehouse!
 }
 
-type ContactFieldError {
-  field: String!
-  message: String!
-}
-
-type ContactMessageResult {
-  accepted: Boolean!
-  fieldErrors: [ContactFieldError!]!
-  reference: String
-}
-
+"Staff moderation projection of a rating/review, including hidden ones."
 type ModerationReview {
   authorName: String!
   body: String
@@ -316,6 +318,7 @@ type Mutation {
   deleteDeliveryOption(id: ID!): Boolean!
   deleteMyAddress(addressId: ID!): Boolean!
   deleteMyPaymentMethod(paymentMethodId: ID!): Boolean!
+  "Delete the caller's own rating and review for the product. False when none existed."
   deleteMyReview(productId: ID!): Boolean!
   deleteProduct(productId: ID!): Boolean!
   deleteProductImage(imageId: ID!): Boolean!
@@ -325,6 +328,7 @@ type Mutation {
   deleteUserAddress(addressId: ID!, userId: ID!): Boolean!
   deleteUserPaymentMethod(paymentMethodId: ID!, userId: ID!): Boolean!
   deleteWarehouse(warehouseId: ID!): Boolean!
+  "Staff: hide a review with a 3-500 character reason. Audited."
   hideReview(reason: String!, reviewId: ID!): ModerationReview!
   "Validate and create products/variants from CSV or JSON text (max 1 MB, 500 variant rows). See docs/api/bulk-import.md."
   importProducts(content: String!, format: ProductImportFormat!): ProductImportResult!
@@ -342,6 +346,7 @@ type Mutation {
   "imageIds must list each of the product's images exactly once."
   reorderProductImages(imageIds: [ID!]!, productId: ID!): [ProductImage!]!
   requestRefund(input: RequestRefundInput!): OrderRefundRequest!
+  "Staff: make a hidden review visible again. Audited."
   restoreReview(reviewId: ID!): ModerationReview!
   setInventory(input: SetInventoryInput!): Inventory!
   setOrderTracking(input: SetOrderTrackingInput!): Order!
@@ -349,6 +354,7 @@ type Mutation {
   setPrimaryProductImage(imageId: ID!): [ProductImage!]!
   startGuestCart: StartGuestCartResult!
   submitContactMessage(input: ContactMessageInput!): ContactMessageResult!
+  "Remove the caller's helpful vote (idempotent)."
   unvoteReviewHelpful(reviewId: ID!): ProductReview!
   updateCartItem(cartItemId: ID!, input: UpdateCartItemInput!): CartItem!
   updateCategory(categoryId: ID!, input: UpdateCategoryInput!): Category!
@@ -361,7 +367,13 @@ type Mutation {
   updateProductVariant(input: UpdateProductVariantInput!, variantId: ID!): ProductVariant!
   updateUserRole(input: UpdateRoleInput, userId: ID!): User!
   updateWarehouse(input: UpdateWarehouseInput!, warehouseId: ID!): Warehouse!
+  """
+  Create or edit the caller's own review (and star rating). title 1-120 and body
+  10-4000 characters of plain text, trimmed; HTML markup is rejected. Editing keeps
+  the moderation status. Requires rating:write.
+  """
   upsertMyReview(body: String!, productId: ID!, stars: Int!, title: String!): ProductReview!
+  "Mark a visible review helpful (idempotent). Authors cannot vote on their own review."
   voteReviewHelpful(reviewId: ID!): ProductReview!
 }
 
@@ -429,6 +441,8 @@ type OrderPage {
 }
 
 type OrderPayment {
+  " Allow-listed decline code (e.g. insufficient_funds); set only when status is DECLINED."
+  declineReason: String
   status: OrderPaymentStatus!
 }
 
@@ -534,6 +548,7 @@ type ProductImportResult {
 
 type ProductReview {
   authorName: String!
+  "Plain text (newlines preserved); null for a legacy star-only rating."
   body: String
   createdAt: Instant!
   helpfulCount: Int!
@@ -541,15 +556,21 @@ type ProductReview {
   productId: ID!
   stars: Int!
   status: ReviewStatus!
+  "Plain text; null for a legacy star-only rating."
   title: String
   updatedAt: Instant!
+  "True when the authenticated caller marked this review helpful; false for anonymous callers."
   viewerHasVoted: Boolean!
+  "True when the authenticated caller wrote this review."
   viewerIsAuthor: Boolean!
 }
 
 type ProductReviewPage {
+  "Average of all VISIBLE ratings (written and star-only); null when there are none."
   averageRating: Float
+  "Always five buckets, 5 stars first."
   distribution: [RatingDistributionBucket!]!
+  "Visible written reviews only."
   items: [ProductReview!]!
   pageInfo: SearchPageInfo!
   ratingCount: Int!
@@ -614,16 +635,27 @@ type Query {
   guestOrder(publicId: UUID, requestId: UUID): CheckoutOrder
   guestPaymentSession(requestId: UUID!): CheckoutPaymentSession!
   me: User!
+  "Staff: reviews filtered by status (all when null). Requires review:moderate and CATALOG_MANAGER or ADMIN."
   moderationReviews(page: Int = 0, size: Int = 20, status: ReviewStatus): ModerationReviewPage!
   myCart: Cart!
   myOrders(filter: OrderFilter, page: Int = 0, size: Int = 20): OrderPage!
+  "The caller's own rating/review for a product (any status), or null. Requires rating:write."
   myReview(productId: ID!): ProductReview
   myWishlist: Wishlist!
   order(id: ID, publicId: UUID): Order
   product(id: ID, slug: String): Product
+  "Public: visible written reviews with the product's visible rating distribution. size is 1-20."
   productReviews(page: Int = 0, productId: ID!, size: Int = 10, sort: ReviewSort = NEWEST): ProductReviewPage!
   productSearchSuggestions(limit: Int, query: String!): [ProductSuggestion!]!
   products: [Product!]!
+  """
+  Deterministic "related products" for the given products (e.g. the current
+  product page or the cart contents) — not personalised. Returns products with
+  at least one active, in-stock variant that share a category or brand with the
+  given products, excluding the given products themselves. Ordered by shared
+  category first, then shared brand, then average rating (unrated last), then
+  product id. At most 20 input ids are considered; limit defaults to 4, max 8.
+  """
   recommendedProducts(limit: Int, productIds: [ID!]!): [Product!]!
   searchProducts(input: ProductSearchInput!): ProductSearchResult!
   staffOrders(filter: StaffOrderFilter, page: Int = 0, size: Int = 20): OrderPage!
@@ -721,6 +753,12 @@ enum CheckoutShippingMethod {
   STANDARD
 }
 
+"""
+Public contact form. Submissions are stored and delivered to support by email
+through a retryable outbox; the sender receives an acknowledgement that does
+not repeat the message. Validation problems are returned as fieldErrors
+(accepted = false) rather than GraphQL errors so the form can show them inline.
+"""
 enum ContactSubject {
   ACCOUNT
   FEEDBACK
@@ -989,6 +1027,8 @@ enum GuestCartMergeStatus {
 }
 
 enum OrderPaymentStatus {
+  " Last attempt definitively declined; the order stays pending and can be paid again."
+  DECLINED
   FAILED
   PENDING
   SUCCEEDED
@@ -1060,6 +1100,12 @@ enum ReviewSort {
   RATING_LOW
 }
 
+"""
+Written product reviews extend the caller-owned 1-5 star rating (one row per
+user/product). Reviews are post-moderated: visible immediately, staff may hide or
+restore them. HIDDEN reviews never appear in public lists and are excluded from
+every product aggregate (averageRating, ratingCount, RATING_DESC).
+"""
 enum ReviewStatus {
   HIDDEN
   VISIBLE
@@ -1139,9 +1185,11 @@ input CheckoutInput {
 
 input ContactMessageInput {
   email: String!
+  "10 to 4000 characters."
   message: String!
   name: String!
   subject: ContactSubject!
+  "Honeypot: must be empty. Bots that fill it receive a normal-looking response."
   website: String
 }
 
@@ -1211,9 +1259,7 @@ input DecideRefundInput {
 }
 
 input OrderFilter {
-  """
-  Inclusive lower / exclusive upper bound on the order creation time.
-  """
+  " Inclusive lower / exclusive upper bound on the order creation time."
   from: Instant
   status: OrderStatus
   to: Instant

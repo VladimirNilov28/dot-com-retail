@@ -15,7 +15,8 @@ public final class OrderRecoveryValues {
 
     public record Cancellation(String source, Instant cancelledAt, boolean awaitingPaymentOutcome) {}
 
-    public record Payment(String status) {}
+    /** {@code declineReason} is an allow-listed code, present only while status is DECLINED. */
+    public record Payment(String status, String declineReason) {}
 
     public record Refund(String status, BigDecimal amount, String currency, String failureReason) {}
 
@@ -51,7 +52,7 @@ public final class OrderRecoveryValues {
                                 order.getCancelledAt(),
                                 !java.util.Set.of("SUCCEEDED", "FAILED").contains(paymentStatus))
                         : null,
-                new Payment(paymentStatus),
+                new Payment(paymentStatus, "DECLINED".equals(paymentStatus) ? order.getPaymentDeclineReason() : null),
                 refund == null
                         ? new Refund("NONE", null, null, null)
                         : new Refund(

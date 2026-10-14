@@ -837,6 +837,47 @@ public class OrderService {
         orderRepository.save(order);
     }
 
+    /**
+     * Records one definitely declined attempt (idempotent per payment+attempt). The order stays
+     * PENDING and keeps its stock reservation so the customer can retry on the same order and
+     * PaymentIntent; decline is never terminal and never touches inventory.
+     */
+    public void applyPaymentDecline(Order order, UUID paymentId, UUID eventId, String attemptId, String reason) {
+        if (order.getPaymentId() != null && !order.getPaymentId().equals(paymentId))
+            throw new IllegalArgumentException("Payment identity conflicts with the observed original payment");
+        if (java.util.Set.of("SUCCEEDED", "FAILED").contains(order.getPaymentStatus())) return;
+        String code = DECLINE_REASONS.contains(reason) ? reason : "card_declined";
+        int inserted = checkoutJdbc
+                .getObject()
+                .update(
+                        """
+                        INSERT INTO order_payment_declines(payment_id,attempt_id,order_id,reason,event_id)
+                        VALUES (?,?,?,?,?) ON CONFLICT DO NOTHING
+                        """,
+                        paymentId,
+                        attemptId,
+                        order.getId(),
+                        code,
+                        eventId);
+        if (inserted == 0) return;
+        order.setPaymentId(paymentId);
+        order.setPaymentStatus("DECLINED");
+        order.setPaymentDeclineReason(code);
+        orderRepository.save(order);
+        if (order.getStatus() == OrderStatus.PENDING) notifyOrder(order, "PAYMENT_FAILED", attemptId, code);
+    }
+
+    /** Allow-listed decline reason codes shared with the Payment Service and the storefront. */
+    public static final java.util.Set<String> DECLINE_REASONS = java.util.Set.of(
+            "insufficient_funds",
+            "expired_card",
+            "incorrect_cvc",
+            "incorrect_number",
+            "invalid_expiry",
+            "card_not_supported",
+            "authentication_failed",
+            "card_declined");
+
     private void ensureRefund(Order order) {
         if (!"SUCCEEDED".equals(order.getPaymentStatus()) || order.getStatus() != OrderStatus.CANCELLED) return;
         if (refunds.getObject().findByOrderId(order.getId()).isPresent()) return;
