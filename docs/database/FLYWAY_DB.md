@@ -31,7 +31,14 @@ schema changes must be new `V{n}__...sql` files instead.
 | `V15__product_ratings.sql` | `product_ratings` | `V0`, `V1` (users), `V2` (products) |
 | `V16__native_registration_linkage.sql` | nullable unique canonical Kratos UUID, durable username/email registration reservations | `V1` (users) |
 | `V17__product_media_brand_dimensions.sql` | `brands`, nullable `products.brand_id`, nullable `product_variants.length_mm/width_mm/height_mm`, `product_images` (storage key, type, size, dimensions, alt text, position) | `V3` (products) |
+| `V18__order_notifications.sql` | `order_notifications` email outbox (PENDING → SENT / DEAD) | `V4` (orders) |
+| `V19__order_lifecycle.sql` | `PROCESSING` status, tracking columns on `orders`, append-only `order_status_events`, `refund_requests`, notification dedupe key | `V4`, `V14`, `V18` |
+| `V20__admin_audit_log.sql` | append-only `admin_audit_log` (actor, operation, target, time, safe details) | — |
+| `V21__shipping_options.sql` | `shipping_options` (admin-managed checkout delivery methods) | — |
 | `V22__product_reviews.sql` | review text/moderation columns and surrogate `id` on `product_ratings`, `review_votes` | `V1` (users), `V15` (product_ratings) |
+| `V23__rate_limit_buckets.sql` | `rate_limit_buckets` (token bucket state, TTL cleanup) | — |
+| `V24__contact_messages.sql` | `contact_messages`, `contact_notifications` outbox | `V1` (users) |
+| `V25__encryption_at_rest.sql` | widens encrypted PII columns, allows only legacy→sealed / key-rotation snapshot updates, contact-email blind index | `V13`, `V18`, `V24` |
 
 Every foreign key either points to a table created in an earlier migration
 file, or to a table created earlier within the same file. There are no
@@ -77,7 +84,25 @@ erDiagram
 
     wishlists ||--o{ wishlist_items : contains
     product_variants ||--o{ wishlist_items : "referenced by"
+
+    brands ||--o{ products : brands
+    products ||--o{ product_images : "media"
+    product_ratings ||--o{ review_votes : "helpful votes"
+    users ||--o{ review_votes : casts
+    orders ||--o{ order_status_events : "status history"
+    orders ||--o{ refund_requests : "refund requests"
+    orders ||--o{ order_notifications : "email outbox"
+    orders ||--o{ payment_outbox : "payment events"
+    users |o--o{ contact_messages : sends
+    contact_messages ||--o{ contact_notifications : "email outbox"
+    users |o--o{ admin_audit_log : "actor of"
 ```
+
+Standalone tables: `shipping_options`, `rate_limit_buckets`,
+`user_registration_reservations`, `guest_cart_merge_receipts`, `checkout_requests`.
+Personal fields in `user_address`, `orders.checkout_snapshot`, `order_notifications`
+and contact tables are AES-GCM ciphertext at rest
+([`../security/encryption-at-rest.md`](../security/encryption-at-rest.md)).
 
 ## Tables
 

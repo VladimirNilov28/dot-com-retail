@@ -1,4 +1,118 @@
-# Backend development
+# ByteCore — i-love-shopping
+
+ByteCore OÜ's electronics web shop, built for the Foundation, Commerce and
+Experience projects. Submission status and evidence:
+[`docs/submission-checklist.md`](docs/submission-checklist.md).
+
+## Overview
+
+- **Storefront:** home page; category browsing; faceted search with suggestions;
+  sorting by relevance, price and genuine rating. Product pages show variants, media,
+  brand, metric and imperial dimensions, reviews, helpful votes and related products.
+- **Shopping:** guest and customer carts with merge, cart recommendations, and a
+  single-page checkout for guests and signed-in customers. Payment uses Stripe sandbox
+  hosted fields, confirmed only by signed webhooks.
+- **Orders:** history with status/date filters and paging, detail with status timeline
+  and tracking, cancellation before processing, refund requests, and email
+  notifications delivered locally through Mailpit.
+- **Accounts:** registration with CAPTCHA and email verification, password recovery,
+  Google sign-in and linking, optional customer TOTP, sessions, saved addresses and
+  account deletion.
+- **Administration** (staff with mandatory TOTP, AAL2 enforced in the backend):
+  - products, variants and media;
+  - categories, shipping options and users/roles;
+  - orders: status, tracking, cancel, refund approval;
+  - review moderation;
+  - atomic CSV/JSON bulk import;
+  - audit log.
+- **Security:**
+  - Next.js BFF token custody, with no tokens in browser storage;
+  - Hydra token rotation;
+  - role, scope and ownership checks in Spring;
+  - token-bucket rate limiting;
+  - AES-GCM encryption at rest for personal and order data;
+  - TLS on the reviewer stack.
+
+## Architecture
+
+```
+Browser ──HTTPS──> Caddy (review) ──> Next.js storefront + BFF (:3000)
+                                        │  session cookie only; tokens stay server-side
+                                        ├──> Hive Router (:4002, GraphQL gateway)
+                                        │       └──> Spring Boot / Netflix DGS "retail" subgraph (:8080)
+                                        │               ├── PostgreSQL (Flyway V0–V25)
+                                        │               ├── Kafka <──> Go payment-service (:8081) <── Stripe webhooks
+                                        │               ├── SMTP → Mailpit (order/contact email outbox)
+                                        │               └── media volume (uploaded product images)
+                                        ├──> Ory Kratos (identity, MFA, recovery, Google OIDC)
+                                        └──> Ory Hydra (OAuth2/OIDC tokens) + oauth-service (login/consent bridge)
+```
+
+- **ERD and migrations:** [`docs/database/FLYWAY_DB.md`](docs/database/FLYWAY_DB.md).
+- **GraphQL schema:** [`docs/api/graphql-schema.md`](docs/api/graphql-schema.md).
+- **Browser token model:** [`docs/auth/browser-contract.md`](docs/auth/browser-contract.md).
+- **Security:**
+  - [`docs/security/rate-limiting.md`](docs/security/rate-limiting.md)
+  - [`docs/security/encryption-at-rest.md`](docs/security/encryption-at-rest.md)
+
+## Reviewer setup (Docker only)
+
+Prerequisites: Docker Engine with Compose v2.24 or newer. The Stripe CLI is optional
+and only needed for card payments. No host Java, Node or Bun is required.
+
+```bash
+make review          # builds and starts everything: generates secrets/certs, runs migrations, waits for health
+# open https://bytecore.localhost:8443  (trust the generated local CA, see docs/review-setup.md)
+make review-down     # stop (keeps data and uploaded media)
+```
+
+[`docs/review-setup.md`](docs/review-setup.md) is the full guide. It covers:
+
+- URLs (Mailpit, Hive);
+- trusting the local CA;
+- private secret provisioning (`.env.review` is generated and Git-ignored);
+- the staff bootstrap account and mandatory TOTP enrolment;
+- Stripe test keys and the webhook listener;
+- Google OAuth client setup.
+
+Google and Stripe require your own credentials. Without them, sign-in with Google and
+card payment are disabled; everything else works.
+
+## Demo walkthrough
+
+1. Browse `/catalog`, search with suggestions, filter by facets, and sort by rating or
+   price. Open a product, switch variants, and read or write a review and vote it
+   helpful.
+2. Add items to the cart as a guest. The cart shows "You may also like". Check out with
+   Stripe test card `4242 4242 4242 4242`. The confirmation page updates when the
+   signed webhook marks the order PAID, and the email appears in Mailpit.
+3. Register an account (the verification code is in Mailpit) and sign in. Then use:
+   - `/account/addresses` to save addresses;
+   - `/account/orders` to filter history, view details and tracking, cancel before
+     processing, or request a refund after payment;
+   - `/account/security` to enable optional TOTP.
+4. Use `/contact` to send a message. Support and acknowledgement emails arrive in
+   Mailpit. `/about` and unknown URLs show the about page and 404.
+5. Staff:
+   1. Sign in as the bootstrap admin and enrol TOTP at `/admin/security`.
+   2. Manage products, media, categories, shipping, users and roles, and orders
+      (status, tracking, refund approval).
+   3. Moderate reviews, run `/admin/import` with
+      [`docs/api/samples`](docs/api/samples), and inspect `/admin/audit`.
+
+## Implemented extras
+
+- Kafka-based payment-service with an outbox and dead-letter handling.
+- Guest-to-customer cart merge.
+- Google account linking.
+- Staff audit log and atomic bulk import.
+- Encrypted BFF session store.
+- Product media pipeline on a durable volume.
+- Load-test harness: `perf/run.sh` and [`docs/performance/report.md`](docs/performance/report.md).
+
+---
+
+# Development guide
 
 For the standalone HeroUI v3 dark frontend foundation, see
 [`frontend/README.md`](frontend/README.md). Its component demonstration needs

@@ -158,13 +158,8 @@ sealing keys.
   MFA. After enrolling, every staff sign-in asks for the TOTP code before
   `/admin/products` is available. There is no bypass.
 
-  > Known application issue at the time of writing, not specific to this stack:
-  > the "Verify authenticator" link on `/admin/security` starts a flow with
-  > `returnTo=/admin/security`. The storefront's return-path allowlist
-  > (`safeReturnTo` in `frontend/src/lib/auth/model.ts`) does not yet include `/admin`
-  > paths, so that step-up ends on "We couldn't complete this request". Signing in
-  > with the admin password works; the step-up is affected until that allowlist is
-  > extended.
+  The "Verify authenticator" step-up returns to `/admin/...`, which is permitted by the
+  storefront return-path allowlist (`safeReturnTo`, fixed in `89d1a32`).
 
 ## Optional: Stripe (test mode)
 
@@ -206,7 +201,7 @@ The stack was verified against a disposable project
 - OIDC discovery reports the https issuer.
 - A real headless-Chromium registration → email code (Mailpit) → verification →
   sign-in → `/account` flow works.
-- The bootstrap admin can sign in and reaches the TOTP gate (see the known issue above).
+- The bootstrap admin can sign in and reaches the TOTP gate.
 - Postgres rejects non-TLS connections.
 - Products, accounts and media survive a `review-down` / `review-up` cycle.
 
