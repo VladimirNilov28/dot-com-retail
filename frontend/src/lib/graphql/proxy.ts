@@ -16,12 +16,17 @@ function jsonResponse<Data>(result: Result<Data>, cookies: string[] = [], status
         failureKind: error.kind,
         ...(error.codes?.length ? { code: error.codes[0] } : {}),
         ...(error.httpStatus ? { http: { status: error.httpStatus } } : {}),
+        ...(error.retryAfterSeconds === undefined ? {} : { retryAfterSeconds: error.retryAfterSeconds }),
       },
     }] } : {}),
   });
   if (!body) throw new TypeError("Invalid GraphQL response");
   const headers = new Headers({ "Content-Type": "application/json", "Cache-Control": "private, no-store" });
   cookies.forEach((cookie) => headers.append("Set-Cookie", cookie));
+  if (error?.kind === "rate-limited") {
+    status = 429;
+    headers.set("Retry-After", String(error.retryAfterSeconds ?? 1));
+  }
   return new Response(body, { status, headers });
 }
 
@@ -34,6 +39,7 @@ export async function handleGuestRequest(
   // Browser-supplied bearer tokens are never accepted.
   resolveToken: () => Promise<string | undefined> = async () => undefined,
   validateCheckout: (scope: string | null, guest: boolean) => Promise<boolean> = async () => true,
+  clientAddress?: string,
 ) {
   if (request.method !== "POST") return proxyFailure(failure("validation", false), 405);
   if ((request.headers.has("Origin") && request.headers.get("Origin") !== config.origin) ||
@@ -82,7 +88,7 @@ export async function handleGuestRequest(
       if (!accessToken) return proxyFailure(failure("unauthenticated", false), 401);
       context = { kind: "authenticated", accessToken, guestCookieHeader: request.headers.get("Cookie") ?? undefined };
     }
-    const { result, setCookies } = await requestHive(operation, variables, config, context, { fetch: fetcher, signal, timeoutMs: Math.max(1, 10_000 - (Date.now() - started)) });
+    const { result, setCookies } = await requestHive(operation, variables, config, context, { fetch: fetcher, signal, timeoutMs: Math.max(1, 10_000 - (Date.now() - started)), clientAddress });
     return jsonResponse(result, setCookies);
   }
   const [shipping, cart, order] = guestOperations;

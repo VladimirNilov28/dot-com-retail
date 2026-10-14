@@ -1,0 +1,5 @@
+# Test-only overrides (loaded after classpath:application.yaml). Rate limiting is
+# explicitly switched off so unrelated integration tests are not throttled;
+# RateLimitIntegrationTest re-enables it.
+rate-limit:
+  enabled: false

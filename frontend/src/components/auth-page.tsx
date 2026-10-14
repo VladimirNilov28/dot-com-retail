@@ -116,6 +116,9 @@ export async function AuthPage({ kind, searchParams }: { kind: FormKind; searchP
           {query.social === "cancelled" ? "Google sign-in was cancelled. Try again or use your password." :
             "Google sign-in could not complete. Start again or use your password."}
         </p> : null}
+        {query.rateLimited === "1" && (kind === "login" || kind === "recovery") ? <p role="alert" className="auth-summary mb-5">
+          Too many attempts from your connection. Wait a few minutes before trying again.
+        </p> : null}
         {kind === "login" && query.reset === "success" ? <p role="status" className="mb-5 text-sm text-muted">Your password has changed. Sign in with your new password.</p> : null}
         {messages.length || validation ? (
           <div id={validation ? "auth-error-summary" : undefined}

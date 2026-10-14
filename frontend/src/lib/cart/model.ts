@@ -80,6 +80,7 @@ export function cartErrorMessage(kind: string): string {
   switch (kind) {
     case "unauthenticated": case "forbidden": return "Your session changed. Reload the page to continue.";
     case "validation": return "That item or quantity can't be added right now. Check availability and try again.";
+    case "rate-limited": return "You're updating the cart very quickly. Wait a moment and try again.";
     case "read-unavailable": return "Your cart couldn't be loaded right now. Try again in a moment.";
     case "timeout": case "transport": case "unavailable": return "The cart service is unavailable. Your cart has not changed — try again.";
     default: return "The cart could not be updated. Your cart has not changed.";

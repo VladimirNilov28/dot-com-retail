@@ -2,7 +2,7 @@ import { integer, object } from "./scalars";
 
 export type FailureKind = "validation" | "unauthenticated" | "forbidden" | "not-found" |
   "conflict" | "unavailable" | "transport" | "timeout" | "cancelled" | "protocol" |
-  "graphql" | "configuration" | "stale";
+  "graphql" | "configuration" | "stale" | "rate-limited";
 
 const messages: Record<FailureKind, string> = {
   validation: "Check the request details and try again.",
@@ -18,6 +18,7 @@ const messages: Record<FailureKind, string> = {
   graphql: "The request could not be completed.",
   configuration: "The connection is not configured correctly.",
   stale: "A newer request replaced this result.",
+  "rate-limited": "Too many requests in a short time. Please wait a moment and try again.",
 };
 
 export interface SafeFailure {
@@ -26,6 +27,8 @@ export interface SafeFailure {
   retryable: boolean;
   httpStatus?: number;
   codes?: string[];
+  /** Seconds until a rate-limited request may be retried, when the server said so. */
+  retryAfterSeconds?: number;
 }
 
 const safeCodes = new Set([
@@ -35,16 +38,29 @@ const safeCodes = new Set([
   "UNAVAILABLE", "OVERLOADED", "TIMEOUT", "DOWNSTREAM_SERVICE_ERROR", "SUBREQUEST_HTTP_ERROR",
   "GUEST_CART_UNAVAILABLE", "GUEST_ORDER_UNAVAILABLE", "CHECKOUT_INVALID",
   "CHECKOUT_QUOTE_CHANGED", "CHECKOUT_REQUEST_CONFLICT",
-  "PAYMENT_NOT_CONFIGURED", "PAYMENT_UNAVAILABLE",
+  "PAYMENT_NOT_CONFIGURED", "PAYMENT_UNAVAILABLE", "RATE_LIMITED",
 ]);
 
-export function failure(kind: FailureKind, query: boolean, httpStatus?: number, codes?: string[]): SafeFailure {
+export function failure(
+  kind: FailureKind, query: boolean, httpStatus?: number, codes?: string[], retryAfterSeconds?: number,
+): SafeFailure {
   return {
     kind, message: messages[kind],
     retryable: query && ["timeout", "transport", "unavailable"].includes(kind),
     ...(httpStatus === undefined ? {} : { httpStatus }),
     ...(codes?.length ? { codes } : {}),
+    ...(kind === "rate-limited" && retryAfterSeconds !== undefined ? { retryAfterSeconds } : {}),
   };
+}
+
+/** Accepts only the delta-seconds form of Retry-After, bounded to a day. */
+export function retryAfter(value: unknown): number | undefined {
+  let seconds = NaN;
+  if (typeof value === "string") seconds = /^\d{1,6}$/.test(value.trim()) ? Number(value.trim()) : NaN;
+  else if (value !== undefined && value !== null) {
+    try { seconds = integer(value); } catch (error) { if (!(error instanceof TypeError)) throw error; }
+  }
+  return Number.isSafeInteger(seconds) && seconds >= 0 && seconds <= 86_400 ? seconds : undefined;
 }
 
 export function httpKind(status: number): FailureKind {
@@ -53,7 +69,8 @@ export function httpKind(status: number): FailureKind {
   if (status === 404) return "not-found";
   if (status === 409) return "conflict";
   if (status === 400 || status === 422) return "validation";
-  if (status === 429 || status >= 500) return "unavailable";
+  if (status === 429) return "rate-limited";
+  if (status >= 500) return "unavailable";
   return "transport";
 }
 
@@ -62,6 +79,7 @@ export function graphFailure(errors: unknown, query: boolean): SafeFailure {
   const kinds: FailureKind[] = [];
   const codes: string[] = [];
   let status: number | undefined;
+  let wait: number | undefined;
   for (const value of errors) {
     const error = object(value);
     if (typeof error.message !== "string") throw new TypeError("Invalid GraphQL error");
@@ -73,7 +91,10 @@ export function graphFailure(errors: unknown, query: boolean): SafeFailure {
     const code = typeof rawCode === "string" ? rawCode.toUpperCase() : undefined;
     if (code !== undefined && safeCodes.has(code)) {
       codes.push(code);
-      if (/UNAUTHENTICATED|UNAUTHORIZED/.test(code)) kinds.push("unauthenticated");
+      if (code === "RATE_LIMITED") {
+        kinds.push("rate-limited");
+        wait = retryAfter(extension.retryAfterSeconds) ?? wait;
+      } else if (/UNAUTHENTICATED|UNAUTHORIZED/.test(code)) kinds.push("unauthenticated");
       else if (/FORBIDDEN|PERMISSION_DENIED/.test(code)) kinds.push("forbidden");
       else if (/NOT_FOUND|GUEST_CART_UNAVAILABLE|GUEST_ORDER_UNAVAILABLE/.test(code)) kinds.push("not-found");
       else if (/CONFLICT|QUOTE_CHANGED/.test(code)) kinds.push("conflict");
@@ -91,7 +112,7 @@ export function graphFailure(errors: unknown, query: boolean): SafeFailure {
       }
     }
   }
-  const priority: FailureKind[] = ["unauthenticated", "forbidden", "validation", "conflict", "not-found",
+  const priority: FailureKind[] = ["rate-limited", "unauthenticated", "forbidden", "validation", "conflict", "not-found",
     "configuration", "protocol", "cancelled", "stale", "timeout", "unavailable", "transport"];
-  return failure(priority.find((kind) => kinds.includes(kind)) ?? "graphql", query, status, [...new Set(codes)]);
+  return failure(priority.find((kind) => kinds.includes(kind)) ?? "graphql", query, status, [...new Set(codes)], wait);
 }

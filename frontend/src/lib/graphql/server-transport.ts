@@ -71,9 +71,13 @@ export async function requestHive<Data, Variables>(
   variables: Variables,
   config: HiveConfig,
   context: RequestContext,
-  options: Pick<TransportOptions, "fetch" | "signal" | "timeoutMs"> = {},
+  options: Pick<TransportOptions, "fetch" | "signal" | "timeoutMs"> & { clientAddress?: string } = {},
 ): Promise<{ result: Result<Data>; setCookies: string[] }> {
   const headers = new Headers();
+  // Spring keys anonymous rate limits by this address and trusts it only from the router (see client-address.ts).
+  if (options.clientAddress && /^[0-9A-Fa-f:.]{2,45}$/.test(options.clientAddress)) {
+    headers.set("X-Forwarded-For", options.clientAddress);
+  }
   const setCookies: string[] = [];
   if (operation.access === "authenticated" && context.kind !== "authenticated") {
     return { result: { status: "failure", error: failure("unauthenticated", false) }, setCookies };
@@ -100,7 +104,7 @@ export async function requestHive<Data, Variables>(
     headers.set("Authorization", `Bearer ${context.accessToken}`);
   }
   const result = await execute(operation, variables, {
-    ...options, endpoint: config.endpoint, headers,
+    fetch: options.fetch, signal: options.signal, timeoutMs: options.timeoutMs, endpoint: config.endpoint, headers,
     onResponse(response) {
       if (operation.access === "public") {
         if (response.headers.has("Set-Cookie")) throw new TypeError("Public read returned credentials");

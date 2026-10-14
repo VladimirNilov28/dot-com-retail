@@ -15,6 +15,8 @@ import { handleAccount, notifySecurityEvent, recoveryMode, accountStatus, sessio
 import { assertBrowserNavigation, assertCsrf, authBoundary, authHeaders, boundedForm, browserCookie,
   clearBrowserCookies, redirectResponse, setBrowserCookie } from "./http";
 import { cancelLoginAttempt } from "./attempt";
+import { clientAddress } from "@/lib/graphql/client-address";
+import { TokenBuckets } from "@/lib/rate-limit/token-bucket";
 
 function flowRoute(kind: FormKind): string {
   return kind === "registration" ? "/register" : kind === "verification" ? "/verify" :
@@ -233,11 +235,25 @@ async function flow(request: NextRequest): Promise<NextResponse> {
   return response;
 }
 
+// Credential guessing and recovery-email abuse: per client address, per Next.js process.
+const submissionLimits = {
+  login: new TokenBuckets({ capacity: 10, refillPerSecond: 1 / 30 }),
+  recovery: new TokenBuckets({ capacity: 5, refillPerSecond: 1 / 120 }),
+};
+
 async function submit(request: NextRequest): Promise<NextResponse> {
   const form = await boundedForm(request);
   const browser = browserCookie(request);
   const kind = formKind(oneParameter(request.nextUrl.searchParams, "kind"));
   const flowId = flowIdentifier(oneParameter(form, "flow"));
+  if (kind === "login" || kind === "recovery") {
+    const decision = submissionLimits[kind].consume(clientAddress(request.headers) ?? "unknown");
+    if (!decision.allowed) {
+      const response = redirectResponse(`${flowRoute(kind)}?flow=${flowId}&rateLimited=1`);
+      response.headers.set("Retry-After", String(decision.retryAfterSeconds));
+      return response;
+    }
+  }
   const submission = await withBrowser(browser, async (state, client) => {
     assertCsrf(request, form, state.csrf);
     return { ...await submitFlow(state, browser, flowId, kind, form, client), returnTo: state.returnTo };

@@ -1,4 +1,4 @@
-import { failure, graphFailure, httpKind, type SafeFailure } from "./errors";
+import { failure, graphFailure, httpKind, retryAfter, type SafeFailure } from "./errors";
 import type { Operation } from "./operations";
 import { object, parseJson, serializeJson } from "./scalars";
 
@@ -115,7 +115,8 @@ export async function execute<Data, Variables>(
       }
       if (!response.ok) {
         await response.body?.cancel();
-        return { status: "failure", error: failure(httpKind(response.status), query, response.status) };
+        return { status: "failure", error: failure(httpKind(response.status), query, response.status, undefined,
+          retryAfter(response.headers.get("Retry-After"))) };
       }
       const contentType = response.headers.get("Content-Type")?.split(";", 1)[0].trim();
       if (contentType !== "application/json" && contentType !== "application/graphql-response+json") {

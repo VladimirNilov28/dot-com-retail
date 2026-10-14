@@ -84,3 +84,44 @@ checkout:
 payment:
   service-url: ${PAYMENT_SERVICE_URL:http://localhost:8081}
   internal-token: ${PAYMENT_INTERNAL_TOKEN:}
+
+# Token-bucket rate limiting (docs/security/rate-limiting.md). Buckets live in
+# PostgreSQL (rate_limit_buckets) so limits hold across backend instances.
+# capacity = burst size; refill-tokens per refill-period = sustained rate.
+rate-limit:
+  enabled: true
+  # Header carrying the original client address, honoured only from trusted proxies.
+  client-ip-header: X-Forwarded-For
+  # Peers allowed to supply client-ip-header (Next BFF / Hive Router). Compose adds its network.
+  trusted-proxies: ${RATE_LIMIT_TRUSTED_PROXIES:127.0.0.1/32,::1/128}
+  cleanup-idle-after: PT1H
+  cleanup-interval: PT10M
+  policies:
+    # Every request, per JWT subject or client IP.
+    general:
+      capacity: 60
+      refill-tokens: 20
+      refill-period: PT1S
+    # Trusted-proxy traffic with no client address (shared, cached server-side catalog reads).
+    proxy:
+      capacity: 600
+      refill-tokens: 200
+      refill-period: PT1S
+    cart-write:
+      capacity: 30
+      refill-tokens: 1
+      refill-period: PT1S
+      operations: [addCartItem, updateCartItem, removeCartItem, addGuestCartItem, updateGuestCartItem,
+                   removeGuestCartItem, startGuestCart, mergeGuestCart, addWishlistItem, removeWishlistItem]
+    sensitive:
+      capacity: 10
+      refill-tokens: 1
+      refill-period: PT6S
+      operations: [createOrder, createGuestOrder, cancelOrder, cancelGuestOrder, rateProduct,
+                   submitContactMessage, createProductReview, updateProductReview, deleteProductReview,
+                   voteReviewHelpful, addMyAddress, updateMyAddress, deleteMyAddress]
+    contact:
+      capacity: 5
+      refill-tokens: 5
+      refill-period: PT10M
+      operations: [submitContactMessage]
