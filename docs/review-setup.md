@@ -18,8 +18,8 @@ That workflow is unchanged, because everything described here is opt-in through
   Back it up: without it the database cannot be opened. See
   [`security/encryption-at-rest.md`](security/encryption-at-rest.md#storage-layer-encryption-review-stack).
 - `bash` and the repository checkout. On Windows, use WSL2 or Git Bash.
-- Optional: the [Stripe CLI](https://docs.stripe.com/stripe-cli) for webhooks, and
-  Google OAuth credentials.
+- Optional: Stripe test-mode keys and Google OAuth credentials. The Stripe CLI runs in
+  a container, so you don't need to install it.
 
 The host does not need Java, Node, Bun, Python, openssl or psql. Certificates,
 secrets and the frontend build are all produced inside containers.
@@ -171,19 +171,25 @@ sealing keys.
 
 ## Optional: Stripe (test mode)
 
-1. Put your **test-mode** `STRIPE_SECRET_KEY` and `STRIPE_PUBLISHABLE_KEY` into
-   `.env.review`.
-2. Forward webhooks through the TLS edge:
+1. Copy the template and paste your **test-mode** keys
+   (<https://dashboard.stripe.com/test/apikeys>):
 
    ```bash
-   stripe listen --forward-to https://bytecore.localhost:8443/webhooks/stripe --skip-verify
+   cp .env.stripe.example .env.stripe   # Git-ignored
+   # set STRIPE_SECRET_KEY=sk_test_... and STRIPE_PUBLISHABLE_KEY=pk_test_...
    ```
 
-   `--skip-verify` is needed because the Stripe CLI does not use the OS trust store
-   for the local CA. Only POST requests are routed to the payment service; other
-   methods return 405.
-3. Copy the printed `whsec_...` value into `STRIPE_WEBHOOK_SECRET` and run
-   `make review` again so the payment service picks it up.
+   Alternatively, export both variables in the shell before `make review`.
+2. Run `make review`. The script:
+   - stores the keys in `.env.review`;
+   - rejects live keys;
+   - fetches the account's webhook signing secret with the pinned Stripe CLI image;
+   - starts the `stripe-listener` container, which forwards the `payment_intent.*`
+     events to the payment service.
+
+   The payment service verifies every event signature. No host Stripe CLI is needed.
+3. Pay with `4242 4242 4242 4242` (any future expiry, any CVC). Decline cards such as
+   `4000 0000 0000 9995` (insufficient funds) show a declined payment and allow a retry.
 
 Without keys, the catalog, cart and auth flows work, but card payment is disabled.
 

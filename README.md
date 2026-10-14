@@ -56,39 +56,83 @@ Browser ──HTTPS──> Caddy (review) ──> Next.js storefront + BFF (:300
   - [`docs/security/encryption-at-rest.md`](docs/security/encryption-at-rest.md)
   - reviewer concept walkthrough: [`docs/review-walkthrough.md`](docs/review-walkthrough.md)
 
-## Reviewer setup (Docker only)
+## Quick start for reviewers
 
-Prerequisites: Docker Engine with Compose v2.24 or newer, and a Docker host that
-provides `/dev/fuse` (standard on Linux and in the Docker Desktop VM). The reviewer
-Postgres keeps its data directory and WAL on gocryptfs-encrypted storage, which needs
-FUSE. The Stripe CLI is optional and only needed for card payments. No host Java,
-Node or Bun is required; `make` is only a wrapper.
+The whole application runs in Docker. You need only Docker, `bash` and this checkout.
+
+**1. Check the prerequisites**
+
+- Docker Engine with Compose v2.24 or newer (`docker compose version`).
+- `/dev/fuse` on the Docker host. It is standard in Docker Desktop. On Linux, run
+  `sudo modprobe fuse` if `/dev/fuse` is missing. The database is stored on
+  encrypted storage, which needs FUSE.
+- You don't need Java, Node, Bun, a Stripe CLI or `make`.
+
+**2. (Optional) Enable card payments with Stripe test keys**
 
 ```bash
-make review          # = bash scripts/review-up.sh : secrets/certs/storage key, build, migrations, health waits
-# open https://bytecore.localhost:8443  (trust the generated local CA, see docs/review-setup.md)
-make review-down     # = bash scripts/review-down.sh : stop (keeps data and uploaded media)
+cp .env.stripe.example .env.stripe   # Git-ignored; paste sk_test_... and pk_test_...
 ```
 
-The storage key is written to `infrastructure/review/secrets/pgdata.key` (Git-ignored).
-Back it up: without it the encrypted database cannot be opened.
+Skip this step and everything except card payment still works.
 
-A fresh stack has a demo catalog without pictures. To exercise the media pipeline,
-sign in as staff (TOTP), open a product under `/admin/products` and upload a JPEG or
-PNG; thumbnails (≤320 px), medium (≤800 px) and full (≤2000 px) variants are served
-from the media volume (see [`docs/api/product-media.md`](docs/api/product-media.md)).
+**3. Start the stack.** The first build takes a few minutes.
 
-[`docs/review-setup.md`](docs/review-setup.md) is the full guide. It covers:
+```bash
+make review            # or: bash scripts/review-up.sh
+```
 
-- URLs (Mailpit, Hive);
-- trusting the local CA;
-- private secret provisioning (`.env.review` is generated and Git-ignored);
-- the staff bootstrap account and mandatory TOTP enrolment;
-- Stripe test keys and the webhook listener;
-- Google OAuth client setup.
+The script:
 
-Google and Stripe require your own credentials. Without them, sign-in with Google and
-card payment are disabled; everything else works.
+- generates private secrets and certificates;
+- builds and starts the stack, runs migrations and waits for every service;
+- loads a demo catalog;
+- prints the URLs.
+
+**4. Open the shop:** <https://bytecore.localhost:8443>
+
+- The certificate comes from a local CA generated on your machine. Import
+  `infrastructure/review/certs/ca.crt` as trusted (see
+  [`docs/review-setup.md`](docs/review-setup.md#tls-and-trusting-the-local-ca)), or
+  accept the browser warning once for each port.
+- Emails (verification codes, order emails) are in Mailpit:
+  <https://bytecore.localhost:8425>.
+- Test card: `4242 4242 4242 4242`, any future expiry, any CVC.
+- Decline cards: `4000 0000 0000 9995` (insufficient funds) and
+  `4000 0000 0000 0069` (expired).
+
+**5. Sign in as administrator**
+
+1. Sign in with `admin@bytecore.ee`. The password is `ADMIN_PASSWORD` in the generated
+   `.env.review`.
+2. Open `/admin/security` and scan the QR code with any authenticator app. A second
+   factor is mandatory for staff.
+3. Use `/admin` for products, image upload, categories, orders, users, reviews,
+   import and the audit log.
+
+**6. Stop the stack**
+
+```bash
+make review-down       # or: bash scripts/review-down.sh   (keeps data)
+bash scripts/review-down.sh --volumes   # removes the review data completely
+```
+
+The demo catalog has no pictures. Upload a JPEG or PNG under `/admin/products` to see
+thumbnail (≤320 px), medium (≤800 px) and full-size (≤2000 px) versions
+([`docs/api/product-media.md`](docs/api/product-media.md)).
+
+The database storage key is `infrastructure/review/secrets/pgdata.key` (Git-ignored).
+Without it, the encrypted database cannot be opened.
+
+More detail is in [`docs/review-setup.md`](docs/review-setup.md):
+
+- ports and other overrides;
+- trusting the CA on each operating system;
+- Google sign-in setup;
+- troubleshooting.
+
+The concept walkthrough for the review is in
+[`docs/review-walkthrough.md`](docs/review-walkthrough.md).
 
 ## Production-mode stack
 
