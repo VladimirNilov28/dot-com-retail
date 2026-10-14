@@ -40,16 +40,19 @@ def main() -> int:
         logger.error("bootstrap failed: %s", exc)
         return 1
 
-    internal_server = ThreadingHTTPServer(
-        (config.internal_token_host, config.internal_token_port),
-        make_internal_handler(config, hydra_client, kratos_client, spring_auth_client),
-    )
-    threading.Thread(target=internal_server.serve_forever, daemon=True).start()
-    logger.info(
-        "serving internal dev-token endpoint on %s:%s",
-        config.internal_token_host,
-        config.internal_token_port,
-    )
+    if config.dev_token_endpoint_enabled:
+        internal_server = ThreadingHTTPServer(
+            (config.internal_token_host, config.internal_token_port),
+            make_internal_handler(config, hydra_client, kratos_client, spring_auth_client),
+        )
+        threading.Thread(target=internal_server.serve_forever, daemon=True).start()
+        logger.info(
+            "serving internal dev-token endpoint on %s:%s",
+            config.internal_token_host,
+            config.internal_token_port,
+        )
+    else:
+        logger.info("internal dev-token endpoint disabled")
 
     bridge_server = ThreadingHTTPServer(
         (config.bridge_host, config.bridge_port),

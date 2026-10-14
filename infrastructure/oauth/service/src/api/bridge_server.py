@@ -24,7 +24,15 @@ def make_bridge_handler(
     config: Config, hydra_client: HydraClient, kratos_client: KratosClient, spring_auth_client: SpringAuthClient
 ):
     registration = RegistrationService(config, spring_auth_client)
-    mailer = SmtpMailer(config.smtp_host, config.smtp_port, config.smtp_from)
+    mailer = SmtpMailer(
+        config.smtp_host,
+        config.smtp_port,
+        config.smtp_from,
+        username=config.smtp_username,
+        password=config.smtp_password,
+        starttls=config.smtp_starttls,
+        implicit_tls=config.smtp_implicit_tls,
+    )
 
     class BridgeRequestHandler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):  # noqa: A002 - matches BaseHTTPRequestHandler signature

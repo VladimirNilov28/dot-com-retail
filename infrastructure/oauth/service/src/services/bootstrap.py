@@ -240,6 +240,13 @@ def _is_client_in_sync(existing: dict, desired: dict) -> bool:
 
 def reconcile_hydra_clients(hydra_client: HydraClient, spec: AccessControlSpec, config: Config) -> None:
     for client in spec.clients:
+        if client.client_id == config.dev_client_id and not config.dev_token_endpoint_enabled:
+            if hydra_client.get_client(client.client_id) is not None:
+                logger.warning("development client %s exists but the dev-token endpoint is disabled; "
+                               "delete it through the Hydra admin API", client.client_id)
+            else:
+                logger.info("development client %s skipped (dev-token endpoint disabled)", client.client_id)
+            continue
         desired = _build_desired_client_payload(client, spec)
         if client.client_id == config.bff_client_id:
             desired["redirect_uris"] = [config.bff_redirect_uri]

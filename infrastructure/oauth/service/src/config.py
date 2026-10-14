@@ -39,6 +39,24 @@ class Config:
     smtp_host: str = "mailpit"
     smtp_port: int = 1025
     smtp_from: str = "no-reply@bytecore.ee"
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_starttls: bool = False
+    smtp_implicit_tls: bool = False
+    # Production sets OAUTH_DEV_TOKEN_ENDPOINT=disabled: no /internal/token
+    # listener and no `bytecore-web` development client in Hydra.
+    dev_token_endpoint_enabled: bool = True
+
+
+def _flag(name: str, default: bool) -> bool:
+    raw = os.environ.get(name, "").strip().lower()
+    if raw == "":
+        return default
+    if raw in ("true", "1", "yes", "enabled"):
+        return True
+    if raw in ("false", "0", "no", "disabled"):
+        return False
+    raise ConfigError(f"{name} must be true/false")
 
 
 def load_config() -> Config:
@@ -84,6 +102,10 @@ def load_config() -> Config:
             ))):
         raise ConfigError("BFF_REDIRECT_URI must be an exact HTTPS callback or loopback development callback")
 
+    smtp_starttls = _flag("SMTP_STARTTLS", False)
+    smtp_implicit_tls = _flag("SMTP_IMPLICIT_TLS", False)
+    if smtp_starttls and smtp_implicit_tls:
+        raise ConfigError("SMTP_STARTTLS and SMTP_IMPLICIT_TLS are mutually exclusive")
     return Config(
         hydra_admin_url=hydra_admin_url.rstrip("/"),
         # Token-endpoint/authorization-endpoint calls the dev-token flow drives itself.
@@ -122,4 +144,9 @@ def load_config() -> Config:
         smtp_host=os.environ.get("SMTP_HOST", "mailpit").strip(),
         smtp_port=int(os.environ.get("SMTP_PORT", "1025")),
         smtp_from=os.environ.get("SMTP_FROM", "no-reply@bytecore.ee").strip(),
+        smtp_username=os.environ.get("SMTP_USERNAME", "").strip(),
+        smtp_password=os.environ.get("SMTP_PASSWORD", ""),
+        smtp_starttls=smtp_starttls,
+        smtp_implicit_tls=smtp_implicit_tls,
+        dev_token_endpoint_enabled=_flag("OAUTH_DEV_TOKEN_ENDPOINT", True),
     )
