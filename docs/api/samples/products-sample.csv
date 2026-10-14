@@ -1,0 +1,4 @@
+slug,name,description,brand,categories,sku,price,barcode,weight_grams,length_mm,width_mm,height_mm,active,attr:color,attr:layout
+sample-mech-keyboard,Sample mechanical keyboard,Hot-swappable 75% keyboard.,Sample Keys,perifeeria,SAMPLE-KB-BLK-US,89.90,4740000000011,820,330,140,40,true,black,US
+sample-mech-keyboard,Sample mechanical keyboard,Hot-swappable 75% keyboard.,Sample Keys,perifeeria,SAMPLE-KB-WHT-EE,94.90,4740000000028,820,330,140,40,true,white,EE
+sample-usb-hub,Sample USB-C hub,"7-in-1 hub, aluminium body",Sample Keys,perifeeria|arvutid,SAMPLE-HUB-7,39.00,,95,,,,yes,grey,
