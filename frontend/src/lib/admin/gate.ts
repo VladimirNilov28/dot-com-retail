@@ -4,7 +4,7 @@ import { authConfig } from "@/lib/auth/config";
 import { AuthError, authCookie, hasSessionCookie } from "@/lib/auth/model";
 import { authenticatedState } from "@/lib/auth/session";
 import { hiveConfig } from "@/lib/graphql/server";
-import { adminPolicy, unverifiedClaim } from "./policy";
+import { adminPolicy, adminRoles, unverifiedClaim } from "./policy";
 
 export type AdminSession = { accessToken: string; username: string };
 export type AdminAccess =
@@ -19,7 +19,8 @@ function localOnlyAal1(): boolean {
   return origin.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(origin.hostname);
 }
 
-export async function adminAccess(): Promise<AdminAccess> {
+/** `roles` selects the staff area: catalog (default) or orders. */
+export async function adminAccess(roles: ReadonlySet<string> = adminRoles): Promise<AdminAccess> {
   const request = await headers();
   if (!hasSessionCookie(request.get("cookie"))) return { kind: "anonymous" };
   try {
@@ -28,7 +29,7 @@ export async function adminAccess(): Promise<AdminAccess> {
     const { state, user } = await authenticatedState(cookie);
     // The session and the issued token must both be aal2; the token is what the API checks.
     const aal = state.provider?.aal === "aal2" && unverifiedClaim(state.tokens?.accessToken, "aal") === "aal2" ? "aal2" : "aal1";
-    const verdict = adminPolicy(user.role, aal, localOnlyAal1());
+    const verdict = adminPolicy(user.role, aal, localOnlyAal1(), roles);
     if (verdict !== "ok") return { kind: "forbidden", reason: verdict };
     if (!state.tokens) return { kind: "anonymous" };
     return { kind: "ok", session: { accessToken: state.tokens.accessToken, username: user.username } };
