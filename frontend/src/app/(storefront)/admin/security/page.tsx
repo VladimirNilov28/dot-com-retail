@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { AccountHeading } from "@/components/account/account-gate";
+import { AdminPageHeader } from "@/components/admin-page-header";
 import { Notice } from "@/components/account/notice";
 import { AuthenticatorPanel } from "@/components/account/security-panels";
 import { AuthProblem } from "@/components/auth-page";
 import { adminAccess } from "@/lib/admin/gate";
+import { staffRoles } from "@/lib/admin/policy";
 import { authConfig } from "@/lib/auth/config";
 import { AuthError, adminNext, authCookie, hasSessionCookie } from "@/lib/auth/model";
 import { loadStaffSecurity, type StaffSecurity } from "@/lib/auth/settings";
@@ -22,8 +23,8 @@ export default async function AdminSecurity({ searchParams }: { searchParams: Pr
   if (!hasSessionCookie(request.get("cookie"))) {
     return (
       <div className="account-main">
-        <AccountHeading title="Authenticator" description="Sign in with a staff account first." />
-        <a className="store-cta justify-self-start" href={`/login?returnTo=${encodeURIComponent("/admin/security")}`}>Sign in</a>
+        <AdminPageHeader title="Authenticator" description="Sign in with a staff account first." />
+        <a className="store-cta justify-self-start" data-variant="primary" href={`/login?returnTo=${encodeURIComponent("/admin/security")}`}>Sign in</a>
       </div>
     );
   }
@@ -38,7 +39,7 @@ export default async function AdminSecurity({ searchParams }: { searchParams: Pr
     if (code === "forbidden") {
       return (
         <div className="account-main">
-          <AccountHeading title="Authenticator" description="This page is for staff accounts. Customers manage security in their account." />
+          <AdminPageHeader title="Authenticator" description="This page is for staff accounts. Customers manage security in their account." />
           <a className="store-link" href="/account/security">Account security</a>
         </div>
       );
@@ -55,7 +56,7 @@ export default async function AdminSecurity({ searchParams }: { searchParams: Pr
   const verified = enrolled && (await adminAccess(staffRoles)).kind === "ok";
   return (
     <div className="account-main">
-      <AccountHeading title="Authenticator"
+      <AdminPageHeader title="Authenticator"
         description="Administrative access needs an authenticator app on every staff sign-in." />
       {query.saved ? <Notice tone="success">Authenticator confirmed. Verify it once to open the admin area.</Notice> : null}
       {query.invalid === "1" ? <Notice tone="error">That code was not accepted. Check your app and try again.</Notice> : null}
@@ -63,13 +64,13 @@ export default async function AdminSecurity({ searchParams }: { searchParams: Pr
         <section className="account-card" aria-labelledby="verified-h">
           <h2 id="verified-h" className="text-lg font-semibold">Authenticator verified</h2>
           <p className="text-sm text-muted">This session is verified with your authenticator app.</p>
-          <a className="store-cta justify-self-start" href={next}>Continue to admin</a>
+          <a className="store-cta justify-self-start" data-variant="primary" href={next}>Continue to admin</a>
         </section>
       ) : enrolled ? (
         <section className="account-card" aria-labelledby="verify-h">
           <h2 id="verify-h" className="text-lg font-semibold">Verify authenticator</h2>
           <p className="text-sm text-muted">Enter the current code from your authenticator app to unlock the admin area.</p>
-          <a className="store-cta justify-self-start" href={`/auth/start?returnTo=${encodeURIComponent(next)}`}>Verify authenticator</a>
+          <a className="store-cta justify-self-start" data-variant="primary" href={`/auth/start?returnTo=${encodeURIComponent(next)}`}>Verify authenticator</a>
         </section>
       ) : (
         <AuthenticatorPanel settings={security.settings} enabled={false} editable section="/admin/security" next={next} />
@@ -78,15 +79,13 @@ export default async function AdminSecurity({ searchParams }: { searchParams: Pr
   );
 }
 
-const staffRoles: ReadonlySet<string> = new Set(["ADMIN", "CATALOG_MANAGER", "ORDER_MANAGER", "WAREHOUSE", "SUPPORT"]);
-
 function Reconfirm({ next }: { next: string }) {
   return (
     <div className="account-main">
-      <AccountHeading title="Confirm it's you"
+      <AdminPageHeader title="Confirm it's you"
         description="Setting up an authenticator needs a recent sign-in. Nothing has been changed." />
       {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- auth endpoints need full navigation */}
-      <a className="store-cta justify-self-start" href="/auth/security-reauth?section=%2Fadmin%2Fsecurity" data-next={next}>Confirm sign-in</a>
+      <a className="store-cta justify-self-start" data-variant="primary" href="/auth/security-reauth?section=%2Fadmin%2Fsecurity" data-next={next}>Confirm sign-in</a>
     </div>
   );
 }

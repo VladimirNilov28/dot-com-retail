@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { CircleAlert, CircleCheck, Eye, EyeOff, MessageSquareText, Star, ThumbsUp } from "lucide-react";
 import { AdminDenied } from "@/components/admin-denied";
+import { AdminEmpty, AdminPageHeader, AdminPanel } from "@/components/admin-page-header";
+import { AdminLoadError } from "@/components/admin-status";
 import { adminAccess, adminGraphql } from "@/lib/admin/gate";
 import { hideReview, restoreReview } from "@/lib/admin/review-actions";
 import { REASON_MAX, REASON_MIN, ratingLabel, reviewDate } from "@/lib/reviews/model";
@@ -51,54 +54,58 @@ export default async function AdminReviews({ searchParams }: PageProps<"/admin/r
   const totalPages = data?.pageInfo.totalPages ?? 0;
   return (
     <div className="account-main">
-      <h1 className="text-2xl font-semibold tracking-tight">Review moderation</h1>
-      <p className="text-sm text-muted">Hidden reviews are removed from the storefront and from product ratings. Every change is audited.</p>
-      <nav aria-label="Filter reviews by status" className="review-actions">
+      <AdminPageHeader title="Review moderation"
+        description="Hidden reviews are removed from the storefront and from product ratings. Every change is audited." />
+      <nav aria-label="Filter reviews by status" className="admin-segmented">
         {filters.map((filter) => (
-          <Link key={filter.label} prefetch={false} className="store-cta" href={href(filter.value, 1)}
+          <Link key={filter.label} prefetch={false} href={href(filter.value, 1)}
             aria-current={status === filter.value ? "page" : undefined}>{filter.label}</Link>
         ))}
       </nav>
-      <div id="status" tabIndex={-1}>
-        {notice ? <p role="status" className="account-badge" data-tone="ok">{notice}</p> : null}
-        {error ? <p role="alert" className="account-badge" data-tone="off">{error}</p> : null}
+      <div id="status" tabIndex={-1} className="admin-status">
+        {notice ? <p role="status" className="admin-alert" data-tone="success"><CircleCheck size={18} aria-hidden="true" /><span>{notice}</span></p> : null}
+        {error ? <p role="alert" className="admin-alert" data-tone="danger"><CircleAlert size={18} aria-hidden="true" /><span>{error}</span></p> : null}
       </div>
-      {data === null ? <p role="alert" className="text-muted">Reviews could not be loaded. Retry shortly.</p> : (
-        <section className="account-card" aria-labelledby="reviews-heading">
-          <h2 id="reviews-heading" className="text-lg font-semibold">
-            {data.pageInfo.totalItems} {status ? `${status.toLowerCase()} ` : ""}review{data.pageInfo.totalItems === 1 ? "" : "s"}
-          </h2>
-          {data.items.length === 0 ? <p className="text-muted">No reviews match this filter.</p> : (
-            <ul className="account-rows" aria-label="Reviews">
+      {data === null ? <AdminLoadError>Reviews could not be loaded. Retry shortly.</AdminLoadError> : (
+        <AdminPanel id="reviews"
+          title={`${data.pageInfo.totalItems} ${status ? `${status.toLowerCase()} ` : ""}review${data.pageInfo.totalItems === 1 ? "" : "s"}`}>
+          {data.items.length === 0 ? <AdminEmpty icon={<MessageSquareText size={22} />} title="No reviews match this filter" /> : (
+            <ul aria-label="Reviews" className="admin-flush">
               {data.items.map((review) => (
-                <li key={review.id} className="account-row admin-review">
-                  <div className="admin-review-body">
-                    <p className="text-sm">
-                      <Link prefetch={false} className="store-link" href={`/products/${review.productSlug}#reviews`}>{review.productName}</Link>
-                      {" · "}{ratingLabel(review.stars)} · {review.authorName} · <time dateTime={review.createdAt}>{reviewDate(review.createdAt)}</time>
-                      {" · "}{review.helpfulCount} helpful
-                    </p>
-                    <h3 className="font-semibold">{review.title ?? "Rating only (no written review)"}</h3>
-                    {review.body ? <p className="review-body text-sm">{review.body}</p> : null}
-                    {review.status === "HIDDEN" ? <p className="text-sm text-muted">
-                      Hidden{review.moderatedAt ? ` ${reviewDate(review.moderatedAt)}` : ""}: {review.moderationReason ?? "no reason recorded"}
-                    </p> : null}
+                <li key={review.id} className="admin-review-card">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="grid gap-1 min-w-0">
+                      <Link prefetch={false} className="store-link font-medium" href={`/products/${review.productSlug}#reviews`}>{review.productName}</Link>
+                      <div className="admin-review-meta">
+                        <span className="admin-stars" role="img" aria-label={ratingLabel(review.stars)}>
+                          {[1, 2, 3, 4, 5].map((n) => <Star key={n} size={14} aria-hidden="true" fill={n <= review.stars ? "currentColor" : "none"} className={n <= review.stars ? undefined : "admin-star-off"} />)}
+                        </span>
+                        <span>{review.authorName}</span>
+                        <time dateTime={review.createdAt}>{reviewDate(review.createdAt)}</time>
+                        <span className="inline-flex items-center gap-1"><ThumbsUp size={12} aria-hidden="true" />{review.helpfulCount} helpful</span>
+                      </div>
+                    </div>
+                    <span className="account-badge" data-tone={review.status === "VISIBLE" ? "ok" : "warn"}>
+                      {review.status === "VISIBLE" ? "Visible" : "Hidden"}
+                    </span>
                   </div>
-                  <span className="account-badge" data-tone={review.status === "VISIBLE" ? "ok" : "off"}>
-                    {review.status === "VISIBLE" ? "Visible" : "Hidden"}
-                  </span>
+                  <h3 className="font-semibold">{review.title ?? <span className="text-muted font-normal">Rating only (no written review)</span>}</h3>
+                  {review.body ? <p className="admin-quote">{review.body}</p> : null}
+                  {review.status === "HIDDEN" ? <p className="admin-hint">
+                    Hidden{review.moderatedAt ? ` ${reviewDate(review.moderatedAt)}` : ""}: {review.moderationReason ?? "no reason recorded"}
+                  </p> : null}
                   {review.status === "VISIBLE" ? (
                     <form action={hideReview} className="admin-inline">
                       <input type="hidden" name="reviewId" value={review.id} />
                       <input type="hidden" name="slug" value={review.productSlug} />
                       <input type="hidden" name="filter" value={status ?? ""} />
                       <input type="hidden" name="page" value={page} />
-                      <div className="auth-field">
+                      <div className="auth-field admin-search">
                         <label htmlFor={`reason-${review.id}`} className="text-sm">Reason for hiding</label>
                         <input id={`reason-${review.id}`} name="reason" className="auth-input" required
                           minLength={REASON_MIN} maxLength={REASON_MAX} autoComplete="off" />
                       </div>
-                      <button type="submit" className="store-cta">Hide<span className="sr-only"> review {review.title ?? review.id}</span></button>
+                      <button type="submit" className="store-cta" data-variant="danger" data-size="sm"><EyeOff size={14} aria-hidden="true" />Hide<span className="sr-only"> review {review.title ?? review.id}</span></button>
                     </form>
                   ) : (
                     <form action={restoreReview} className="admin-inline">
@@ -106,22 +113,24 @@ export default async function AdminReviews({ searchParams }: PageProps<"/admin/r
                       <input type="hidden" name="slug" value={review.productSlug} />
                       <input type="hidden" name="filter" value={status ?? ""} />
                       <input type="hidden" name="page" value={page} />
-                      <button type="submit" className="store-cta">Restore<span className="sr-only"> review {review.title ?? review.id}</span></button>
+                      <button type="submit" className="store-cta" data-size="sm"><Eye size={14} aria-hidden="true" />Restore<span className="sr-only"> review {review.title ?? review.id}</span></button>
                     </form>
                   )}
                 </li>
               ))}
             </ul>
           )}
-          {totalPages > 1 ? (
-            <nav aria-label="Review pages" className="review-pagination">
-              {page > 1 ? <Link prefetch={false} className="store-cta" href={href(status, page - 1)}>Previous</Link> : null}
-              <span className="text-sm text-muted">Page {page} of {totalPages}</span>
-              {page < totalPages ? <Link prefetch={false} className="store-cta" href={href(status, page + 1)}>Next</Link> : null}
-            </nav>
-          ) : null}
-        </section>
+        </AdminPanel>
       )}
+      {totalPages > 1 ? (
+        <nav aria-label="Review pages" className="admin-pagination">
+          <span>Page {page} of {totalPages}</span>
+          <div>
+            {page > 1 ? <Link prefetch={false} className="store-cta" data-size="sm" href={href(status, page - 1)}>Previous</Link> : null}
+            {page < totalPages ? <Link prefetch={false} className="store-cta" data-size="sm" href={href(status, page + 1)}>Next</Link> : null}
+          </div>
+        </nav>
+      ) : null}
     </div>
   );
 }

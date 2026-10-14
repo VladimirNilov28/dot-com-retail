@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { PackageSearch } from "lucide-react";
 import { AdminDenied } from "@/components/admin-denied";
+import { AdminEmpty, AdminPageHeader } from "@/components/admin-page-header";
+import { AdminLoadError } from "@/components/admin-status";
 import { OrderFilters, OrderList, Pagination } from "@/components/orders/order-view";
 import { adminAccess } from "@/lib/admin/gate";
 import { orderRoles } from "@/lib/admin/policy";
@@ -26,17 +29,17 @@ export default async function AdminOrders({ searchParams }: { searchParams: Prom
   }
   return (
     <div className="account-main">
-      <h1 className="text-2xl font-semibold tracking-tight">Order management</h1>
+      <AdminPageHeader title="Orders" description="Search, filter and fulfil customer and guest orders. Status changes, tracking, cancellations and refunds are audited." />
       <OrderFilters base={base} search={search} staff />
       {search.error ? <p role="alert" className="account-notice" data-tone="error">{search.error}</p> : null}
       {!result ? (
-        <div role="alert" className="account-card">
-          <p>{denied ? "The order API denied this session. Sign out and in again so the order-management scope is granted." :
-            "Orders could not be loaded. Retry shortly."}</p>
+        <AdminLoadError>
+          {denied ? "The order API denied this session. Sign out and in again so the order-management scope is granted." :
+            "Orders could not be loaded. Retry shortly."}{" "}
           <Link prefetch={false} className="store-link" href={searchHref(base, search)}>Try again</Link>
-        </div>
+        </AdminLoadError>
       ) : result.items.length === 0 ? (
-        <p className="account-card text-muted">No orders match these filters.</p>
+        <div className="admin-panel"><AdminEmpty icon={<PackageSearch size={22} />} title="No orders match these filters" /></div>
       ) : <OrderList base={base} items={result.items} staff />}
       {result ? <Pagination base={base} search={search} totalCount={result.totalCount} size={result.size} /> : null}
     </div>

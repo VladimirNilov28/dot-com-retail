@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { AdminDenied } from "@/components/admin-denied";
-import { AdminStatus } from "@/components/admin-status";
+import { ChevronRight, CornerDownRight, Folder, FolderTree, Plus, Trash2 } from "lucide-react";
+import { AdminEmpty, AdminPageHeader, AdminPanel } from "@/components/admin-page-header";
+import { AdminLoadError, AdminStatus } from "@/components/admin-status";
 import { adminAccess, adminGraphql } from "@/lib/admin/gate";
 import { blockedParents, categoryTree, type CategoryNode } from "@/lib/admin/forms";
 import { createCategory, deleteCategory, updateCategory } from "@/lib/admin/manage-actions";
@@ -30,49 +32,64 @@ export default async function AdminCategories({ searchParams }: { searchParams: 
   ));
   return (
     <div className="account-main">
-      <h1 className="text-2xl font-semibold tracking-tight">Category management</h1>
+      <AdminPageHeader title="Categories" description="Organise the catalogue tree. Expand a category to rename it, change its slug, move it or delete it." />
       <AdminStatus params={params} />
-      {failed ? <p role="alert" className="text-muted">Categories could not be loaded. Retry shortly.</p> : null}
+      {failed ? <AdminLoadError>Categories could not be loaded. Retry shortly.</AdminLoadError> : null}
 
-      <section className="account-card" aria-labelledby="new-category">
-        <h2 id="new-category" className="text-lg font-semibold">New category</h2>
-        <form action={createCategory} className="admin-inline">
+      <AdminPanel id="new-category" title="New category">
+        <form action={createCategory} className="admin-form-grid">
           <label className="auth-field"><span className="text-sm">Name</span><input className="auth-input" name="name" required maxLength={255} /></label>
           <label className="auth-field"><span className="text-sm">Slug</span>
             <input className="auth-input" name="slug" required maxLength={255} pattern="[a-z0-9]+(-[a-z0-9]+)*" /></label>
           <label className="auth-field"><span className="text-sm">Parent</span>
             <select className="auth-input" name="parentId" defaultValue=""><option value="">Top level</option>{parentOptions(new Set())}</select></label>
-          <button className="store-cta" type="submit">Create</button>
+          <button className="store-cta" data-variant="primary" type="submit"><Plus size={16} aria-hidden="true" />Create</button>
         </form>
-      </section>
+      </AdminPanel>
 
-      <section className="account-card" aria-labelledby="tree-heading">
-        <h2 id="tree-heading" className="text-lg font-semibold">Category tree</h2>
-        <p className="text-sm text-muted">A category cannot move under itself or its own subcategories. Delete subcategories first; deleting a category only removes it from its products.</p>
-        {!failed && tree.length === 0 ? <p className="text-muted">No categories yet.</p> : null}
-        <ul className="grid gap-4" aria-label="Categories">
-          {tree.map((row) => (
-            <li key={row.id} className="grid gap-2" style={{ paddingInlineStart: `${row.depth * 1.5}rem` }}>
-              <form action={updateCategory} className="admin-inline">
-                <input type="hidden" name="categoryId" value={row.id} />
-                <label className="auth-field"><span className="text-sm">Name</span>
-                  <input className="auth-input" name="name" defaultValue={row.name} required maxLength={255} /></label>
-                <label className="auth-field"><span className="text-sm">Slug</span>
-                  <input className="auth-input" name="slug" defaultValue={row.slug} required maxLength={255} pattern="[a-z0-9]+(-[a-z0-9]+)*" /></label>
-                <label className="auth-field"><span className="text-sm">Parent</span>
-                  <select className="auth-input" name="parentId" defaultValue={row.parent?.id ?? ""}>
-                    <option value="">Top level</option>{parentOptions(blockedParents(categories, row.id))}
-                  </select></label>
-                <button className="store-cta" type="submit">Save {row.name}</button>
-              </form>
-              <form action={deleteCategory} className="admin-inline">
-                <input type="hidden" name="categoryId" value={row.id} />
-                <label className="admin-checks"><input type="checkbox" name="confirm" value="yes" required /> Confirm deleting {row.name}</label>
-                <button className="store-cta" type="submit">Delete</button>
-              </form>
-            </li>
-          ))}
-        </ul>
+      <section aria-labelledby="tree-heading" className="grid gap-3">
+        <div className="admin-panel-head">
+          <div>
+            <h2 id="tree-heading" className="text-lg font-semibold">Category tree <span className="text-muted font-normal">· {tree.length}</span></h2>
+            <p className="admin-panel-description">A category cannot move under itself or its own subcategories. Delete subcategories first; deleting a category only removes it from its products.</p>
+          </div>
+        </div>
+        {!failed && tree.length === 0 ? <div className="admin-panel"><AdminEmpty icon={<FolderTree size={22} />} title="No categories yet" /></div> : null}
+        {tree.length ? (
+          <ul className="admin-list" aria-label="Categories">
+            {tree.map((row) => (
+              <li key={row.id}>
+                <details className="admin-disclosure">
+                  <summary style={{ paddingInlineStart: `${1 + row.depth * 1.5}rem` }}>
+                    {row.depth ? <CornerDownRight size={15} className="admin-tree-indent" aria-hidden="true" /> : <Folder size={16} className="admin-tree-indent" aria-hidden="true" />}
+                    <span className="font-medium">{row.name}</span>
+                    <span className="admin-code">/{row.slug}</span>
+                    <ChevronRight size={16} className="admin-chevron" aria-hidden="true" />
+                  </summary>
+                  <div className="admin-disclosure-body">
+                    <form action={updateCategory} className="admin-form-grid">
+                      <input type="hidden" name="categoryId" value={row.id} />
+                      <label className="auth-field"><span className="text-sm">Name</span>
+                        <input className="auth-input" name="name" defaultValue={row.name} required maxLength={255} /></label>
+                      <label className="auth-field"><span className="text-sm">Slug</span>
+                        <input className="auth-input" name="slug" defaultValue={row.slug} required maxLength={255} pattern="[a-z0-9]+(-[a-z0-9]+)*" /></label>
+                      <label className="auth-field"><span className="text-sm">Parent</span>
+                        <select className="auth-input" name="parentId" defaultValue={row.parent?.id ?? ""}>
+                          <option value="">Top level</option>{parentOptions(blockedParents(categories, row.id))}
+                        </select></label>
+                      <button className="store-cta" data-variant="primary" type="submit">Save {row.name}</button>
+                    </form>
+                    <form action={deleteCategory} className="admin-form-actions">
+                      <input type="hidden" name="categoryId" value={row.id} />
+                      <label className="admin-check"><input type="checkbox" name="confirm" value="yes" required /> Confirm deleting {row.name}</label>
+                      <button className="store-cta" data-variant="danger" data-size="sm" type="submit"><Trash2 size={14} aria-hidden="true" />Delete</button>
+                    </form>
+                  </div>
+                </details>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </section>
     </div>
   );

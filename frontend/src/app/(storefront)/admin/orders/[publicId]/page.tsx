@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { CircleAlert } from "lucide-react";
 import { AdminDenied } from "@/components/admin-denied";
+import { AdminPageHeader } from "@/components/admin-page-header";
+import { AdminLoadError } from "@/components/admin-status";
 import { OrderActionForm } from "@/components/orders/order-action-form";
 import {
   OrderDelivery, OrderItems, OrderTimeline, PaymentState, StatusBadge, StatusMessages,
@@ -21,11 +24,10 @@ export const dynamic = "force-dynamic";
 
 function Problem({ text }: { text: string }) {
   return (
-    <section className="account-main">
-      <h1 className="text-2xl font-semibold">Order management</h1>
-      <p role="alert" className="text-muted">{text}</p>
-      <Link prefetch={false} className="store-link" href="/admin/orders">Back to orders</Link>
-    </section>
+    <div className="account-main">
+      <AdminPageHeader title="Order" back={{ href: "/admin/orders", label: "Orders" }} />
+      <AdminLoadError>{text}</AdminLoadError>
+    </div>
   );
 }
 
@@ -51,15 +53,21 @@ export default async function AdminOrder({ params, searchParams }: {
   const openRequests = order.refundRequests.filter((request) => request.status === "REQUESTED");
   return (
     <div className="account-main">
-      <div>
-        <Link prefetch={false} className="store-link" href="/admin/orders">← Orders</Link>
-        <h1 className="text-2xl font-semibold tracking-tight">Order {order.publicId.slice(0, 8).toUpperCase()}</h1>
-        <p className="text-sm text-muted break-all">
-          {order.publicId} · placed {dateTime(order.createdAt)} · {order.user ? `${order.user.username} <${order.user.email}>` : `Guest ${order.checkout?.details.contactEmail ?? ""}`}
-        </p>
-      </div>
+      <AdminPageHeader title={`Order ${order.publicId.slice(0, 8).toUpperCase()}`} back={{ href: "/admin/orders", label: "Orders" }}
+        meta={<><StatusBadge value={order.status} /><span className="admin-code break-all">{order.publicId}</span></>}
+        description={`Placed ${dateTime(order.createdAt)} · ${order.user ? `${order.user.username} <${order.user.email}>` : `Guest ${order.checkout?.details.contactEmail ?? ""}`}`} />
       <StatusMessages query={query} />
+      {openRequests.length ? <p role="status" className="admin-alert" data-tone="warning"><CircleAlert size={18} aria-hidden="true" />
+        <span>{openRequests.length} refund request{openRequests.length === 1 ? " is" : "s are"} waiting for a decision.</span></p> : null}
 
+      <div className="admin-split">
+      <div className="admin-split-main">
+        <OrderItems order={order} />
+        <OrderDelivery order={order} />
+        <PaymentState order={order} />
+        <OrderTimeline order={order} staff />
+      </div>
+      <div className="admin-split-side">
       <section className="account-card" aria-labelledby="fulfillment-heading">
         <div className="flex flex-wrap items-center gap-2">
           <h2 id="fulfillment-heading" className="text-lg font-semibold">Fulfillment</h2><StatusBadge value={order.status} />
@@ -112,7 +120,7 @@ export default async function AdminOrder({ params, searchParams }: {
         )) : <p className="text-sm text-muted">No refund requests are waiting for a decision.</p>}
       </section>
 
-      <section className="account-card" aria-labelledby="cancel-heading">
+      <section className="account-card" data-tone="danger" aria-labelledby="cancel-heading">
         <h2 id="cancel-heading" className="text-lg font-semibold">Cancellation</h2>
         {order.cancellationEligibility.allowed ? (
           <OrderActionForm action={staffCancel} fields={fields} label="Cancel order" pendingLabel="Cancelling…" variant="danger"
@@ -120,10 +128,8 @@ export default async function AdminOrder({ params, searchParams }: {
         ) : <p className="text-sm text-muted">Not cancellable: {statusLabel(order.cancellationEligibility.reason ?? "not allowed").toLowerCase()}.</p>}
       </section>
 
-      <OrderItems order={order} />
-      <OrderDelivery order={order} />
-      <PaymentState order={order} />
-      <OrderTimeline order={order} staff />
+      </div>
+      </div>
     </div>
   );
 }

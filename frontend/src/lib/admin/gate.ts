@@ -1,5 +1,6 @@
 import "server-only";
 import { headers } from "next/headers";
+import { cache } from "react";
 import { authConfig } from "@/lib/auth/config";
 import { AuthError, authCookie, hasSessionCookie } from "@/lib/auth/model";
 import { authenticatedState } from "@/lib/auth/session";
@@ -19,6 +20,9 @@ function localOnlyAal1(): boolean {
   return origin.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(origin.hostname);
 }
 
+// The admin layout and page both check access; share one session lookup per request.
+const sessionState = cache((cookie: string) => authenticatedState(cookie));
+
 /** `roles` selects the staff area: catalog (default) or orders. */
 export async function adminAccess(roles: ReadonlySet<string> = adminRoles): Promise<AdminAccess> {
   const request = await headers();
@@ -26,7 +30,7 @@ export async function adminAccess(roles: ReadonlySet<string> = adminRoles): Prom
   try {
     const cookie = authCookie(request.get("cookie"), authConfig().sessionCookie);
     if (!cookie) return { kind: "anonymous" };
-    const { state, user } = await authenticatedState(cookie);
+    const { state, user } = await sessionState(cookie);
     // The session and the issued token must both be aal2; the token is what the API checks.
     const aal = state.provider?.aal === "aal2" && unverifiedClaim(state.tokens?.accessToken, "aal") === "aal2" ? "aal2" : "aal1";
     const verdict = adminPolicy(user.role, aal, localOnlyAal1(), roles);

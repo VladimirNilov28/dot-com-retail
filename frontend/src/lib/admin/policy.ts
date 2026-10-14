@@ -14,6 +14,7 @@ export const adminRoles: ReadonlySet<string> = new Set(["ADMIN", "CATALOG_MANAGE
 export const orderRoles: ReadonlySet<string> = new Set(["ADMIN", "ORDER_MANAGER"]);
 /** Shipping, users and the audit log: the API also requires ADMIN. */
 export const adminOnly: ReadonlySet<string> = new Set(["ADMIN"]);
+export const staffRoles: ReadonlySet<string> = new Set(["ADMIN", "CATALOG_MANAGER", "ORDER_MANAGER", "WAREHOUSE", "SUPPORT"]);
 
 /** Staff role, plus a second factor unless a local-only dev opt-in is set. */
 export function adminPolicy(role: string, aal: string, allowAal1: boolean, roles: ReadonlySet<string> = adminRoles): "ok" | "role" | "assurance" {

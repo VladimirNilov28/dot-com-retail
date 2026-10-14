@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AdminDenied } from "@/components/admin-denied";
-import { AdminStatus } from "@/components/admin-status";
+import { Search, UserSearch } from "lucide-react";
+import { AdminEmpty, AdminPageHeader } from "@/components/admin-page-header";
+import { AdminLoadError, AdminStatus } from "@/components/admin-status";
 import { adminAccess, adminGraphql } from "@/lib/admin/gate";
 import { adminOnly } from "@/lib/admin/policy";
 import { changeUserRole } from "@/lib/admin/manage-actions";
@@ -42,46 +44,62 @@ export default async function AdminUsers({ searchParams }: { searchParams: Promi
   const back = href(page);
   return (
     <div className="account-main">
-      <h1 className="text-2xl font-semibold tracking-tight">Users and roles</h1>
+      <AdminPageHeader title="Users and roles"
+        description="A new role takes effect in the user's access token after its next refresh (within minutes) or their next sign-in; the API always re-checks the current token." />
       <AdminStatus params={params} />
-      <p className="text-sm text-muted">A new role takes effect in the user&apos;s access token after its next refresh (within minutes) or their next sign-in; the API always re-checks the current token.</p>
-      <form method="get" action="/admin/users" className="admin-inline" role="search">
-        <label className="auth-field"><span className="text-sm">Username or email contains</span>
-          <input className="auth-input" name="q" defaultValue={query} maxLength={100} /></label>
+      <form method="get" action="/admin/users" className="admin-toolbar" role="search">
+        <label className="auth-field admin-search"><span className="text-sm">Username or email contains</span>
+          <input className="auth-input" type="search" name="q" defaultValue={query} maxLength={100} /></label>
         <label className="auth-field"><span className="text-sm">Role</span>
           <select className="auth-input" name="role" defaultValue={role}><option value="">Any role</option>
-            {roles.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
-        <button className="store-cta" type="submit">Search</button>
+            {roles.map((value) => <option key={value} value={value}>{label(value)}</option>)}</select></label>
+        <button className="store-cta" type="submit"><Search size={16} aria-hidden="true" />Search</button>
       </form>
-      {failed ? <p role="alert" className="text-muted">Users could not be loaded. Retry shortly.</p> : null}
+      {failed ? <AdminLoadError>Users could not be loaded. Retry shortly.</AdminLoadError> : null}
       <div className="admin-table-wrap">
         <table className="admin-table">
-          <caption className="text-sm text-muted">{data.totalElements} matching user{data.totalElements === 1 ? "" : "s"} · page {page + 1} of {pages}</caption>
-          <thead><tr><th scope="col">User</th><th scope="col">Email</th><th scope="col">Role</th></tr></thead>
+          <caption className="text-sm text-muted">{data.totalElements} matching user{data.totalElements === 1 ? "" : "s"}</caption>
+          <thead><tr><th scope="col">User</th><th scope="col">Current role</th><th scope="col">Change role</th></tr></thead>
           <tbody>
             {data.items.map((user) => (
               <tr key={user.id}>
-                <th scope="row">{user.username}{user.username === access.session.username ? " (you)" : ""}</th>
-                <td>{user.email}</td>
+                <th scope="row">
+                  <div className="admin-cell-main">
+                    <span className="admin-avatar" aria-hidden="true">{user.username.slice(0, 1)}</span>
+                    <div>
+                      <span className="font-medium">{user.username}{user.username === access.session.username ? <span className="text-muted font-normal"> (you)</span> : null}</span>
+                      <span className="admin-cell-sub">{user.email}</span>
+                    </div>
+                  </div>
+                </th>
+                <td><span className="account-badge" data-tone={user.role === "USER" ? "plain" : "ok"}>{label(user.role)}</span></td>
                 <td>
                   <form action={changeUserRole} className="admin-inline">
                     <input type="hidden" name="userId" value={user.id} />
                     <input type="hidden" name="back" value={back} />
-                    <label className="auth-field"><span className="text-sm">Role for {user.username}</span>
+                    <label className="auth-field"><span className="sr-only">Role for {user.username}</span>
                       <select className="auth-input" name="role" defaultValue={user.role}>
-                        {roles.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
-                    <button className="store-cta" type="submit">Change role</button>
+                        {roles.map((value) => <option key={value} value={value}>{label(value)}</option>)}</select></label>
+                    <button className="store-cta" data-size="sm" type="submit">Change role<span className="sr-only"> for {user.username}</span></button>
                   </form>
                 </td>
               </tr>
             ))}
+            {!failed && data.items.length === 0 ? <tr><td colSpan={3}><AdminEmpty icon={<UserSearch size={22} />} title="No matching users" /></td></tr> : null}
           </tbody>
         </table>
       </div>
-      <nav aria-label="User pages" className="admin-inline">
-        {page > 0 ? <Link prefetch={false} className="store-link" href={href(page - 1)}>Previous page</Link> : null}
-        {page + 1 < pages ? <Link prefetch={false} className="store-link" href={href(page + 1)}>Next page</Link> : null}
+      <nav aria-label="User pages" className="admin-pagination">
+        <span>Page {page + 1} of {pages}</span>
+        <div>
+          {page > 0 ? <Link prefetch={false} className="store-cta" data-size="sm" href={href(page - 1)}>Previous page</Link> : null}
+          {page + 1 < pages ? <Link prefetch={false} className="store-cta" data-size="sm" href={href(page + 1)}>Next page</Link> : null}
+        </div>
       </nav>
     </div>
   );
+}
+
+function label(role: string): string {
+  return role.toLowerCase().split("_").map((part) => part[0].toUpperCase() + part.slice(1)).join(" ");
 }
