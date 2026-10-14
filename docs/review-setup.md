@@ -222,6 +222,24 @@ The stack was verified against a disposable project
   - GraphQL catalog search works through the TLS edge;
   - a contact form submission delivered both the support email and the
     acknowledgement to Mailpit.
+- Re-checked on 15 Oct (00:30 local) after the token-revocation, PII-encryption,
+  payment-decline, purchase-gated reviews, media-variant and edge merges, from a
+  fresh disposable project (`dcr-review-tmp`, own volumes, torn down afterwards):
+  - `review-up.sh` completed; all services healthy, including `auth-maintenance`;
+  - the raw `postgres_crypt_volume` contained 0 files with a seeded product name
+    (the decrypted view inside the container: 1) and no plaintext file names;
+  - `scripts/verify-token-revocation.mjs`, run inside the review network: 19/19
+    PASS (rotation, old refresh rejected, reuse detection, logout and subject
+    revocation → Spring 401);
+  - rate limiting through Caddy with two client containers: client A got
+    5 × 200 then 429 with `Retry-After: 120` on the contact policy; forged
+    `X-Forwarded-For`/`Forwarded`/`X-Real-IP` kept A in its bucket; client B was
+    independent. An authenticated subject stayed limited when the same token was
+    used from another address, while that address's anonymous bucket was separate.
+    Rotating `X-Forwarded-For` sent straight to Spring from an untrusted container
+    did not escape the bucket. Only Caddy publishes host ports;
+  - `/`, `/catalog/all-products`, `/search`, a PDP, `/cart`, `/checkout`, `/about`,
+    `/contact`, `/account` and `/admin/products` returned 200 over TLS; unknown → 404.
 
 ## Troubleshooting
 

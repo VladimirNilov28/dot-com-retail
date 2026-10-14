@@ -54,17 +54,29 @@ Browser ──HTTPS──> Caddy (review) ──> Next.js storefront + BFF (:300
 - **Security:**
   - [`docs/security/rate-limiting.md`](docs/security/rate-limiting.md)
   - [`docs/security/encryption-at-rest.md`](docs/security/encryption-at-rest.md)
+  - reviewer concept walkthrough: [`docs/review-walkthrough.md`](docs/review-walkthrough.md)
 
 ## Reviewer setup (Docker only)
 
-Prerequisites: Docker Engine with Compose v2.24 or newer. The Stripe CLI is optional
-and only needed for card payments. No host Java, Node or Bun is required.
+Prerequisites: Docker Engine with Compose v2.24 or newer, and a Docker host that
+provides `/dev/fuse` (standard on Linux and in the Docker Desktop VM). The reviewer
+Postgres keeps its data directory and WAL on gocryptfs-encrypted storage, which needs
+FUSE. The Stripe CLI is optional and only needed for card payments. No host Java,
+Node or Bun is required; `make` is only a wrapper.
 
 ```bash
-make review          # builds and starts everything: generates secrets/certs, runs migrations, waits for health
+make review          # = bash scripts/review-up.sh : secrets/certs/storage key, build, migrations, health waits
 # open https://bytecore.localhost:8443  (trust the generated local CA, see docs/review-setup.md)
-make review-down     # stop (keeps data and uploaded media)
+make review-down     # = bash scripts/review-down.sh : stop (keeps data and uploaded media)
 ```
+
+The storage key is written to `infrastructure/review/secrets/pgdata.key` (Git-ignored).
+Back it up: without it the encrypted database cannot be opened.
+
+A fresh stack has a demo catalog without pictures. To exercise the media pipeline,
+sign in as staff (TOTP), open a product under `/admin/products` and upload a JPEG or
+PNG; thumbnails (≤320 px), medium (≤800 px) and full (≤2000 px) variants are served
+from the media volume (see [`docs/api/product-media.md`](docs/api/product-media.md)).
 
 [`docs/review-setup.md`](docs/review-setup.md) is the full guide. It covers:
 
@@ -81,11 +93,15 @@ card payment are disabled; everything else works.
 ## Demo walkthrough
 
 1. Browse `/catalog`, search with suggestions, filter by facets, and sort by rating or
-   price. Open a product, switch variants, and read or write a review and vote it
-   helpful.
+   price. Open a product, switch variants, read reviews sorted by helpfulness and vote
+   one helpful. Writing a review requires a paid, non-refunded purchase of the product
+   ([`docs/api/reviews.md`](docs/api/reviews.md)).
 2. Add items to the cart as a guest. The cart shows "You may also like". Check out with
    Stripe test card `4242 4242 4242 4242`. The confirmation page updates when the
-   signed webhook marks the order PAID, and the email appears in Mailpit.
+   signed webhook marks the order PAID, and the email appears in Mailpit. Decline
+   cards such as `4000 0000 0000 9995` (insufficient funds) show "Payment declined"
+   with the reason and allow a retry on the same order
+   ([`docs/api/checkout.md`](docs/api/checkout.md)).
 3. Register an account (the verification code is in Mailpit) and sign in. Then use:
    - `/account/addresses` to save addresses;
    - `/account/orders` to filter history, view details and tracking, cancel before

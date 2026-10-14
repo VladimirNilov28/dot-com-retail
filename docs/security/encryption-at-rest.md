@@ -201,7 +201,13 @@ The reviewer stack (`infrastructure/compose.review.yml`, started by
   `postgres_volume` of the dev stack is not mounted.
 - `encrypted-storage-entrypoint.sh` reads the key file, mounts the decrypted view at
   `PGDATA` inside the container only, then execs the normal (TLS) Postgres
-  entrypoint. Postgres runs as PID 1 as usual.
+  entrypoint. Postgres runs as PID 1 as usual. The gocryptfs daemon runs as the
+  `postgres` user (key piped on stdin, `-allow_other` via `user_allow_other`), not as
+  root: a root daemon with `-allow_other` switches credentials per request, and
+  concurrent file creation during first-start migrations failed with `EPERM`
+  (reproduced, fixed in the entrypoint, and re-tested with 6 parallel sessions × 30
+  table creations: 0 errors). Volumes created by the earlier root-mounted image are
+  re-owned on start and keep unlocking with the same key.
 - Everything under `PGDATA` is encrypted. That covers all databases in the server
   (`retail`, Kratos, Hydra, BFF `storefront_auth`, payment service), WAL, temporary
   files and the server configuration.
