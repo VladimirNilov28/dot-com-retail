@@ -199,6 +199,14 @@ Late success after cancellation uses the existing queued full-refund pipeline.
 
 ## Browser payment, confirmation and notification lifecycle
 
+Header account lookup accepts checkout and protected confirmation return routes.
+Provider-only return parameters are excluded from sign-in destinations. Anonymous
+visitors remain anonymous; expired login and real service outages stay distinct.
+Aborted/superseded lookups cannot restore a previous account, and there is no
+account-status polling. Abandoning login does not erase a guest cart, checkout
+recovery or protected confirmation proof (see the authentication lifecycle in
+[Account Management](../auth/account-management.md)).
+
 The checkout displays authoritative item/shipping totals and requires explicit
 quote acceptance. Changes invalidate acceptance immediately. Customer contact
 and saved addresses come from authorized APIs; manual address entry is available.

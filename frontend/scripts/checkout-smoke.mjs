@@ -46,6 +46,9 @@ async function pageFor() {
   const page = await context.newPage();
   page.setDefaultTimeout(35_000);
   page.on("pageerror", () => unexpected.push("pageerror"));
+  page.on("console", (message) => {
+    if (message.type() === "error" && message.text().includes("Account status could not be loaded")) unexpected.push("account-status");
+  });
   currentPage = page;
   await page.goto(base + "/cart");
   return page;
@@ -397,6 +400,15 @@ try {
   if (selected.has("guest")) {
   stage = "guest success / replay / pending";
   const page = await pageFor();
+  if (process.env.CHECKOUT_ABANDON_GOOGLE === "1") {
+    await page.goto(base + "/login");
+    await page.getByRole("button", { name: /Google/ }).click();
+    await page.waitForURL("https://accounts.google.com/**");
+    assert.equal(new URL(page.url()).searchParams.get("prompt"), "select_account");
+    await page.goto(base + "/");
+    const anonymous = await page.evaluate(async () => (await (await fetch("/auth/session")).json()).kind);
+    assert.equal(anonymous, "anonymous", "Abandoned Google authorization is not a storefront login");
+  }
   await seed(page);
   await checkoutForm(page, "sandbox-success-25-74-75@example.test");
   const attempt = await place(page, false, true);

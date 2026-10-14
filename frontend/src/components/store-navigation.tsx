@@ -10,7 +10,7 @@ import { CatalogRetry } from "./catalog-retry";
 import { CategoryNavigation, isPlainClick } from "./category-navigation";
 import { useProductSuggestions } from "./search-form";
 import { LogoutForm } from "./logout-form";
-import { safeReturnTo } from "@/lib/auth/model";
+import { headerReturnTo, loadHeaderAccount, type HeaderAccount } from "@/lib/auth/browser-session";
 
 const destinations = [
   { href: "/catalog", label: "Catalog" },
@@ -29,8 +29,6 @@ const DESKTOP_LINKS = ".store-catalog-slot a, .store-actions a";
 const DESKTOP_BUTTONS = ".store-catalog-slot button, .store-actions button";
 
 type Overlay = "mobile" | "catalog" | "account" | "search" | null;
-type HeaderAccount = { kind: "checking" | "anonymous" | "expired" | "unavailable" } |
-  { kind: "authenticated"; username: string; csrf: string };
 
 export function StoreNavigation({
   cartPreview,
@@ -56,26 +54,15 @@ export function StoreNavigation({
   useEffect(() => {
     const controller = new AbortController();
     async function updateAccount() {
-      const route = ["/login", "/register", "/verify", "/recover", "/reset", "/auth/error", "/dev/foundation"].includes(pathname) ? "/account" :
-        window.location.pathname + window.location.search;
+      setAccount({ kind: "checking" });
+      const authentication = ["/login", "/register", "/verify", "/recover", "/reset", "/auth/error", "/dev/foundation"].includes(pathname);
       try {
-        setReturnTo(safeReturnTo(route));
-        const response = await fetch("/auth/session", {
-          credentials: "same-origin", cache: "no-store", signal: controller.signal, headers: { Accept: "application/json" },
-        });
-        const body: unknown = await response.json();
-        if (!body || typeof body !== "object") throw new TypeError("Invalid account response");
-        if ("kind" in body && body.kind === "anonymous" && response.ok) setAccount({ kind: "anonymous" });
-        else if ("kind" in body && body.kind === "authenticated" && response.ok &&
-          "user" in body && body.user && typeof body.user === "object" && "username" in body.user &&
-          typeof body.user.username === "string" && "csrf" in body && typeof body.csrf === "string" &&
-          /^[A-Za-z0-9_-]{43}$/.test(body.csrf)) setAccount({ kind: "authenticated", username: body.user.username, csrf: body.csrf });
-        else if (response.status === 401) setAccount({ kind: "expired" });
-        else if (response.status === 503) setAccount({ kind: "unavailable" });
-        else throw new TypeError("Invalid account response");
+        setReturnTo(headerReturnTo(authentication ? "/account" : window.location.pathname, authentication ? "" : window.location.search));
+        const result = await loadHeaderAccount(controller.signal);
+        if (result && !controller.signal.aborted) setAccount(result);
       } catch (error) {
         if (controller.signal.aborted) return;
-        console.error("Account status could not be loaded", error instanceof TypeError ? "protocol" : "unavailable");
+        console.error("Account status could not be loaded", error instanceof TypeError || error instanceof SyntaxError ? "protocol" : "unavailable");
         setAccount({ kind: "unavailable" });
       }
     }

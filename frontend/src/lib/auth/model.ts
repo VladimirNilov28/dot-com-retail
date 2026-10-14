@@ -161,10 +161,10 @@ export function safeReturnTo(value: unknown): string {
   if (path.startsWith("//") || path.split("/").some((part) => part === "." || part === "..")) {
     throw new AuthError("invalid_request", 400);
   }
-  if (url.hash || !/^(?:\/|\/catalog(?:\/[^/]+)?|\/products\/[^/]+|\/search|\/account(?:\/(?:security|connections|profile|sessions))?|\/cart)$/.test(path) ||
+  if (url.hash || !/^(?:\/|\/catalog(?:\/[^/]+)?|\/products\/[^/]+|\/search|\/account(?:\/(?:security|connections|profile|sessions))?|\/cart|\/checkout|\/order-confirmation\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/.test(path) ||
       Array.from(url.searchParams).some(([key, item]) => /[\\\u0000-\u001f\u007f]/.test(key + item)) ||
       Array.from(url.searchParams.keys()).some((key) =>
-        ["access_token", "refresh_token", "id_token", "client_secret", "password", "code", "csrf_token"].includes(key))) {
+        ["access_token", "refresh_token", "id_token", "client_secret", "payment_intent_client_secret", "payment_intent", "password", "code", "csrf_token"].includes(key))) {
     throw new AuthError("invalid_request", 400);
   }
   return url.pathname + url.search;
