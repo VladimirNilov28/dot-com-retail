@@ -426,6 +426,7 @@ class OrderServiceIntegrationTest {
 
         Order order = orderService.createOrder(user.getId());
         orderService.updateStatus(order.getId(), OrderStatus.PAID);
+        orderService.updateStatus(order.getId(), OrderStatus.PROCESSING);
         orderService.updateStatus(order.getId(), OrderStatus.SHIPPING);
 
         assertThatThrownBy(() -> orderService.updateStatus(order.getId(), OrderStatus.CANCELLED))

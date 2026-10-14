@@ -1,8 +1,33 @@
 input UpdateOrderStatusInput {
   status: OrderStatus!
+  # Optional staff note recorded in the status history.
+  note: String
+}
+
+input SetOrderTrackingInput {
+  publicId: UUID!
+  carrier: String!
+  trackingNumber: String!
+  # Optional http(s) carrier tracking page.
+  trackingUrl: String
+}
+
+input RequestRefundInput {
+  publicId: UUID!
+  reason: String!
+}
+
+input DecideRefundInput {
+  requestId: UUID!
+  # Required when rejecting.
+  note: String
 }
 
 extend type Mutation {
   createOrder(input: PlaceOrderInput!): Order!
   updateOrderStatus(orderId: ID!, input: UpdateOrderStatusInput!): Order!
+  setOrderTracking(input: SetOrderTrackingInput!): Order!
+  requestRefund(input: RequestRefundInput!): OrderRefundRequest!
+  approveRefund(input: DecideRefundInput!): OrderRefundRequest!
+  rejectRefund(input: DecideRefundInput!): OrderRefundRequest!
 }

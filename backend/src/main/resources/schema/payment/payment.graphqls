@@ -1,6 +1,8 @@
 enum OrderStatus {
   PENDING
   PAID
+  # Fulfillment has begun; the order can no longer be cancelled (refund requests only).
+  PROCESSING
   SHIPPING
   COMPLETED
   CANCELLED
@@ -31,6 +33,12 @@ type Order {
   cancellation: OrderCancellation
   payment: OrderPayment!
   refund: OrderRefund!
+  refundEligibility: OrderRefundEligibility!
+  refundRequests: [OrderRefundRequest!]!
+  tracking: OrderTracking
+  statusHistory: [OrderStatusEvent!]!
+  # Next fulfillment states staff may set via updateOrderStatus (cancellation is separate).
+  allowedStatusTransitions: [OrderStatus!]!
   createdAt: Instant!
   updatedAt: Instant!
 }

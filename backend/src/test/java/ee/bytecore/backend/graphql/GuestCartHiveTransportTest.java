@@ -370,7 +370,7 @@ class GuestCartHiveTransportTest {
                 "{ me { id } }",
                 "{ myCart { id } }",
                 "{ myWishlist { id } }",
-                "{ myOrders { id } }",
+                "{ myOrders { items { id } } }",
                 "{ warehouses { id } }",
                 """
                 mutation {

@@ -35,7 +35,7 @@ public final class OrderRecoveryValues {
     public static Eligibility eligibility(Order order) {
         return switch (order.getStatus()) {
             case PENDING, PAID -> new Eligibility(true, null);
-            case SHIPPING -> new Eligibility(false, "PROCESSING_BEGUN");
+            case PROCESSING, SHIPPING -> new Eligibility(false, "PROCESSING_BEGUN");
             case COMPLETED -> new Eligibility(false, "COMPLETED");
             case CANCELLED -> new Eligibility(false, "ALREADY_CANCELLED");
         };

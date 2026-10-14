@@ -21,10 +21,12 @@ public class RefundResultListener {
     private static final Logger LOG = LoggerFactory.getLogger(RefundResultListener.class);
     private final OrderService orders;
     private final OrderRefundRepository refunds;
+    private final OrderNotifications notifications;
 
-    public RefundResultListener(OrderService orders, OrderRefundRepository refunds) {
+    public RefundResultListener(OrderService orders, OrderRefundRepository refunds, OrderNotifications notifications) {
         this.orders = orders;
         this.refunds = refunds;
+        this.notifications = notifications;
     }
 
     @KafkaListener(topics = PaymentTopics.REFUND_SUCCEEDED)
@@ -68,7 +70,7 @@ public class RefundResultListener {
                         && (event.providerTransactionId().isBlank()
                                 || event.providerTransactionId().length() > 255)))
             throw new IllegalStateException("Malformed refund result correlation or outcome");
-        orders.lockForFinancialResult(event.orderId());
+        var order = orders.lockForFinancialResult(event.orderId());
         var refund = refunds.findById(event.refundId());
         if (refund.isEmpty()
                 || !Objects.equals(refund.get().getOrderId(), event.orderId())
@@ -96,5 +98,7 @@ public class RefundResultListener {
             row.setRefundTransactionId(event.providerTransactionId());
         }
         refunds.saveAndFlush(row);
+        if ("SUCCEEDED".equals(target)) notifications.enqueue(order, "REFUNDED");
+        if ("FAILED".equals(target)) notifications.enqueue(order, "REFUND_FAILED");
     }
 }

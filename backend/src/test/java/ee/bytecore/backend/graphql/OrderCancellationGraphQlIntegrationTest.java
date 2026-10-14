@@ -217,7 +217,11 @@ class OrderCancellationGraphQlIntegrationTest extends CheckoutGraphQlIntegration
                         .has("errors"))
                 .isTrue();
         successPayment(order, UUID.randomUUID());
-        success(post(update, Map.of("id", Long.toString(order.id()), "status", "SHIPPING"), new Session(), staff));
+        assertThat(post(update, Map.of("id", Long.toString(order.id()), "status", "SHIPPING"), new Session(), staff)
+                        .body()
+                        .has("errors"))
+                .isTrue();
+        success(post(update, Map.of("id", Long.toString(order.id()), "status", "PROCESSING"), new Session(), staff));
         assertThat(confirmation(order).at("/cancellationEligibility/reason").asString())
                 .isEqualTo("PROCESSING_BEGUN");
         assertThat(cancel(order, UUID.randomUUID(), order.session(), null, "cancelGuestOrder")
@@ -228,9 +232,23 @@ class OrderCancellationGraphQlIntegrationTest extends CheckoutGraphQlIntegration
                         .body()
                         .has("errors"))
                 .isTrue();
+        success(post(update, Map.of("id", Long.toString(order.id()), "status", "SHIPPING"), new Session(), staff));
         success(post(update, Map.of("id", Long.toString(order.id()), "status", "COMPLETED"), new Session(), staff));
         assertThat(confirmation(order).at("/cancellationEligibility/reason").asString())
                 .isEqualTo("COMPLETED");
+        String lifecycle =
+                "query($id:UUID!){guestOrder(requestId:$id){statusHistory{toStatus actor} tracking{carrier}}}";
+        var history = success(post(lifecycle, Map.of("id", order.checkoutId().toString()), order.session(), null))
+                .at("/data/guestOrder");
+        assertThat(history.at("/statusHistory").size()).isEqualTo(5);
+        assertThat(history.at("/statusHistory/4/toStatus").asString()).isEqualTo("COMPLETED");
+        assertThat(history.at("/statusHistory/4/actor").asString()).isEqualTo("STAFF");
+        assertThat(history.at("/tracking").isNull()).isTrue();
+        assertThat(post(lifecycle, Map.of("id", order.checkoutId().toString()), new Session(), null)
+                        .body()
+                        .at("/data/guestOrder/statusHistory")
+                        .isMissingNode())
+                .isTrue();
         assertThat(stock()).isEqualTo(18);
     }
 
@@ -488,7 +506,7 @@ class OrderCancellationGraphQlIntegrationTest extends CheckoutGraphQlIntegration
                 order.publicId().toString());
         String mixed = "mutation($input:CancelOrderInput!){cancelGuestOrder(input:$input){requestId}"
                 + "cancelOrder(input:$input){requestId}}";
-        String selected = "query Private{myOrders{publicId}} "
+        String selected = "query Private{myOrders{items{publicId}}} "
                 + "mutation Selected($input:CancelOrderInput!){...CancellationRoot} "
                 + "fragment CancellationRoot on Mutation{answer:cancelGuestOrder(input:$input){order{status}}}";
         var envelope = Map.of("query", selected, "operationName", "Selected", "variables", Map.of("input", input));

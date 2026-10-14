@@ -1,4 +1,28 @@
+input OrderFilter {
+  status: OrderStatus
+  # Inclusive lower / exclusive upper bound on the order creation time.
+  from: Instant
+  to: Instant
+}
+
+input StaffOrderFilter {
+  status: OrderStatus
+  from: Instant
+  to: Instant
+  # Exact customer email/username, snapshot contact email, or order reference prefix.
+  query: String
+}
+
+# Newest first. size is 1..50 (default 20), page is zero-based.
+type OrderPage {
+  items: [Order!]!
+  totalCount: Int!
+  page: Int!
+  size: Int!
+}
+
 extend type Query {
   order(id: ID, publicId: UUID): Order
-  myOrders: [Order!]!
+  myOrders(filter: OrderFilter, page: Int = 0, size: Int = 20): OrderPage!
+  staffOrders(filter: StaffOrderFilter, page: Int = 0, size: Int = 20): OrderPage!
 }
