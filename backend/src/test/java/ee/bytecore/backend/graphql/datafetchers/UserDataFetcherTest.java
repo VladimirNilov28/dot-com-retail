@@ -2,6 +2,9 @@ package ee.bytecore.backend.graphql.datafetchers;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDate;
@@ -46,6 +49,7 @@ import org.junit.jupiter.api.Test;
             InstantScalar.class,
             ee.bytecore.backend.security.CurrentUserProvider.class,
             ee.bytecore.backend.services.UserAddressService.class,
+            ee.bytecore.backend.config.CheckoutSettings.class,
             ee.bytecore.backend.services.UserPaymentMethodService.class,
             ee.bytecore.backend.graphql.dataloaders.AddressesByUserIdDataLoader.class,
             ee.bytecore.backend.graphql.dataloaders.PaymentMethodsByUserIdDataLoader.class
@@ -369,7 +373,10 @@ class UserDataFetcherTest {
         var mutation =
                 """
             mutation {
-              addMyAddress(input: { firstName: "John", lastName: "Smith", city: "New York" }) {
+              addMyAddress(input: {
+                firstName: " John ", lastName: "Smith", city: "Tallinn", country: "ee",
+                postalCode: "10111", addressLine1: "Main street 1"
+              }) {
                 firstName
                 city
               }
@@ -382,11 +389,60 @@ class UserDataFetcherTest {
                 .path("addMyAddress.firstName")
                 .entity(String.class)
                 .isEqualTo(userAddress.getFirstName());
+
+        verify(userAddressRepository)
+                .save(argThat(saved -> "John".equals(saved.getFirstName())
+                        && "EE".equals(saved.getCountry())
+                        && saved.getAddressLine2() == null));
+    }
+
+    @Test
+    @WithMockUser(username = "1")
+    void shouldRejectIncompleteMyAddressTest() {
+        @Language("GraphQl")
+        var mutation =
+                """
+            mutation {
+              addMyAddress(input: { firstName: "John", lastName: "Smith", city: "New York" }) {
+                firstName
+              }
+            }
+        """;
+
+        graphQlTester.document(mutation).execute().errors().satisfy(errors -> assertThat(errors)
+                .singleElement()
+                .satisfies(error -> assertThat(error.getMessage()).contains("Country code is required")));
+        verify(userAddressRepository, never()).save(any(UserAddress.class));
+    }
+
+    @Test
+    @WithMockUser(username = "1")
+    void shouldRejectMyAddressOutsideSupportedDestinationsTest() {
+        @Language("GraphQl")
+        var mutation =
+                """
+            mutation {
+              addMyAddress(input: {
+                firstName: "John", lastName: "Smith", city: "Boston", country: "US",
+                postalCode: "02101", addressLine1: "1 Main Street"
+              }) {
+                firstName
+              }
+            }
+        """;
+
+        graphQlTester.document(mutation).execute().errors().satisfy(errors -> assertThat(errors)
+                .singleElement()
+                .satisfies(error -> assertThat(error.getMessage()).contains("supported delivery destination")));
+        verify(userAddressRepository, never()).save(any(UserAddress.class));
     }
 
     @Test
     @WithMockUser(username = "1")
     void shouldUpdateMyAddressTest() {
+        userAddress =
+                UserAddress.create(user, "John", "Smith", "Tartu", "EE", "50090", "Rüütli 1", null, "+3725555555");
+        userAddress.setId(1L);
         Long addressId = userAddress.getId();
         when(userAddressRepository.findById(addressId)).thenReturn(Optional.of(userAddress));
         when(userAddressRepository.save(userAddress)).thenReturn(userAddress);
@@ -395,7 +451,7 @@ class UserDataFetcherTest {
         var mutation =
                 """
             mutation($addressId: ID!) {
-              updateMyAddress(addressId: $addressId, input: { city: "Boston" }) {
+              updateMyAddress(addressId: $addressId, input: { city: "Tallinn" }) {
                 city
               }
             }
@@ -407,7 +463,7 @@ class UserDataFetcherTest {
                 .execute()
                 .path("updateMyAddress.city")
                 .entity(String.class)
-                .isEqualTo("Boston");
+                .isEqualTo("Tallinn");
     }
 
     @Test
