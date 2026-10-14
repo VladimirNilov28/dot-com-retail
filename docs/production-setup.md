@@ -7,8 +7,11 @@ separate from `make dev` (owner development infrastructure) and `make review`
 (`172.28.92.0/24`), volumes, private configuration (`.env.prod`) and secrets directory
 (`infrastructure/prod/secrets/`).
 
-This document prepares a deployment. Choosing the host, domain, DNS and provider
-dashboards is a separate step (see [External setup](#external-setup)).
+**By default it needs no keys, domain or real data.** The first `make prod` creates
+`.env.prod` with local defaults and starts the stack at `https://bytecore.localhost`.
+It uses a generated local CA, Mailpit captures the emails, and the database starts with
+no demo data. A real host is optional (see [Running on a real host](#running-on-a-real-host)).
+Choosing the host, domain, DNS and provider dashboards is a separate step.
 
 ## Commands
 
@@ -36,15 +39,32 @@ default `bytecore-prod`), `PROD_ENV_FILE` (default `.env.prod`), `PROD_WAIT_TIME
   `apparmor=unconfined` so that gocryptfs can mount the encrypted data directory.
   `scripts/prod.sh` refuses to start on Linux without `/dev/fuse`, and there is no
   plaintext fallback.
-- Inbound TCP on the public ports (defaults: 80, 443, 8433, 8444, 8446).
+- Free host ports 80, 443, 9433, 9444, 9446 and 18025 (bound to `127.0.0.1` by default;
+  a real server uses `PROD_BIND=0.0.0.0`).
 
 ## First run
 
 ```bash
-make prod            # first run creates .env.prod (mode 600) and stops, listing what to fill in
-$EDITOR .env.prod    # set the operator values (below)
-make prod            # build, migrate, start, wait, smoke-check
+make prod            # creates .env.prod (mode 600) with local defaults, builds, migrates, starts
 ```
+
+Then:
+
+1. Trust `infrastructure/prod/secrets/tls/ca.crt` in the browser. The CA is name-constrained
+   to `bytecore.localhost`. Without trusting it, the browser shows a certificate warning.
+2. Open `https://bytecore.localhost`.
+3. Read the emails in Mailpit at `http://127.0.0.1:18025`.
+4. Sign in to `/admin/security` as `admin@bytecore.ee`, using `ADMIN_PASSWORD` from
+   `.env.prod`, and enroll TOTP.
+5. Add products and images through the admin UI.
+
+**Optional card payments (Stripe test mode).** Copy `.env.stripe.example` to `.env.stripe`
+(Git-ignored) and paste your `sk_test_`/`pk_test_` keys. Then run `make prod` again:
+
+- The webhook signing secret is fetched with the Stripe CLI image and is not written to disk.
+- A `stripe-listener` container (Compose profile `stripe`) forwards the `payment_intent.*`
+  events to the payment service, so no public URL is needed.
+- Without keys, card payment is shown as unavailable and everything else works.
 
 Generated secrets (database passwords, Hydra/Kratos secrets, client secrets, internal
 tokens, `AUTH_SEAL_KEYS`, `APP_DATA_KEYS`, `ADMIN_PASSWORD`) are created once when
@@ -93,7 +113,7 @@ credentials.
 ```text
 Internet ──> Caddy (only published service)
    :443   storefront + BFF (Next.js, production build) ── /webhooks/stripe ──> payment-service
-   :8433  Kratos public          :8444 Hydra public        :8446 OAuth bridge
+   :9433  Kratos public          :9444 Hydra public        :9446 OAuth bridge
    :80    HTTP → HTTPS redirect and ACME challenge
 internal network: Hive Router, Spring backend, Postgres (TLS only, gocryptfs),
                   Kafka, Kratos/Hydra admin APIs, oauth-service, auth-maintenance,
@@ -139,22 +159,30 @@ internal network: Hive Router, Spring backend, Postgres (TLS only, gocryptfs),
   - Caddy obtains public certificates for `PROD_HOST` and stores them in the
     `caddy_data` volume.
   - Requires a public DNS record pointing at the host and reachable ports 80/443.
-  - The extra origins (8433/8444/8446) use the same name.
+  - The extra origins (9433/9444/9446) use the same name.
 - **`files`.** Your certificate chain and key are mounted read-only.
-- **`selfsigned`.**
+- **`selfsigned`** (default).
   - A local CA in `infrastructure/prod/secrets/tls/` signs the edge certificate.
-  - For local rehearsals only: browsers must trust `ca.crt`.
+  - For local runs only: browsers must trust `ca.crt`.
 
 Independently of the mode, internal traffic to Postgres uses certificates from the
 generated internal CA with `sslmode=verify-full`. Plaintext TCP connections are
 rejected.
 
-## External setup
+## Running on a real host
 
-These parts are prepared but cannot be verified without a real host and accounts:
+This is optional; the local defaults need none of it. In `.env.prod`, set:
 
-1. **DNS:** an `A`/`AAAA` record for `PROD_HOST`, plus open ports 80, 443, 8433, 8444
-   and 8446.
+- `PROD_HOST`;
+- `PROD_BIND=0.0.0.0`;
+- `PROD_TLS_MODE=acme` with `PROD_ACME_EMAIL`, or `files`;
+- a real SMTP relay.
+
+Then complete the external setup below. These steps are prepared but cannot be verified
+without a real host and accounts:
+
+1. **DNS:** an `A`/`AAAA` record for `PROD_HOST`, plus open ports 80, 443, 9433, 9444
+   and 9446.
 2. **Google OAuth** (optional): add the authorized redirect URI
    `https://PROD_HOST/self-service/methods/oidc/callback/google` (with
    `:PROD_HTTPS_PORT` if not 443) and the JavaScript origin `https://PROD_HOST`.
@@ -164,8 +192,8 @@ These parts are prepared but cannot be verified without a real host and accounts
      `payment_intent.canceled`, `payment_intent.processing`.
    - Refund outcomes come from the payment service's idempotent Stripe API calls,
      so no refund webhook events are needed.
-   - Put its signing secret into `STRIPE_WEBHOOK_SECRET`.
-   - The Stripe CLI listener is a local testing tool and is not part of production.
+   - Put its signing secret into `STRIPE_WEBHOOK_SECRET`. Setting it turns off the
+     local `stripe-listener` container, which is meant for local runs only.
 4. **SMTP:** a relay that accepts mail from `SMTP_FROM`, with SPF/DKIM for that
    domain.
    - For local sandbox tests only, `SMTP_HOST=mailpit` and `SMTP_PORT=1025` start the

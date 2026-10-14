@@ -78,7 +78,7 @@ derive() {
     PROD_SECRETS_DIR SMTP_HOST SMTP_USERNAME; do
     export "$key=$(value_of "$key")"
   done
-  : "${PROD_HTTPS_PORT:=443}" "${PROD_KRATOS_PORT:=8433}" "${PROD_HYDRA_PORT:=8444}" "${PROD_BRIDGE_PORT:=8446}"
+  : "${PROD_HTTPS_PORT:=443}" "${PROD_KRATOS_PORT:=9433}" "${PROD_HYDRA_PORT:=9444}" "${PROD_BRIDGE_PORT:=9446}"
   export PROD_HTTPS_PORT PROD_KRATOS_PORT PROD_HYDRA_PORT PROD_BRIDGE_PORT
   PROD_SECRETS_DIR="${PROD_SECRETS_DIR:-infrastructure/prod/secrets}"
   case "$PROD_SECRETS_DIR" in /*) ;; *) PROD_SECRETS_DIR="$ROOT/$PROD_SECRETS_DIR" ;; esac
@@ -99,7 +99,12 @@ derive() {
   fi
   if [ -n "$SMTP_USERNAME" ]; then export PROD_SMTP_AUTH=true; else export PROD_SMTP_AUTH=false; fi
   # Mailpit capture only when explicitly selected; `down` always includes it.
-  if [ "$SMTP_HOST" = mailpit ] || [ "$COMMAND" = down ]; then export COMPOSE_PROFILES=sandbox-mail; fi
+  local profiles=() all=false
+  case "$COMMAND" in down | status | logs) all=true ;; esac
+  if [ "$SMTP_HOST" = mailpit ] || [ "$all" = true ]; then profiles+=(sandbox-mail); fi
+  if [ "${PROD_STRIPE_LISTENER:-}" = true ] || [ "$all" = true ]; then profiles+=(stripe); fi
+  COMPOSE_PROFILES="$(IFS=,; printf '%s' "${profiles[*]}")"
+  export COMPOSE_PROFILES
   COMPOSE=(docker compose -p "$PROJECT" -f "$ROOT/infrastructure/compose.yml"
     -f "$ROOT/infrastructure/compose.prod.yml" --env-file "$ENV_FILE")
 }
@@ -266,15 +271,40 @@ smoke_check() {
       })();' || diagnose
 }
 
+# Optional Stripe test keys from the Git-ignored .env.stripe (shell and .env.prod win).
+# Without a configured webhook secret, the account's CLI signing secret is fetched
+# and the stripe-listener container forwards events (local runs; no public URL).
+STRIPE_FILE="${PROD_STRIPE_FILE:-$ROOT/.env.stripe}"
+load_stripe() {
+  local key v
+  if [ -f "$STRIPE_FILE" ]; then
+    for key in STRIPE_SECRET_KEY STRIPE_PUBLISHABLE_KEY STRIPE_WEBHOOK_SECRET; do
+      v="$(sed -n "s/^$key=//p" "$STRIPE_FILE" | head -n 1 | sed "s/^['\"]//; s/['\"]\$//")"
+      [ -z "$v" ] || [ -n "$(value_of "$key")" ] || export "$key=$v"
+    done
+  fi
+  v="$(value_of STRIPE_SECRET_KEY)"
+  [[ "$v" == sk_test_* || "$v" == rk_test_* ]] || return 0 # absent or invalid: validate() reports it
+  [ -z "$(value_of STRIPE_WEBHOOK_SECRET)" ] || return 0
+  info "Fetching the Stripe test webhook signing secret (Stripe CLI container)"
+  STRIPE_WEBHOOK_SECRET="$(docker run --rm -e STRIPE_API_KEY="$v" -e STRIPE_DEVICE_NAME="$PROJECT" \
+    stripe/stripe-cli:v1.53.1@sha256:11c46caeead82e329f14823dd622d494b4cc8c1b9766f724d122d2af42c97540 \
+    listen --print-secret 2>/dev/null | tr -d '\r\n' || true)"
+  [[ "$STRIPE_WEBHOOK_SECRET" == whsec_* ]] ||
+    fail "Could not obtain a Stripe webhook signing secret; check STRIPE_SECRET_KEY and network access"
+  export STRIPE_WEBHOOK_SECRET PROD_STRIPE_LISTENER=true
+}
+
 case "$COMMAND" in
   up | check)
     [ -f "$TEMPLATE" ] || fail "$TEMPLATE is missing"
     if [ ! -f "$ENV_FILE" ]; then
       generate_env_file
-      warn "Edit the CHANGE_ME values in $ENV_FILE, then rerun."
+      info "Created $ENV_FILE with local defaults (https://bytecore.localhost, Mailpit, no real keys)"
     else
       chmod 600 "$ENV_FILE"
     fi
+    load_stripe
     derive
     validate
     [ "$COMMAND" = up ] || { "${COMPOSE[@]}" config --quiet && info "Configuration valid"; exit 0; }
@@ -288,7 +318,8 @@ ByteCore production-mode stack '$PROJECT' is ready:
   Storefront   $PROD_STOREFRONT_ORIGIN
   Admin        $PROD_STOREFRONT_ORIGIN/admin/security (enroll TOTP first)
   Bootstrap    $(value_of ADMIN_USERNAME)@bytecore.ee, password ADMIN_PASSWORD in $ENV_FILE (not printed)
-  Webhook      $PROD_STOREFRONT_ORIGIN/webhooks/stripe (Stripe test mode)
+  Emails       $(if [ "$SMTP_HOST" = mailpit ]; then echo "Mailpit http://127.0.0.1:$(value_of PROD_MAILPIT_UI_PORT) (captured, not delivered)"; else echo "SMTP relay $SMTP_HOST"; fi)
+  Payments     $(if [ -z "$(value_of STRIPE_SECRET_KEY)" ]; then echo "disabled (optional: test keys in .env.stripe)"; elif [ "${PROD_STRIPE_LISTENER:-}" = true ]; then echo "Stripe test mode, webhooks via stripe-listener container"; else echo "Stripe test mode, webhook $PROD_STOREFRONT_ORIGIN/webhooks/stripe"; fi)
 Stop: make prod-down (keeps all data). Docs: docs/production-setup.md
 EOF
     ;;

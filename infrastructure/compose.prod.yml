@@ -178,6 +178,21 @@ services:
     volumes:
       - *prod-ca
 
+  # Optional Stripe test-mode webhook forwarder for hosts without a public URL
+  # (profile "stripe", enabled by scripts/prod.sh when it fetched the CLI secret).
+  stripe-listener:
+    image: stripe/stripe-cli:v1.53.1@sha256:11c46caeead82e329f14823dd622d494b4cc8c1b9766f724d122d2af42c97540
+    profiles: [stripe]
+    command: ["listen", "--forward-to", "http://payment-service:8081/webhooks/stripe",
+      "--events", "payment_intent.succeeded,payment_intent.payment_failed,payment_intent.processing,payment_intent.canceled"]
+    environment:
+      STRIPE_API_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_DEVICE_NAME: bytecore-prod
+    depends_on:
+      payment-service:
+        condition: service_started
+    restart: unless-stopped
+
   # Next.js production server + server-side BFF (frontend/Dockerfile).
   frontend:
     build:
@@ -251,18 +266,18 @@ services:
       PROD_HOST: ${PROD_HOST:?PROD_HOST is required}
       PROD_HTTP_PORT: ${PROD_HTTP_PORT:-80}
       PROD_HTTPS_PORT: ${PROD_HTTPS_PORT:-443}
-      PROD_KRATOS_PORT: ${PROD_KRATOS_PORT:-8433}
-      PROD_HYDRA_PORT: ${PROD_HYDRA_PORT:-8444}
-      PROD_BRIDGE_PORT: ${PROD_BRIDGE_PORT:-8446}
+      PROD_KRATOS_PORT: ${PROD_KRATOS_PORT:-9433}
+      PROD_HYDRA_PORT: ${PROD_HYDRA_PORT:-9444}
+      PROD_BRIDGE_PORT: ${PROD_BRIDGE_PORT:-9446}
       PROD_CADDY_TLS: ${PROD_CADDY_TLS:?run through scripts/prod.sh}
       PROD_ACME_EMAIL: ${PROD_ACME_EMAIL:-}
       PROD_HSTS_MAX_AGE: ${PROD_HSTS_MAX_AGE:-31536000}
     ports:
-      - "${PROD_BIND:-0.0.0.0}:${PROD_HTTP_PORT:-80}:${PROD_HTTP_PORT:-80}"
-      - "${PROD_BIND:-0.0.0.0}:${PROD_HTTPS_PORT:-443}:${PROD_HTTPS_PORT:-443}"
-      - "${PROD_BIND:-0.0.0.0}:${PROD_KRATOS_PORT:-8433}:${PROD_KRATOS_PORT:-8433}"
-      - "${PROD_BIND:-0.0.0.0}:${PROD_HYDRA_PORT:-8444}:${PROD_HYDRA_PORT:-8444}"
-      - "${PROD_BIND:-0.0.0.0}:${PROD_BRIDGE_PORT:-8446}:${PROD_BRIDGE_PORT:-8446}"
+      - "${PROD_BIND:-127.0.0.1}:${PROD_HTTP_PORT:-80}:${PROD_HTTP_PORT:-80}"
+      - "${PROD_BIND:-127.0.0.1}:${PROD_HTTPS_PORT:-443}:${PROD_HTTPS_PORT:-443}"
+      - "${PROD_BIND:-127.0.0.1}:${PROD_KRATOS_PORT:-9433}:${PROD_KRATOS_PORT:-9433}"
+      - "${PROD_BIND:-127.0.0.1}:${PROD_HYDRA_PORT:-9444}:${PROD_HYDRA_PORT:-9444}"
+      - "${PROD_BIND:-127.0.0.1}:${PROD_BRIDGE_PORT:-9446}:${PROD_BRIDGE_PORT:-9446}"
     volumes:
       - ./prod/Caddyfile:/etc/caddy/Caddyfile:ro
       - ./prod/tls-manual.caddy:/etc/caddy/tls-manual.caddy:ro
