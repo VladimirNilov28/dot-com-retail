@@ -10,7 +10,7 @@ RESET  = \033[0m
 
 .PHONY: dev front-dev dev-clean debug debug-clean test test-unit test-graphql test-integration test-e2e \
 	coverage format format-check build status logs down clean help restart config doctor firewall-check \
-	seed-test-data check-env review review-down prod prod-down prod-status prod-logs
+	seed-test-data check-env review review-down prod prod-down prod-status prod-logs seed-prod
 
 help:
 	@echo "$(CYAN)Available commands:$(RESET)"
@@ -43,6 +43,7 @@ help:
 	@echo "  $(GREEN)make prod-down$(RESET)       🛑 stop the production-mode stack (never deletes volumes)"
 	@echo "  $(GREEN)make prod-status$(RESET)     📊 production-mode container states"
 	@echo "  $(GREEN)make prod-logs$(RESET)       📜 follow production-mode logs (SERVICE=name for one service)"
+	@echo "  $(GREEN)make seed-prod$(RESET)       🌱 load the demo showcase dataset into an empty production-mode stack"
 
 check-env:
 	@test -f .env || { echo "$(YELLOW)✗ .env not found — run: cp .env.example .env$(RESET)"; exit 1; }
@@ -157,3 +158,6 @@ prod-status:
 
 prod-logs:
 	@./scripts/prod.sh logs --tail 200 -f $(SERVICE)
+
+seed-prod:
+	@./scripts/prod.sh seed

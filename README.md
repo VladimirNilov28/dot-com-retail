@@ -141,7 +141,7 @@ isolated from dev and review, with its own project, volumes, `.env.prod` and sec
 
 - production builds, migrations and readiness checks;
 - an encrypted Postgres and a TLS edge;
-- no dev bypasses and no demo data;
+- no dev bypasses, and no demo data unless you run `make seed-prod`;
 - Stripe in test mode only.
 
 It needs no keys, domain or real data. The first `make prod` creates `.env.prod` with
@@ -149,6 +149,8 @@ local defaults. Trust `infrastructure/prod/secrets/tls/ca.crt` in the browser, t
 `https://bytecore.localhost`. Emails are captured by Mailpit at `http://127.0.0.1:18025`.
 Card payments are optional: put Stripe test keys into the Git-ignored `.env.stripe`, and
 the webhook listener starts automatically.
+For a showcase, run `make seed-prod` once afterwards. It loads the demo catalog, stock,
+customers and orders into the fresh stack, and refuses if data already exists.
 
 `make prod-down` stops it and keeps all data; `make prod-status` and `make prod-logs`
 inspect it. Configuration, TLS modes, external setup (DNS, Google, Stripe webhook,

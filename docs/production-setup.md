@@ -21,6 +21,7 @@ Choosing the host, domain, DNS and provider dashboards is a separate step.
 | `make prod-down` | `bash scripts/prod.sh down` | stop and remove containers; **keeps all volumes, keys and configuration** |
 | `make prod-status` | `bash scripts/prod.sh status` | container state and health, storefront URL |
 | `make prod-logs [SERVICE=caddy]` | `bash scripts/prod.sh logs [-f] [service]` | logs (the Make target follows the last 200 lines) |
+| `make seed-prod` | `bash scripts/prod.sh seed` | load the demo showcase dataset into a fresh stack (refuses if data exists) |
 | — | `bash scripts/prod.sh check` | validate configuration only; prints missing variable *names* |
 
 `make` is only a convenience wrapper. No normal command deletes volumes:
@@ -214,9 +215,27 @@ On first start, `oauth-service` creates the staff account
 3. Change the password under `/account/security`.
 4. Remove `ADMIN_PASSWORD` from `.env.prod` or store it elsewhere.
 
-No demo customers, orders or catalog are loaded. Add categories and products under
+`make prod` loads no demo customers, orders or catalog. Add categories and products under
 `/admin`, upload product images there, or import a catalog with the CSV/JSON bulk
 import (`docs/api/bulk-import.md`).
+
+For a showcase, run **`make seed-prod`** (`bash scripts/prod.sh seed`) once after `make prod`.
+It loads the same demo dataset as the reviewer stack
+(`backend/src/main/resources/db/testdata/test-data.sql`):
+
+- 42 products and 46 variants, with categories, warehouses and stock;
+- 15 demo users, their carts and wishlists;
+- 12 orders.
+
+The seed has these safeguards and limits:
+
+- It loads in one transaction, only into a fresh stack: no products, and no user other than
+  the bootstrap admin (user 1, `admin`).
+- It refuses to run otherwise, so it never replaces data created through the application.
+- It then restarts the backend so the startup backfill encrypts the seeded personal data
+  at rest.
+- Demo customers have no passwords; register your own account to shop.
+- Product images are not in Git; upload them under `/admin/products`.
 
 ## Persistent data
 

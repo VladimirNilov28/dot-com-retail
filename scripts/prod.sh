@@ -6,6 +6,7 @@
 #   scripts/prod.sh status   container states and public URLs                      (make prod-status)
 #   scripts/prod.sh logs [compose logs args...]                                    (make prod-logs)
 #   scripts/prod.sh check    validate the private configuration only
+#   scripts/prod.sh seed     load the demo showcase dataset into an empty stack   (make seed-prod)
 #
 # Environment overrides (shell wins over .env.prod, as in Compose):
 #   PROD_PROJECT       Compose project name             (default bytecore-prod)
@@ -28,7 +29,7 @@ warn() { printf '\033[0;33m!!  %s\033[0m\n' "$*" >&2; }
 fail() { printf '\033[0;31mxx  %s\033[0m\n' "$*" >&2; exit 1; }
 
 usage() { sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
-case "$COMMAND" in up | down | status | logs | check) ;; *) usage ;; esac
+case "$COMMAND" in up | down | status | logs | check | seed) ;; *) usage ;; esac
 
 command -v docker >/dev/null || fail "Docker is required"
 docker info >/dev/null 2>&1 || fail "The Docker daemon is not reachable"
@@ -362,5 +363,44 @@ EOF
     derive
     if [ $# -eq 0 ]; then set -- --tail 200; fi
     "${COMPOSE[@]}" logs "$@"
+    ;;
+  seed)
+    # Showcase data for a local study run: the same dataset as `make review`
+    # (catalog, warehouses/stock, demo customers, carts, orders). It only loads into
+    # an empty stack, so it never replaces data created through the application.
+    [ $# -eq 0 ] || fail "prod seed takes no arguments"
+    [ -f "$ENV_FILE" ] || fail "$ENV_FILE not found; run make prod first"
+    seed_file="$ROOT/backend/src/main/resources/db/testdata/test-data.sql"
+    [ -f "$seed_file" ] || fail "$seed_file is missing"
+    derive
+    [ "$("${COMPOSE[@]}" ps -q --status running postgres backend | wc -l)" -eq 2 ] ||
+      fail "The stack is not running; start it with make prod first"
+    psql=("${COMPOSE[@]}" exec -T -e PGOPTIONS=-cclient_min_messages=warning postgres
+      psql -U "$(value_of DB_USERNAME)" -d retail -v ON_ERROR_STOP=1 -qtA)
+    read -r products users admin_ok <<<"$("${psql[@]}" -c \
+      "SELECT (SELECT count(*) FROM products) || ' ' || (SELECT count(*) FROM users) || ' ' ||
+              (SELECT count(*) FROM users WHERE id = 1 AND username = 'admin' AND role = 'ADMIN')")"
+    if [ "$products" != 0 ] || [ "$users" -gt 1 ]; then
+      fail "Not empty ($products products, $users users); the demo seed only loads into a fresh stack and was skipped"
+    fi
+    # The dataset recreates the bootstrap admin as user 1 'admin'; refuse if this stack's admin differs.
+    [ "$users" = 0 ] || [ "$admin_ok" = 1 ] ||
+      fail "The bootstrap admin is not user 1 'admin' (ADMIN_USERNAME changed?); the demo seed would replace it"
+    info "Loading the demo showcase dataset (one transaction)"
+    "${psql[@]}" -1 -f - <"$seed_file" >/dev/null
+    # The dataset is plaintext SQL; the backend's startup backfill encrypts personal data at rest.
+    info "Encrypting seeded personal data at rest (backend restart)"
+    "${COMPOSE[@]}" restart backend >/dev/null
+    "${COMPOSE[@]}" up -d --no-deps --wait --wait-timeout "${PROD_WAIT_TIMEOUT:-900}" backend >/dev/null
+    read -r products variants users orders <<<"$("${psql[@]}" -c \
+      "SELECT (SELECT count(*) FROM products) || ' ' || (SELECT count(*) FROM product_variants) || ' ' ||
+              (SELECT count(*) FROM users) || ' ' || (SELECT count(*) FROM orders)")"
+    cat <<EOF
+
+Demo data loaded: $products products, $variants variants, $users users, $orders orders.
+  Catalog      $PROD_STOREFRONT_ORIGIN/catalog/all-products
+  Images       upload them in $PROD_STOREFRONT_ORIGIN/admin/products (catalog images are not stored in Git)
+  Demo customers have no passwords; register your own account to shop.
+EOF
     ;;
 esac
