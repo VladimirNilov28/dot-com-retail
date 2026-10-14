@@ -49,6 +49,7 @@ replay_pid*
 !.env.example
 !.env.review.example
 !.env.prod.example
+!.env.stripe.example
 
 # =====================================================
 # Secrets

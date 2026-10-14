@@ -18,7 +18,7 @@ case "${1:-}" in
 esac
 [ -f "$ENV_FILE" ] || { echo "$ENV_FILE not found; nothing to stop" >&2; exit 1; }
 
-docker compose -p "$PROJECT" -f "$ROOT/infrastructure/compose.yml" \
+docker compose -p "$PROJECT" --profile stripe -f "$ROOT/infrastructure/compose.yml" \
   -f "$ROOT/infrastructure/compose.review.yml" --env-file "$ENV_FILE" "${args[@]}"
 if [ "${1:-}" = --volumes ]; then
   echo "Removed project '$PROJECT' and its volumes. $ENV_FILE, the certificates and the" \

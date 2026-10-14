@@ -13,6 +13,7 @@
 #   REVIEW_HOST, REVIEW_*_PORT, REVIEW_BIND  public origin (see .env.review.example)
 #   REVIEW_SEED=0         skip the demo catalog seed on an empty database
 #   REVIEW_WAIT_TIMEOUT   seconds to wait for healthy services (default 900)
+#   REVIEW_STRIPE_FILE    optional Stripe test keys       (default ./.env.stripe)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -113,6 +114,73 @@ chmod 600 "$REVIEW_PGDATA_KEY_FILE"
 COMPOSE=(docker compose -p "$PROJECT" -f "$ROOT/infrastructure/compose.yml"
   -f "$ROOT/infrastructure/compose.review.yml" --env-file "$ENV_FILE")
 
+# Stripe test keys (optional): shell environment > ./.env.stripe (Git-ignored) > env file.
+# They are stored in the private env file; the webhook signing secret is fetched
+# automatically and the stripe-listener container forwards events.
+set_env_value() { # KEY; value taken from $NEW_VALUE to avoid quoting issues
+  local out
+  out="$(mktemp "$ENV_FILE.XXXXXX")"
+  chmod 600 "$out"
+  NEW_VALUE="$NEW_VALUE" awk -v key="$1" 'BEGIN { done = 0 }
+    index($0, key "=") == 1 { print key "=" ENVIRON["NEW_VALUE"]; done = 1; next } { print }
+    END { if (!done) print key "=" ENVIRON["NEW_VALUE"] }' "$ENV_FILE" >"$out"
+  mv "$out" "$ENV_FILE"
+}
+STRIPE_FILE="${REVIEW_STRIPE_FILE:-$ROOT/.env.stripe}"
+stripe_value() { # shell > Stripe file > env file
+  local value
+  value="$(printenv "$1" || true)"
+  if [ -z "$value" ] && [ -f "$STRIPE_FILE" ]; then
+    value="$(sed -n "s/^$1=//p" "$STRIPE_FILE" | head -n 1 | sed "s/^['\"]//; s/['\"]\$//")"
+  fi
+  printf '%s' "${value:-$(env_value "$1")}"
+}
+stripe_secret="$(stripe_value STRIPE_SECRET_KEY)"
+stripe_public="$(stripe_value STRIPE_PUBLISHABLE_KEY)"
+stripe_webhook="$(stripe_value STRIPE_WEBHOOK_SECRET)"
+if [ -n "$stripe_secret$stripe_public" ]; then
+  case "$stripe_secret" in sk_test_* | rk_test_*) ;; *)
+    echo "STRIPE_SECRET_KEY must be a test-mode key (sk_test_/rk_test_); live keys are not supported" >&2; exit 1 ;;
+  esac
+  case "$stripe_public" in pk_test_*) ;; *)
+    echo "STRIPE_PUBLISHABLE_KEY must be a test-mode key (pk_test_)" >&2; exit 1 ;;
+  esac
+  case "$stripe_webhook" in "" | whsec_*) ;; *)
+    echo "STRIPE_WEBHOOK_SECRET must be empty (fetched automatically) or a whsec_ value" >&2; exit 1 ;;
+  esac
+  if [ "$stripe_secret" != "$(env_value STRIPE_SECRET_KEY)" ] && [ "$stripe_webhook" = "$(env_value STRIPE_WEBHOOK_SECRET)" ]; then
+    stripe_webhook="" # a different account needs its own signing secret
+  fi
+  if [ -z "$stripe_webhook" ]; then
+    info "Fetching the Stripe test webhook signing secret (Stripe CLI container)"
+    stripe_webhook="$(docker run --rm -e STRIPE_API_KEY="$stripe_secret" -e STRIPE_DEVICE_NAME=bytecore-review \
+      stripe/stripe-cli:v1.53.1@sha256:11c46caeead82e329f14823dd622d494b4cc8c1b9766f724d122d2af42c97540 \
+      listen --print-secret 2>/dev/null | tr -d '\r\n' || true)"
+    case "$stripe_webhook" in whsec_*) ;; *)
+      echo "Could not obtain a webhook signing secret; check STRIPE_SECRET_KEY and network access" >&2; exit 1 ;;
+    esac
+  fi
+  for key in STRIPE_SECRET_KEY STRIPE_PUBLISHABLE_KEY STRIPE_WEBHOOK_SECRET; do
+    case "$key" in
+      STRIPE_SECRET_KEY) NEW_VALUE="$stripe_secret" ;;
+      STRIPE_PUBLISHABLE_KEY) NEW_VALUE="$stripe_public" ;;
+      *) NEW_VALUE="$stripe_webhook" ;;
+    esac
+    if [ "$NEW_VALUE" != "$(env_value "$key")" ]; then
+      set_env_value "$key"
+      info "Stored $key in $ENV_FILE"
+    fi
+  done
+  unset NEW_VALUE
+  # Compose gives the shell environment precedence over the env file.
+  export STRIPE_SECRET_KEY="$stripe_secret" STRIPE_PUBLISHABLE_KEY="$stripe_public" STRIPE_WEBHOOK_SECRET="$stripe_webhook"
+  COMPOSE+=(--profile stripe)
+  STRIPE_STATUS="enabled (test mode; webhooks forwarded by the stripe-listener container)"
+else
+  STRIPE_STATUS="disabled (no test keys; see README 'Quick start for reviewers')"
+fi
+unset stripe_secret stripe_public stripe_webhook
+
 if docker volume inspect "${PROJECT}_postgres_volume" >/dev/null 2>&1 &&
   ! docker volume inspect "${PROJECT}_postgres_crypt_volume" >/dev/null 2>&1; then
   warn "Found the unencrypted volume ${PROJECT}_postgres_volume from an older review stack. It is left"
@@ -151,8 +219,8 @@ ByteCore review stack '$PROJECT' is ready (trust infrastructure/review/certs/ca.
 Bootstrap administrator: ${admin_user}@bytecore.ee
   password: ADMIN_PASSWORD in $ENV_FILE (not printed)
 
-Stripe webhooks (optional):
-  stripe listen --forward-to $STORE_URL/webhooks/stripe --skip-verify
+Stripe card payments: $STRIPE_STATUS
+  test card 4242 4242 4242 4242, any future expiry, any CVC
 Postgres storage is encrypted at rest; key: $REVIEW_PGDATA_KEY_FILE (back it up, never commit it)
 Stop: scripts/review-down.sh   (data volumes are kept unless --volumes is given)
 Docs: docs/review-setup.md
