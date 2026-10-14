@@ -12,7 +12,11 @@ import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-/** Durable local-directory byte storage; keys are server generated, never filenames. */
+/**
+ * Durable local-directory byte storage; keys are server generated, never filenames. The uploaded
+ * original lives at {@code <root>/<key>}; resized delivery variants at
+ * {@code <root>/variants/<size>/<key>}, where {@code size} comes from the {@link ImageSize} enum.
+ */
 @Component
 public class MediaStorage {
 
@@ -27,10 +31,19 @@ public class MediaStorage {
     }
 
     public void store(String key, byte[] bytes) {
-        Path target = resolve(key);
+        write(resolve(key), bytes);
+    }
+
+    /** Atomically replaces the variant file, so concurrent readers never observe a partial image. */
+    public void storeVariant(String key, ImageSize size, byte[] bytes) {
+        write(resolve(key, size), bytes);
+    }
+
+    private void write(Path target, byte[] bytes) {
         try {
-            Files.createDirectories(root);
-            Path temporary = Files.createTempFile(root, ".upload-", ".tmp");
+            Path directory = target.getParent();
+            Files.createDirectories(directory);
+            Path temporary = Files.createTempFile(directory, ".upload-", ".tmp");
             try {
                 Files.write(temporary, bytes);
                 Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE);
@@ -43,9 +56,18 @@ public class MediaStorage {
     }
 
     public Optional<byte[]> read(String key) {
-        if (!KEY.matcher(key).matches()) return Optional.empty();
+        if (key == null || !KEY.matcher(key).matches()) return Optional.empty();
+        return readPath(resolve(key));
+    }
+
+    public Optional<byte[]> readVariant(String key, ImageSize size) {
+        if (key == null || size == null || !KEY.matcher(key).matches()) return Optional.empty();
+        return readPath(resolve(key, size));
+    }
+
+    private Optional<byte[]> readPath(Path path) {
         try {
-            return Optional.of(Files.readAllBytes(resolve(key)));
+            return Optional.of(Files.readAllBytes(path));
         } catch (NoSuchFileException e) {
             return Optional.empty();
         } catch (IOException e) {
@@ -53,19 +75,35 @@ public class MediaStorage {
         }
     }
 
-    /** Best effort: a failure leaves an unreferenced file, never a dangling database row. */
+    /**
+     * Removes the original and every variant. Best effort: a failure leaves an unreferenced file,
+     * never a dangling database row.
+     */
     public void delete(String key) {
+        deleteQuietly(() -> resolve(key));
+        for (ImageSize size : ImageSize.values()) deleteQuietly(() -> resolve(key, size));
+    }
+
+    private static void deleteQuietly(java.util.function.Supplier<Path> path) {
         try {
-            Files.deleteIfExists(resolve(key));
+            Files.deleteIfExists(path.get());
         } catch (IOException | RuntimeException e) {
-            // intentionally swallowed; see method contract
+            // intentionally swallowed; see delete contract
         }
     }
 
     private Path resolve(String key) {
-        if (!KEY.matcher(key).matches()) throw new IllegalArgumentException("Invalid media key");
+        if (key == null || !KEY.matcher(key).matches()) throw new IllegalArgumentException("Invalid media key");
         Path path = root.resolve(key).normalize();
         if (!path.startsWith(root)) throw new IllegalArgumentException("Invalid media key");
+        return path;
+    }
+
+    private Path resolve(String key, ImageSize size) {
+        if (key == null || !KEY.matcher(key).matches()) throw new IllegalArgumentException("Invalid media key");
+        Path directory = root.resolve("variants").resolve(size.param());
+        Path path = directory.resolve(key).normalize();
+        if (!path.startsWith(directory)) throw new IllegalArgumentException("Invalid media key");
         return path;
     }
 }

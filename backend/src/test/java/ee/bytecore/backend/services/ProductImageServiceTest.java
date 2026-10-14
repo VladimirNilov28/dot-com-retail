@@ -19,6 +19,7 @@ import ee.bytecore.backend.entities.product.Product;
 import ee.bytecore.backend.entities.product.ProductImage;
 import ee.bytecore.backend.repositories.product.ProductImageRepository;
 import ee.bytecore.backend.repositories.product.ProductRepository;
+import ee.bytecore.backend.services.media.ImageSize;
 import ee.bytecore.backend.services.media.InvalidImageException;
 import ee.bytecore.backend.services.media.MediaStorage;
 
@@ -65,9 +66,22 @@ class ProductImageServiceTest {
     }
 
     private static byte[] png() throws Exception {
+        return encode("png", 300, 300);
+    }
+
+    private static byte[] encode(String format, int width, int height) throws Exception {
         var out = new ByteArrayOutputStream();
-        ImageIO.write(new BufferedImage(300, 300, BufferedImage.TYPE_INT_RGB), "png", out);
+        ImageIO.write(new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB), format, out);
         return out.toByteArray();
+    }
+
+    private static int[] size(byte[] bytes) throws Exception {
+        BufferedImage image = ImageIO.read(new java.io.ByteArrayInputStream(bytes));
+        return new int[] {image.getWidth(), image.getHeight()};
+    }
+
+    private Path variant(ImageSize size, String key) {
+        return dir.resolve("variants").resolve(size.param()).resolve(key);
     }
 
     @Test
@@ -137,5 +151,105 @@ class ProductImageServiceTest {
         when(images.findAllByProductIdOrderByPositionAscIdAsc(6L)).thenReturn(List.of());
         assertThat(service.delete(2L)).isTrue();
         assertThat(Files.exists(dir.resolve(a.getStorageKey()))).isFalse();
+    }
+
+    @Test
+    void uploadStoresBoundedVariantsNextToTheOriginal() throws Exception {
+        ProductImage saved = service.upload(5L, encode("jpeg", 2400, 1600), "wide");
+        String key = saved.getStorageKey();
+        assertThat(key).endsWith(".jpg");
+        assertThat(saved.getWidth()).isEqualTo(2400);
+        assertThat(size(Files.readAllBytes(variant(ImageSize.THUMB, key)))).containsExactly(320, 213);
+        assertThat(size(Files.readAllBytes(variant(ImageSize.MEDIUM, key)))).containsExactly(800, 533);
+        assertThat(size(Files.readAllBytes(variant(ImageSize.FULL, key)))).containsExactly(2000, 1333);
+
+        when(images.findByStorageKey(key)).thenReturn(Optional.of(saved));
+        var thumb = service.deliver(key, ImageSize.THUMB).orElseThrow();
+        assertThat(thumb.contentType()).isEqualTo("image/jpeg");
+        assertThat(size(thumb.bytes())).containsExactly(320, 213);
+    }
+
+    @Test
+    void missingVariantIsGeneratedOnceOnFirstDeliveryAndReused() throws Exception {
+        // An upload that predates variants: only the original exists on disk.
+        String key = "123e4567-e89b-42d3-a456-426614174000.png";
+        storage.store(key, encode("png", 1000, 500));
+        ProductImage legacy = ProductImage.create(5L, key, "image/png", 10, 1000, 500, "legacy", 0);
+        when(images.findByStorageKey(key)).thenReturn(Optional.of(legacy));
+        assertThat(Files.exists(variant(ImageSize.MEDIUM, key))).isFalse();
+
+        var medium = service.deliver(key, ImageSize.MEDIUM).orElseThrow();
+        assertThat(medium.contentType()).isEqualTo("image/png");
+        assertThat(size(medium.bytes())).containsExactly(800, 400);
+        assertThat(Files.readAllBytes(variant(ImageSize.MEDIUM, key))).isEqualTo(medium.bytes());
+        assertThat(Files.exists(variant(ImageSize.THUMB, key))).isFalse();
+
+        var full = service.deliver(key, ImageSize.FULL).orElseThrow();
+        assertThat(size(full.bytes())).as("never upscaled").containsExactly(1000, 500);
+        long modified = Files.getLastModifiedTime(variant(ImageSize.MEDIUM, key)).toMillis();
+        assertThat(service.deliver(key, ImageSize.MEDIUM).orElseThrow().bytes()).isEqualTo(medium.bytes());
+        assertThat(Files.getLastModifiedTime(variant(ImageSize.MEDIUM, key)).toMillis()).isEqualTo(modified);
+        try (var files = Files.walk(dir)) {
+            assertThat(files.filter(f -> f.getFileName().toString().endsWith(".tmp"))).isEmpty();
+        }
+    }
+
+    @Test
+    void concurrentFirstRequestsAllReceiveTheSameCompleteVariant() throws Exception {
+        String key = "123e4567-e89b-42d3-a456-426614174001.jpg";
+        storage.store(key, encode("jpeg", 1600, 1200));
+        when(images.findByStorageKey(key))
+                .thenReturn(Optional.of(ProductImage.create(5L, key, "image/jpeg", 10, 1600, 1200, "x", 0)));
+        var pool = java.util.concurrent.Executors.newFixedThreadPool(8);
+        try {
+            var futures = new ArrayList<java.util.concurrent.Future<byte[]>>();
+            for (int i = 0; i < 16; i++)
+                futures.add(pool.submit(() -> service.deliver(key, ImageSize.THUMB).orElseThrow().bytes()));
+            byte[] first = futures.get(0).get();
+            for (var f : futures) assertThat(f.get()).isEqualTo(first);
+            assertThat(size(first)).containsExactly(320, 240);
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    void unregisteredOrMissingOriginalIsNotDelivered() throws Exception {
+        String key = "123e4567-e89b-42d3-a456-426614174002.png";
+        when(images.findByStorageKey(key)).thenReturn(Optional.empty());
+        assertThat(service.deliver(key, ImageSize.THUMB)).isEmpty();
+        when(images.findByStorageKey(key))
+                .thenReturn(Optional.of(ProductImage.create(5L, key, "image/png", 10, 300, 300, "x", 0)));
+        assertThat(service.deliver(key, ImageSize.THUMB)).isEmpty();
+        assertThat(service.deliver("../../etc/passwd", ImageSize.THUMB)).isEmpty();
+        Mockito.verify(images, Mockito.never()).findByStorageKey("../../etc/passwd");
+    }
+
+    @Test
+    void undecodableLegacyOriginalFallsBackToTheOriginalBytes() {
+        String key = "123e4567-e89b-42d3-a456-426614174003.jpg";
+        byte[] broken = new byte[] {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 1, 2, 3};
+        storage.store(key, broken);
+        when(images.findByStorageKey(key))
+                .thenReturn(Optional.of(ProductImage.create(5L, key, "image/jpeg", 6, 300, 300, "x", 0)));
+        var delivered = service.deliver(key, ImageSize.THUMB).orElseThrow();
+        assertThat(delivered.bytes()).isEqualTo(broken);
+        assertThat(Files.exists(variant(ImageSize.THUMB, key))).isFalse();
+    }
+
+    @Test
+    void deletingTheLastReferenceRemovesOriginalAndEveryVariant() throws Exception {
+        ProductImage a = service.upload(5L, png(), "a");
+        id(a, 1L);
+        when(images.findById(1L)).thenReturn(Optional.of(a));
+        Mockito.doAnswer(i -> table.remove(i.<ProductImage>getArgument(0)))
+                .when(images)
+                .delete(any(ProductImage.class));
+        for (ImageSize size : ImageSize.values()) assertThat(Files.exists(variant(size, a.getStorageKey()))).isTrue();
+
+        assertThat(service.delete(1L)).isTrue();
+
+        assertThat(Files.exists(dir.resolve(a.getStorageKey()))).isFalse();
+        for (ImageSize size : ImageSize.values()) assertThat(Files.exists(variant(size, a.getStorageKey()))).isFalse();
     }
 }

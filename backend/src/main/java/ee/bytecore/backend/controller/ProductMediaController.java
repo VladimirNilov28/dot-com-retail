@@ -20,6 +20,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import ee.bytecore.backend.entities.product.ProductImage;
 import ee.bytecore.backend.services.ProductImageService;
+import ee.bytecore.backend.services.media.ImageSize;
 import ee.bytecore.backend.services.media.InvalidImageException;
 import ee.bytecore.backend.services.media.MediaStorage;
 
@@ -36,11 +37,9 @@ public class ProductMediaController {
     private static final Pattern PRODUCT_ID = Pattern.compile("[0-9]{1,18}");
 
     private final ProductImageService images;
-    private final MediaStorage storage;
 
-    public ProductMediaController(ProductImageService images, MediaStorage storage) {
+    public ProductMediaController(ProductImageService images) {
         this.images = images;
-        this.storage = storage;
     }
 
     @PostMapping("/admin/media/products/{productId}/images")
@@ -66,22 +65,30 @@ public class ProductMediaController {
                         "position", saved.getPosition()));
     }
 
+    /**
+     * {@code size} is {@code thumb} (≤320 px), {@code medium} (≤800 px) or {@code full} (≤2000 px,
+     * the default); any other value is a 400. Variants are re-encoded and generated lazily if missing.
+     */
     @GetMapping("/media/products/{key}")
-    public ResponseEntity<byte[]> serve(@PathVariable String key) {
+    public ResponseEntity<?> serve(@PathVariable String key, @RequestParam(value = "size", required = false) String size) {
+        var requested = ImageSize.fromParam(size);
+        if (requested.isEmpty()) {
+            return ResponseEntity.badRequest()
+                    .header("Cache-Control", "no-store")
+                    .body(Map.of("error", "size must be one of thumb, medium, full"));
+        }
         if (!MediaStorage.KEY.matcher(key).matches())
             return ResponseEntity.notFound().build();
-        var image = images.findByKey(key);
-        if (image.isEmpty()) return ResponseEntity.notFound().build();
-        var bytes = storage.read(key);
-        if (bytes.isEmpty()) return ResponseEntity.notFound().build();
+        var delivered = images.deliver(key, requested.get());
+        if (delivered.isEmpty()) return ResponseEntity.notFound().build();
         return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType(image.get().getContentType()))
+                .contentType(MediaType.parseMediaType(delivered.get().contentType()))
                 .cacheControl(CacheControl.maxAge(java.time.Duration.ofDays(365))
                         .cachePublic()
                         .immutable())
                 .header("X-Content-Type-Options", "nosniff")
                 .header("Content-Security-Policy", "default-src 'none'")
-                .body(bytes.get());
+                .body(delivered.get().bytes());
     }
 
     @ExceptionHandler(InvalidImageException.class)
