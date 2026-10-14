@@ -45,7 +45,7 @@ scopes:
       Submit, update or delete the caller's own product star rating and written
       review, read it back, and mark other customers' reviews helpful
       (rateProduct, upsertMyReview, deleteMyReview, myReview,
-      voteReviewHelpful, unvoteReviewHelpful).
+      myReviewEligibility, voteReviewHelpful, unvoteReviewHelpful).
   - name: review:moderate
     description: >
       Staff moderation of customer reviews (moderationReviews, hideReview,

@@ -24,10 +24,12 @@ import org.springframework.security.access.AccessDeniedException;
 import ee.bytecore.backend.config.PostgresTestConfiguration;
 import ee.bytecore.backend.entities.product.Product;
 import ee.bytecore.backend.entities.user.User;
+import ee.bytecore.backend.exceptions.ReviewPurchaseRequiredException;
 import ee.bytecore.backend.repositories.product.ProductReviewRow;
 import ee.bytecore.backend.repositories.user.UserRepository;
 import ee.bytecore.backend.services.catalog.CatalogSearchCriteria;
 import ee.bytecore.backend.services.catalog.ProductSortOption;
+import ee.bytecore.backend.services.review.ReviewEligibility;
 import ee.bytecore.backend.services.review.ReviewPage;
 import ee.bytecore.backend.services.review.ReviewSortOption;
 
@@ -67,6 +69,7 @@ class ProductReviewIntegrationTest {
 
     @AfterEach
     void cleanFixtures() {
+        PurchaseFixture.cleanup(jdbc, userIds);
         productIds.forEach(id -> jdbc.update("DELETE FROM products WHERE id = ?", id));
         userIds.forEach(id -> jdbc.update("DELETE FROM users WHERE id = ?", id));
     }
@@ -74,8 +77,8 @@ class ProductReviewIntegrationTest {
     @Test
     void shouldCreateTrimmedReviewAndEditOnlyTheCallersOwnRowTest() {
         Long productId = product().getId();
-        Long alice = user();
-        Long bob = user();
+        Long alice = buyer(productId);
+        Long bob = buyer(productId);
         ProductReviewRow created =
                 reviews.upsertMyReview(alice, productId, 4, "  Great value \t", "\r\n  " + BODY + "\r\nSecond line. ");
         assertThat(created.title()).isEqualTo("Great value");
@@ -103,7 +106,7 @@ class ProductReviewIntegrationTest {
     @Test
     void shouldTurnLegacyStarOnlyRatingIntoAReviewAndBackViaRateProductTest() {
         Long productId = product().getId();
-        Long alice = user();
+        Long alice = buyer(productId);
         reviews.rate(alice, productId, 3);
         ProductReviewRow legacy = reviews.myReview(alice, productId).orElseThrow();
         assertThat(legacy.title()).isNull();
@@ -142,7 +145,7 @@ class ProductReviewIntegrationTest {
     @Test
     void shouldValidateStarsLengthsAndKeepHarmlessAngleBracketsTest() {
         Long productId = product().getId();
-        Long alice = user();
+        Long alice = buyer(productId);
         for (int stars : new int[] {0, 6}) {
             assertThatThrownBy(() -> reviews.upsertMyReview(alice, productId, stars, "Title", BODY))
                     .hasMessage("Rating stars must be between 1 and 5");
@@ -170,7 +173,7 @@ class ProductReviewIntegrationTest {
     @Test
     void shouldEnforceReviewConstraintsInTheDatabaseTest() {
         Long productId = product().getId();
-        Long alice = user();
+        Long alice = buyer(productId);
         String insert = "INSERT INTO product_ratings(product_id,user_id,stars,title,body,status,moderation_reason,"
                 + "moderated_at) VALUES (?,?,4,?,?,?,?,?)";
         List<Object[]> invalid = List.of(
@@ -191,7 +194,7 @@ class ProductReviewIntegrationTest {
     @Test
     void shouldCountEachVoterOnceRejectSelfVotesAndUnvoteTest() {
         Long productId = product().getId();
-        Long author = user();
+        Long author = buyer(productId);
         Long voter = user();
         long id = reviews.upsertMyReview(author, productId, 4, "Title", BODY).id();
 
@@ -220,7 +223,8 @@ class ProductReviewIntegrationTest {
     @Test
     void shouldKeepConcurrentVotesUniquePerUserTest() throws Exception {
         Long productId = product().getId();
-        long id = reviews.upsertMyReview(user(), productId, 4, "Title", BODY).id();
+        long id = reviews.upsertMyReview(buyer(productId), productId, 4, "Title", BODY)
+                .id();
         Long sameVoter = user();
         List<Long> voters = new ArrayList<>(List.of(sameVoter, sameVoter, sameVoter, sameVoter));
         for (int i = 0; i < 4; i++) voters.add(user());
@@ -248,10 +252,11 @@ class ProductReviewIntegrationTest {
         Product product = product();
         Long productId = product.getId();
         Product other = product();
-        Long alice = user();
-        Long bob = user();
-        Long carol = user();
+        Long alice = buyer(productId);
+        Long bob = buyer(productId);
+        Long carol = buyer(productId);
         Long moderator = user();
+        PurchaseFixture.paid(jdbc, alice, other.getId());
         long aliceReview =
                 reviews.upsertMyReview(alice, productId, 5, "Love it", BODY).id();
         reviews.upsertMyReview(bob, productId, 4, "Decent", BODY);
@@ -307,7 +312,8 @@ class ProductReviewIntegrationTest {
     @Test
     void shouldValidateModerationInputTest() {
         Long productId = product().getId();
-        long id = reviews.upsertMyReview(user(), productId, 4, "Title", BODY).id();
+        long id = reviews.upsertMyReview(buyer(productId), productId, 4, "Title", BODY)
+                .id();
         assertThatThrownBy(() -> reviews.hide(null, id, "  "))
                 .hasMessage("Moderation reason must be between 3 and 500 characters");
         assertThatThrownBy(() -> reviews.hide(null, id, "<i>spam</i>")).isInstanceOf(IllegalArgumentException.class);
@@ -329,7 +335,7 @@ class ProductReviewIntegrationTest {
         int[] stars = {3, 5, 1, 4};
         List<Long> ids = new ArrayList<>();
         for (int i = 0; i < stars.length; i++) {
-            Long author = user();
+            Long author = buyer(productId);
             authors.add(author);
             ids.add(reviews.upsertMyReview(author, productId, stars[i], "Review " + i, BODY)
                     .id());
@@ -365,6 +371,7 @@ class ProductReviewIntegrationTest {
         Long author = users.save(User.create(email, "other-" + email, LocalDate.of(2000, 1, 1)))
                 .getId();
         userIds.add(author);
+        PurchaseFixture.paid(jdbc, author, productId);
         Long voter = user();
         long id = reviews.upsertMyReview(author, productId, 4, "Title", BODY).id();
         reviews.vote(voter, id);
@@ -376,6 +383,173 @@ class ProductReviewIntegrationTest {
         assertThat(reviews.deleteMyReview(author, productId)).isTrue();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM review_votes WHERE review_id = ?", Long.class, id))
                 .isZero();
+    }
+
+    @ParameterizedTest(name = "{0}/{1} refund={2}")
+    @CsvSource({
+        "PAID,SUCCEEDED,",
+        "PROCESSING,SUCCEEDED,",
+        "SHIPPING,SUCCEEDED,",
+        "COMPLETED,SUCCEEDED,",
+        "COMPLETED,SUCCEEDED,PENDING",
+        "PAID,SUCCEEDED,FAILED",
+    })
+    void shouldLetCustomersWithAPaidNonRefundedOrderCreateReviewsTest(String status, String payment, String refund) {
+        Long productId = product().getId();
+        Long buyer = user();
+        long order = PurchaseFixture.order(jdbc, buyer, productId, status, payment);
+        if (refund != null) PurchaseFixture.refund(jdbc, order, refund);
+
+        assertThat(reviews.eligibility(buyer, productId)).isEqualTo(new ReviewEligibility(true, false, null));
+        ProductReviewRow created = reviews.upsertMyReview(buyer, productId, 5, "Bought it", BODY);
+        assertThat(created.verifiedPurchase()).isTrue();
+        assertThat(reviews.eligibility(buyer, productId)).isEqualTo(new ReviewEligibility(true, true, null));
+        assertThat(reviews.productReviews(null, productId, ReviewSortOption.NEWEST, 0, 10)
+                        .items())
+                .singleElement()
+                .satisfies(row -> assertThat(row.verifiedPurchase()).isTrue());
+    }
+
+    @Test
+    void shouldKeepQualifyingAfterARejectedRefundRequestTest() {
+        Long productId = product().getId();
+        Long buyer = user();
+        long order = PurchaseFixture.order(jdbc, buyer, productId, "COMPLETED", "SUCCEEDED");
+        PurchaseFixture.rejectedRefundRequest(jdbc, order);
+        assertThat(reviews.upsertMyReview(buyer, productId, 4, "Kept it", BODY).verifiedPurchase())
+                .isTrue();
+    }
+
+    @ParameterizedTest(name = "{0}/{1} refund={2}")
+    @CsvSource({
+        // unpaid / awaiting payment
+        "PENDING,UNKNOWN,",
+        "PENDING,PENDING,",
+        "PENDING,UNRESOLVED,",
+        // declined payment cancels the order
+        "CANCELLED,FAILED,",
+        // cancelled before payment
+        "CANCELLED,UNKNOWN,",
+        // cancelled after payment and refunded
+        "CANCELLED,SUCCEEDED,SUCCEEDED",
+        // refunded without cancellation
+        "COMPLETED,SUCCEEDED,SUCCEEDED",
+    })
+    void shouldRejectReviewsAndRatingsWithoutAQualifyingPurchaseTest(String status, String payment, String refund) {
+        Long productId = product().getId();
+        Long customer = user();
+        long order = PurchaseFixture.order(jdbc, customer, productId, status, payment);
+        if (refund != null) PurchaseFixture.refund(jdbc, order, refund);
+
+        assertNoPurchase(customer, productId);
+    }
+
+    @Test
+    void shouldNotCountOtherProductsOrOtherCustomersOrdersAsAPurchaseTest() {
+        Long productId = product().getId();
+        Long otherProduct = product().getId();
+        Long customer = user();
+        Long someoneElse = user();
+        PurchaseFixture.paid(jdbc, customer, otherProduct);
+        PurchaseFixture.paid(jdbc, someoneElse, productId);
+
+        assertNoPurchase(customer, productId);
+        assertNoPurchase(user(), productId);
+        assertThatThrownBy(() -> reviews.eligibility(null, productId)).isInstanceOf(AccessDeniedException.class);
+        assertThatThrownBy(() -> reviews.eligibility(customer, 999_999_999L))
+                .isInstanceOf(EntityNotFoundException.class);
+    }
+
+    @Test
+    void shouldKeepPrePolicyReviewsVisibleAndEditableWithoutAPurchaseTest() {
+        Long productId = product().getId();
+        Long legacyAuthor = user();
+        Long legacyRater = user();
+        jdbc.update(
+                "INSERT INTO product_ratings(product_id,user_id,stars,title,body) VALUES (?,?,3,'Old review',?)",
+                productId,
+                legacyAuthor,
+                BODY);
+        jdbc.update("INSERT INTO product_ratings(product_id,user_id,stars) VALUES (?,?,2)", productId, legacyRater);
+
+        ProductReviewRow listed = reviews.productReviews(null, productId, ReviewSortOption.NEWEST, 0, 10)
+                .items()
+                .getFirst();
+        assertThat(listed.title()).isEqualTo("Old review");
+        assertThat(listed.verifiedPurchase()).isFalse();
+        assertThat(reviews.eligibility(legacyAuthor, productId)).isEqualTo(new ReviewEligibility(true, true, null));
+        assertThat(reviews.upsertMyReview(legacyAuthor, productId, 4, "Edited old review", BODY)
+                        .title())
+                .isEqualTo("Edited old review");
+        assertThat(reviews.rate(legacyAuthor, productId, 5).getRatingCount()).isEqualTo(2);
+
+        // A legacy star-only rating may change its stars, but adding text is creating a review.
+        assertThat(reviews.rate(legacyRater, productId, 1).getRatingCount()).isEqualTo(2);
+        assertThat(reviews.eligibility(legacyRater, productId))
+                .isEqualTo(new ReviewEligibility(false, false, ReviewEligibility.PURCHASE_REQUIRED));
+        assertThatThrownBy(() -> reviews.upsertMyReview(legacyRater, productId, 4, "Now with text", BODY))
+                .isInstanceOf(ReviewPurchaseRequiredException.class);
+        assertThat(reviews.myReview(legacyRater, productId).orElseThrow().body())
+                .isNull();
+    }
+
+    @Test
+    void shouldSortByHelpfulVotesThenNewestThenIdWithinBoundedPagesTest() {
+        Long productId = product().getId();
+        List<Long> authors = new ArrayList<>();
+        List<Long> ids = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            Long author = buyer(productId);
+            authors.add(author);
+            ids.add(reviews.upsertMyReview(author, productId, 3, "Review " + i, BODY)
+                    .id());
+        }
+        // Reviews 0-2 share one timestamp so only the id breaks their tie; review 3 is older, 4 newest.
+        jdbc.update(
+                "UPDATE product_ratings SET created_at = TIMESTAMPTZ '2026-01-02 00:00:00Z' WHERE id IN (?,?,?)",
+                ids.get(0),
+                ids.get(1),
+                ids.get(2));
+        jdbc.update(
+                "UPDATE product_ratings SET created_at = TIMESTAMPTZ '2026-01-01 00:00:00Z' WHERE id = ?", ids.get(3));
+        jdbc.update(
+                "UPDATE product_ratings SET created_at = TIMESTAMPTZ '2026-01-03 00:00:00Z' WHERE id = ?", ids.get(4));
+        Long voterA = user();
+        Long voterB = user();
+        reviews.vote(voterA, ids.get(3));
+        reviews.vote(voterB, ids.get(3));
+        reviews.vote(voterA, ids.get(0));
+        reviews.vote(voterA, ids.get(2));
+
+        // 3 (2 votes); then 0 and 2 (1 vote, same timestamp -> higher id first); then 4 (newer) before 1.
+        assertThat(titles(productId, ReviewSortOption.HELPFUL, 0, 20))
+                .containsExactly("Review 3", "Review 2", "Review 0", "Review 4", "Review 1");
+        assertThat(titles(productId, ReviewSortOption.HELPFUL, 0, 2)).containsExactly("Review 3", "Review 2");
+        assertThat(titles(productId, ReviewSortOption.HELPFUL, 1, 2)).containsExactly("Review 0", "Review 4");
+        ReviewPage last = reviews.productReviews(null, productId, ReviewSortOption.HELPFUL, 2, 2);
+        assertThat(last.items()).extracting(ProductReviewRow::title).containsExactly("Review 1");
+        assertThat(last.pageInfo().totalItems()).isEqualTo(5);
+        assertThat(last.pageInfo().totalPages()).isEqualTo(3);
+        assertThat(reviews.productReviews(null, productId, ReviewSortOption.HELPFUL, 3, 2)
+                        .items())
+                .isEmpty();
+        assertThatThrownBy(() -> reviews.productReviews(null, productId, ReviewSortOption.HELPFUL, 0, 21))
+                .hasMessage("Page size must be between 1 and 20");
+        assertThatThrownBy(() -> reviews.productReviews(null, productId, ReviewSortOption.HELPFUL, 0, 0))
+                .hasMessage("Page size must be between 1 and 20");
+        assertThat(ProductRatingService.MAX_PAGE_SIZE).isEqualTo(20);
+    }
+
+    private void assertNoPurchase(Long customer, Long productId) {
+        assertThat(reviews.eligibility(customer, productId))
+                .isEqualTo(new ReviewEligibility(false, false, ReviewEligibility.PURCHASE_REQUIRED));
+        assertThatThrownBy(() -> reviews.upsertMyReview(customer, productId, 5, "Never bought", BODY))
+                .isInstanceOf(ReviewPurchaseRequiredException.class)
+                .hasMessage("Only customers who purchased this product can review it");
+        assertThatThrownBy(() -> reviews.rate(customer, productId, 5))
+                .isInstanceOf(ReviewPurchaseRequiredException.class);
+        assertThat(reviews.myReview(customer, productId)).isEmpty();
+        assertAggregate(productId, null, 0);
     }
 
     private List<String> titles(Long productId, ReviewSortOption sort, int page, int size) {
@@ -399,6 +573,12 @@ class ProductReviewIntegrationTest {
         Product result = products.create(name, name, null, null);
         productIds.add(result.getId());
         return result;
+    }
+
+    private Long buyer(Long productId) {
+        Long id = user();
+        PurchaseFixture.paid(jdbc, id, productId);
+        return id;
     }
 
     private Long user() {

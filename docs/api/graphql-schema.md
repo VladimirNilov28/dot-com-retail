@@ -166,9 +166,13 @@ same row.
 |---|---|
 | `productReviews(productId, page, size ≤ 20, sort: NEWEST\|HELPFUL\|RATING_HIGH\|RATING_LOW)` | Public (anonymous allowed, like catalog reads). Visible written reviews, page info, visible `averageRating`/`ratingCount` and five-bucket `distribution` |
 | `myReview(productId)` | `rating:write`; caller's own row in any status, or null |
-| `upsertMyReview` / `deleteMyReview` | `rating:write`; caller-owned only (no owner/review id accepted) |
+| `myReviewEligibility(productId)` | `rating:write`; `canReview`/`hasReview`/`reason` for the purchase policy |
+| `upsertMyReview` / `deleteMyReview` | `rating:write`; caller-owned only (no owner/review id accepted); creating a review or rating needs a qualifying purchase (`REVIEW_PURCHASE_REQUIRED`), see [reviews.md](reviews.md) |
 | `voteReviewHelpful` / `unvoteReviewHelpful` | `rating:write`; idempotent; voting on your own review is `FORBIDDEN`; only visible written reviews |
 | `moderationReviews(status, page, size ≤ 20)` / `hideReview(reviewId, reason)` / `restoreReview(reviewId)` | `review:moderate` scope **and** role `CATALOG_MANAGER` or `ADMIN` (staff roles are only granted at aal2). Hide/restore are audited (`REVIEW_HIDE` / `REVIEW_RESTORE`, target `PRODUCT_REVIEW`) |
+
+Purchase eligibility, `verifiedPurchase` and the `HELPFUL` ordering (votes, then
+newest, then id) are documented in [reviews.md](reviews.md).
 
 Validation (server-authoritative, mirrored in the storefront): stars 1-5; title
 1-120 single-line, body 10-4000 characters (code points) after trimming; control

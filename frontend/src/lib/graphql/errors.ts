@@ -39,6 +39,7 @@ const safeCodes = new Set([
   "GUEST_CART_UNAVAILABLE", "GUEST_ORDER_UNAVAILABLE", "CHECKOUT_INVALID",
   "CHECKOUT_QUOTE_CHANGED", "CHECKOUT_REQUEST_CONFLICT",
   "PAYMENT_NOT_CONFIGURED", "PAYMENT_UNAVAILABLE", "RATE_LIMITED",
+  "REVIEW_PURCHASE_REQUIRED",
 ]);
 
 export function failure(
@@ -95,7 +96,7 @@ export function graphFailure(errors: unknown, query: boolean): SafeFailure {
         kinds.push("rate-limited");
         wait = retryAfter(extension.retryAfterSeconds) ?? wait;
       } else if (/UNAUTHENTICATED|UNAUTHORIZED/.test(code)) kinds.push("unauthenticated");
-      else if (/FORBIDDEN|PERMISSION_DENIED/.test(code)) kinds.push("forbidden");
+      else if (/FORBIDDEN|PERMISSION_DENIED|REVIEW_PURCHASE_REQUIRED/.test(code)) kinds.push("forbidden");
       else if (/NOT_FOUND|GUEST_CART_UNAVAILABLE|GUEST_ORDER_UNAVAILABLE/.test(code)) kinds.push("not-found");
       else if (/CONFLICT|QUOTE_CHANGED/.test(code)) kinds.push("conflict");
       else if (/BAD_REQUEST|BAD_USER_INPUT|VALIDATION|CHECKOUT_INVALID|GRAPHQL_PARSE_FAILED|INVALIDSYNTAX/.test(code)) kinds.push("validation");

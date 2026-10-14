@@ -573,6 +573,7 @@ type ProductReview @join__type(graph: RETAIL) {
   status: ReviewStatus!
   title: String
   updatedAt: Instant!
+  verifiedPurchase: Boolean!
   viewerHasVoted: Boolean!
   viewerIsAuthor: Boolean!
 }
@@ -649,6 +650,7 @@ type Query @join__type(graph: RETAIL) {
   myCart: Cart!
   myOrders(filter: OrderFilter, page: Int = 0, size: Int = 20): OrderPage!
   myReview(productId: ID!): ProductReview
+  myReviewEligibility(productId: ID!): ReviewEligibility!
   myWishlist: Wishlist!
   order(id: ID, publicId: UUID): Order
   product(id: ID, slug: String): Product
@@ -666,6 +668,12 @@ type Query @join__type(graph: RETAIL) {
 type RatingDistributionBucket @join__type(graph: RETAIL) {
   count: Int!
   stars: Int!
+}
+
+type ReviewEligibility @join__type(graph: RETAIL) {
+  canReview: Boolean!
+  hasReview: Boolean!
+  reason: ReviewIneligibleReason
 }
 
 type SearchPageInfo @join__type(graph: RETAIL) {
@@ -1082,6 +1090,10 @@ enum ProductSort @join__type(graph: RETAIL) {
   PRICE_DESC @join__enumValue(graph: RETAIL)
   RATING_DESC @join__enumValue(graph: RETAIL)
   RELEVANCE @join__enumValue(graph: RETAIL)
+}
+
+enum ReviewIneligibleReason @join__type(graph: RETAIL) {
+  PURCHASE_REQUIRED @join__enumValue(graph: RETAIL)
 }
 
 enum ReviewSort @join__type(graph: RETAIL) {

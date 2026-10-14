@@ -34,6 +34,7 @@ import ee.bytecore.backend.repositories.user.UserRepository;
 import ee.bytecore.backend.services.CategoryService;
 import ee.bytecore.backend.services.ProductService;
 import ee.bytecore.backend.services.ProductVariantService;
+import ee.bytecore.backend.services.PurchaseFixture;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -149,6 +150,10 @@ class GuestCartHiveTransportTest {
                 """;
         Map<String, Object> variables = Map.of("id", fixture.productId(), "stars", 5);
         assertThat(postCatalog(mutation, null, variables, null, null).body()).contains("Authentication is required");
+        assertThat(postCatalog(mutation, null, variables, null, "rating-alice").body())
+                .contains("REVIEW_PURCHASE_REQUIRED");
+        PurchaseFixture.paid(jdbc, alice.getId(), Long.parseLong(fixture.productId()));
+        PurchaseFixture.paid(jdbc, bob.getId(), Long.parseLong(fixture.productId()));
         for (String token : List.of("rating-no-scope", "rating-machine")) {
             assertThat(mapper.readTree(postCatalog(mutation, null, variables, null, token)
                                     .body())
@@ -273,6 +278,25 @@ class GuestCartHiveTransportTest {
                                 .body())
                         .has("errors"))
                 .isTrue();
+        String eligibility = "query E($id: ID!) { myReviewEligibility(productId: $id) { canReview hasReview reason } }";
+        Map<String, Object> productVars = Map.of("id", fixture.productId());
+        JsonNode notBought = success(postCatalog(eligibility, null, productVars, null, "review-bob"))
+                .at("/data/myReviewEligibility");
+        assertThat(notBought.path("canReview").asBoolean()).isFalse();
+        assertThat(notBought.path("reason").asText()).isEqualTo("PURCHASE_REQUIRED");
+        JsonNode rejected = mapper.readTree(
+                postCatalog(upsert, null, review, null, "review-bob").body());
+        assertThat(rejected.at("/errors/0/extensions/errorType").asText()).isEqualTo("REVIEW_PURCHASE_REQUIRED");
+        assertThat(jdbc.queryForObject(
+                        "SELECT count(*) FROM product_ratings WHERE product_id = ?",
+                        Long.class,
+                        Long.parseLong(fixture.productId())))
+                .isZero();
+        PurchaseFixture.paid(jdbc, alice.getId(), Long.parseLong(fixture.productId()));
+        assertThat(success(postCatalog(eligibility, null, productVars, null, "review-alice"))
+                        .at("/data/myReviewEligibility/canReview")
+                        .asBoolean())
+                .isTrue();
         JsonNode created =
                 success(postCatalog(upsert, null, review, null, "review-alice")).at("/data/upsertMyReview");
         String reviewId = created.path("id").asText();
@@ -287,7 +311,7 @@ class GuestCartHiveTransportTest {
                 """
                 query Reviews($id: ID!) {
                   productReviews(productId: $id) {
-                    items { id title helpfulCount viewerHasVoted viewerIsAuthor }
+                    items { id title helpfulCount viewerHasVoted viewerIsAuthor verifiedPurchase }
                     pageInfo { totalItems }
                     averageRating ratingCount distribution { stars count }
                   }
@@ -299,6 +323,7 @@ class GuestCartHiveTransportTest {
         assertPublicCache(anonymous);
         assertThat(page.at("/items/0/id").asText()).isEqualTo(reviewId);
         assertThat(page.at("/items/0/viewerIsAuthor").asBoolean()).isFalse();
+        assertThat(page.at("/items/0/verifiedPurchase").asBoolean()).isTrue();
         assertThat(page.at("/ratingCount").asInt()).isEqualTo(1);
         assertThat(page.at("/distribution/0/stars").asInt()).isEqualTo(5);
         assertThat(page.at("/distribution/0/count").asInt()).isEqualTo(1);

@@ -2,7 +2,7 @@ package ee.bytecore.backend.repositories.product;
 
 import java.time.Instant;
 
-/** One product_ratings row with its computed helpful count; title/body are null for star-only ratings. */
+/** One product_ratings row with its computed helpful count and verified-purchase flag; title/body are null for star-only ratings. */
 public record ProductReviewRow(
         long id,
         long productId,
@@ -16,6 +16,7 @@ public record ProductReviewRow(
         String status,
         long helpfulCount,
         boolean viewerHasVoted,
+        boolean verifiedPurchase,
         Instant createdAt,
         Instant updatedAt,
         String moderationReason,

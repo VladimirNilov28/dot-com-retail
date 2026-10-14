@@ -4,6 +4,7 @@ import java.util.Objects;
 
 import ee.bytecore.backend.repositories.product.ProductReviewRow;
 import ee.bytecore.backend.services.catalog.SearchPageInfo;
+import ee.bytecore.backend.services.review.ReviewEligibility;
 import ee.bytecore.backend.services.review.ReviewPage;
 
 import com.netflix.dgs.codegen.generated.types.ModerationReview;
@@ -11,6 +12,7 @@ import com.netflix.dgs.codegen.generated.types.ModerationReviewPage;
 import com.netflix.dgs.codegen.generated.types.ProductReview;
 import com.netflix.dgs.codegen.generated.types.ProductReviewPage;
 import com.netflix.dgs.codegen.generated.types.RatingDistributionBucket;
+import com.netflix.dgs.codegen.generated.types.ReviewIneligibleReason;
 import com.netflix.dgs.codegen.generated.types.ReviewStatus;
 
 public class ReviewMapper {
@@ -27,8 +29,17 @@ public class ReviewMapper {
                 .helpfulCount(Math.toIntExact(row.helpfulCount()))
                 .viewerHasVoted(row.viewerHasVoted())
                 .viewerIsAuthor(viewerId != null && Objects.equals(viewerId, row.userId()))
+                .verifiedPurchase(row.verifiedPurchase())
                 .createdAt(row.createdAt())
                 .updatedAt(row.updatedAt())
+                .build();
+    }
+
+    public static com.netflix.dgs.codegen.generated.types.ReviewEligibility toGraphQlType(ReviewEligibility value) {
+        return com.netflix.dgs.codegen.generated.types.ReviewEligibility.newBuilder()
+                .canReview(value.canReview())
+                .hasReview(value.hasReview())
+                .reason(value.reason() == null ? null : ReviewIneligibleReason.valueOf(value.reason()))
                 .build();
     }
 

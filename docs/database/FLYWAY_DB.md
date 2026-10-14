@@ -39,6 +39,7 @@ schema changes must be new `V{n}__...sql` files instead.
 | `V23__rate_limit_buckets.sql` | `rate_limit_buckets` (token bucket state, TTL cleanup) | — |
 | `V24__contact_messages.sql` | `contact_messages`, `contact_notifications` outbox | `V1` (users) |
 | `V25__encryption_at_rest.sql` | widens encrypted PII columns, allows only legacy→sealed / key-rotation snapshot updates, contact-email blind index | `V13`, `V18`, `V24` |
+| `V29__review_purchase_eligibility.sql` | indexes `order_items(order_id, product_variant_id)` and `product_variants(product_id)` for review purchase eligibility | `V2`, `V4` |
 
 Every foreign key either points to a table created in an earlier migration
 file, or to a table created earlier within the same file. There are no

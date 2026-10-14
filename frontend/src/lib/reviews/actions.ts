@@ -15,8 +15,13 @@ import { PAGE_SIZE, reviewIdPattern, reviewSort, validateReview, type ReviewErro
 export type ReviewViewer = "anonymous" | "customer" | "staff";
 export type ReviewPageData = ProductReviewsQuery["productReviews"];
 export type OwnReview = NonNullable<MyReviewQuery["myReview"]>;
+export type ReviewEligibility = MyReviewQuery["myReviewEligibility"];
 export type ReviewsState =
-  | { status: "ok"; viewer: ReviewViewer; sort: ReviewSort; page: ReviewPageData; mine: OwnReview | null }
+  | {
+    status: "ok"; viewer: ReviewViewer; sort: ReviewSort; page: ReviewPageData; mine: OwnReview | null;
+    // Null when unknown (not a customer, or the read failed); the server still enforces eligibility on save.
+    eligibility?: ReviewEligibility | null;
+  }
   | { status: "error"; viewer: ReviewViewer; sort: ReviewSort; message: string };
 export type SaveReviewResult = { ok: true; review: OwnReview } | { ok: false; errors?: ReviewErrors; message: string };
 export type ActionResult = { ok: true } | { ok: false; message: string };
@@ -41,7 +46,10 @@ async function session(): Promise<Session> {
   }
 }
 
-function message(kind: FailureKind | "partial", action: "read" | "save" | "delete" | "vote"): string {
+const purchaseRequired = "Only customers who bought this product can review it. Reviews open once your payment is confirmed.";
+
+function message(kind: FailureKind | "partial", action: "read" | "save" | "delete" | "vote", codes?: string[]): string {
+  if (codes?.includes("REVIEW_PURCHASE_REQUIRED")) return purchaseRequired;
   if (kind === "unauthenticated") return "Your session has expired. Sign in again to continue.";
   if (kind === "forbidden") {
     return action === "vote" ? "You can't mark your own review as helpful." : "Your account can't do this.";
@@ -78,7 +86,8 @@ export async function loadReviews(productIdInput: string, sortInput: string, pag
   }
   // A failed own-review read must not hide the public list; the form then starts empty.
   const mine = own && own.result.status === "success" ? own.result.data.myReview : null;
-  return { status: "ok", viewer: current.viewer, sort, page: list.result.data.productReviews, mine };
+  const eligibility = own && own.result.status === "success" ? own.result.data.myReviewEligibility : null;
+  return { status: "ok", viewer: current.viewer, sort, page: list.result.data.productReviews, mine, eligibility };
 }
 
 export async function saveReview(productIdInput: string, input: { stars: number; title: string; body: string }): Promise<SaveReviewResult> {
@@ -91,7 +100,9 @@ export async function saveReview(productIdInput: string, input: { stars: number;
     { kind: "authenticated", accessToken: current.accessToken });
   if (result.status !== "success") {
     console.error("Review save failed:", result.status === "failure" ? result.error.kind : "partial");
-    return { ok: false, message: message(result.status === "failure" ? result.error.kind : "partial", "save") };
+    return result.status === "failure" ?
+      { ok: false, message: message(result.error.kind, "save", result.error.codes) } :
+      { ok: false, message: message("partial", "save") };
   }
   return { ok: true, review: result.data.upsertMyReview };
 }
