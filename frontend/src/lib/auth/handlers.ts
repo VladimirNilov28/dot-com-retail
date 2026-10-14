@@ -16,6 +16,7 @@ import { assertBrowserNavigation, assertCsrf, authBoundary, authHeaders, bounded
   clearBrowserCookies, redirectResponse, setBrowserCookie } from "./http";
 import { cancelLoginAttempt } from "./attempt";
 import { clientAddress } from "@/lib/graphql/client-address";
+import { staffRoles } from "@/lib/admin/policy";
 import { TokenBuckets } from "@/lib/rate-limit/token-bucket";
 
 function flowRoute(kind: FormKind): string {
@@ -330,7 +331,8 @@ export async function handleAuth(request: NextRequest, action: string): Promise<
       }
       const result = await authenticatedState(browserCookie(request, true));
       return NextResponse.json({
-        kind: "authenticated", user: { id: result.user.id, username: result.user.username }, csrf: result.state.csrf,
+        kind: "authenticated", user: { id: result.user.id, username: result.user.username, staff: staffRoles.has(result.user.role) },
+        csrf: result.state.csrf,
       }, { headers: authHeaders });
     }
     if (request.method === "GET" && request.headers.get("host") !== new URL(authConfig().origin).host) {

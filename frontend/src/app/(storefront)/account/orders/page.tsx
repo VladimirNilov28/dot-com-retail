@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AccountHeading } from "@/components/account/account-gate";
+import { Notice } from "@/components/account/notice";
 import { AuthProblem } from "@/components/auth-page";
 import { OrderFilters, OrderList, Pagination } from "@/components/orders/order-view";
 import { myOrdersQuery, type OrderPage } from "@/lib/orders/documents";
@@ -34,7 +35,7 @@ export default async function AccountOrders({ searchParams }: { searchParams: Pr
     <div className="account-main">
       <AccountHeading title="Your orders" description="Track deliveries, cancel eligible orders and request refunds." />
       <OrderFilters base={base} search={search} />
-      {search.error ? <p role="alert" className="account-notice" data-tone="error">{search.error}</p> : null}
+      {search.error ? <Notice tone="error">{search.error}</Notice> : null}
       {!result ? (
         <div role="alert" className="account-card">
           <p>Your orders could not be loaded right now.</p>

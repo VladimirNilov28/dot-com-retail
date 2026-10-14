@@ -1,7 +1,7 @@
 "use client";
 
 import { Button, Drawer, Popover } from "@heroui/react";
-import { ChevronDown, Grid2X2, Menu, Search, ShoppingCart, UserRound, X } from "lucide-react";
+import { ChevronDown, Grid2X2, Menu, Search, ShieldCheck, ShoppingCart, UserRound, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
@@ -210,6 +210,11 @@ export function StoreNavigation({
             )}
             {status ? <p className={catalog ? "mb-3 text-sm text-muted" : "my-3 text-sm text-muted"}>{status}</p> : null}
             <div className={catalog ? "store-category-entry" : undefined}>{catalog ? allProductsLink() : navigationLink(destination)}</div>
+            {!catalog && account.kind === "authenticated" && account.staff ? (
+              <Link prefetch={false} href="/admin" className="store-nav-link mt-1" onClick={() => setOverlay(null)}>
+                <ShieldCheck className="store-icon" size={20} strokeWidth={2} aria-hidden="true" focusable="false" />Admin console
+              </Link>
+            ) : null}
             {!catalog && account.kind === "authenticated" ? <div className="mt-3"><LogoutForm csrf={account.csrf} /></div> : null}
             {!catalog && (account.kind === "anonymous" || account.kind === "expired") ? <div className="mt-3 grid gap-2">
               <a className="store-cta" href={`/login?returnTo=${encodeURIComponent(returnTo)}`} onClick={() => setOverlay(null)}>Sign in</a>
@@ -263,6 +268,11 @@ export function StoreNavigation({
                 <Drawer.Body className="store-drawer-body">
                   <nav aria-label="Primary" className="store-mobile-panel">
                     {destinations.filter((_, index) => index !== CATALOG).map((destination) => navigationLink(destination))}
+                    {account.kind === "authenticated" && account.staff ? (
+                      <Link prefetch={false} href="/admin" className="store-nav-link" onClick={() => setOverlay(null)}>
+                        <ShieldCheck className="store-icon" size={20} strokeWidth={2} aria-hidden="true" focusable="false" />Admin console
+                      </Link>
+                    ) : null}
                   </nav>
                   {categoryStatus()
                     ? <p className="mt-6 mb-2 text-sm text-muted">{categoryStatus()}</p>

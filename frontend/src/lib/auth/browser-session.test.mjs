@@ -15,6 +15,10 @@ test("anonymous, completed login, expired state and real outages remain distinct
     [Response.json({ kind: "anonymous" }), { kind: "anonymous" }],
     [Response.json({ kind: "authenticated", user: { username: "fixture" }, csrf: "a".repeat(43) }),
       { kind: "authenticated", username: "fixture", csrf: "a".repeat(43) }],
+    [Response.json({ kind: "authenticated", user: { username: "staff", staff: true }, csrf: "a".repeat(43) }),
+      { kind: "authenticated", username: "staff", csrf: "a".repeat(43), staff: true }],
+    [Response.json({ kind: "authenticated", user: { username: "fixture", staff: "yes" }, csrf: "a".repeat(43) }),
+      { kind: "authenticated", username: "fixture", csrf: "a".repeat(43) }],
     [Response.json({ error: "expired" }, { status: 401 }), { kind: "expired" }],
     [Response.json({ error: "unavailable" }, { status: 503 }), { kind: "unavailable" }],
   ]) expect(await loadHeaderAccount(signal, async () => response)).toEqual(expected);

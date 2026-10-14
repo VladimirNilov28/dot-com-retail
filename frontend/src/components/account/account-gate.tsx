@@ -12,9 +12,11 @@ export type AccountContext = { view: AccountView; settings?: SecuritySettings; q
 
 export function AccountHeading({ title, description }: { title: string; description?: string }) {
   return (
-    <header className="account-heading">
-      <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{title}</h1>
-      {description ? <p className="text-muted">{description}</p> : null}
+    <header className="admin-page-header">
+      <div className="admin-page-heading">
+        <h1>{title}</h1>
+        {description ? <p className="admin-page-description">{description}</p> : null}
+      </div>
     </header>
   );
 }
@@ -24,7 +26,7 @@ function SignInPrompt({ section, title }: { section: string; title: string }) {
     <div className="account-main">
       <AccountHeading title={title} description="Sign in to manage your ByteCore account." />
       { }
-      <a className="store-cta justify-self-start" href={`/login?returnTo=${encodeURIComponent(section)}`}>Sign in</a>
+      <a className="store-cta justify-self-start" data-variant="primary" href={`/login?returnTo=${encodeURIComponent(section)}`}>Sign in</a>
     </div>
   );
 }
@@ -54,8 +56,11 @@ export async function accountContext(section: AccountSection, title: string, sea
     const code = error instanceof AuthError ? error.code : "unavailable";
     if (code === "forbidden") return { element: (
       <div className="account-main">
-        <AccountHeading title={title} description="Staff authenticator setup and verification live in the admin area." />
-        <a className="store-cta justify-self-start" href="/admin/security">Open authenticator setup</a>
+        <AccountHeading title={title} description="Staff accounts are managed in the admin console, including authenticator setup and verification." />
+        <div className="flex flex-wrap gap-2">
+          <a className="store-cta" data-variant="primary" href="/admin">Open admin console</a>
+          <a className="store-cta" href="/admin/security">Authenticator setup</a>
+        </div>
       </div>
     ) };
     if (code === "reauthentication_required") return { element: (

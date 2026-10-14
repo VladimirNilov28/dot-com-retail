@@ -1066,3 +1066,17 @@
 @layer components {
   .admin-table-wrap, .admin-nav { position: relative; }
 }
+
+@layer components {
+  .account-console .account-avatar { width: 2.75rem; height: 2.75rem; font-size: 1.125rem; }
+  .account-shortcuts { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: 0.75rem; }
+  .account-shortcut { display: flex; align-items: flex-start; gap: 0.75rem; padding: 1rem; border: 1px solid var(--border); border-radius: var(--admin-radius); background: var(--surface); box-shadow: var(--admin-shadow); color: var(--foreground); transition: border-color 150ms, transform 150ms; }
+  .account-shortcut > svg { flex-shrink: 0; color: var(--accent); margin-top: 0.125rem; }
+  .account-shortcut:hover { border-color: var(--accent); }
+  .account-shortcut:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .account-console .account-staff { border-color: color-mix(in oklab, var(--accent) 40%, var(--border)); }
+  .account-staff-icon { flex-shrink: 0; color: var(--accent); margin-top: 0.125rem; }
+}
+@layer components {
+  .admin-shell .account-summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+}

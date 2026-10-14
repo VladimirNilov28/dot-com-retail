@@ -1,6 +1,13 @@
+import { CircleAlert, CircleCheck, Info } from "lucide-react";
+
+const icons = { success: CircleCheck, error: CircleAlert, info: Info };
+
 export function Notice({ tone, children }: { tone: "success" | "error" | "info"; children: React.ReactNode }) {
+  const Icon = icons[tone];
   return (
-    <p role={tone === "error" ? "alert" : "status"} className="account-notice" data-tone={tone}>{children}</p>
+    <p role={tone === "error" ? "alert" : "status"} className="admin-alert" data-tone={tone === "error" ? "danger" : tone}>
+      <Icon size={18} aria-hidden="true" /><span>{children}</span>
+    </p>
   );
 }
 

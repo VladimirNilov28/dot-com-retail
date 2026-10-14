@@ -1,7 +1,7 @@
 import { safeReturnTo } from "./model";
 
 export type HeaderAccount = { kind: "checking" | "anonymous" | "expired" | "unavailable" } |
-  { kind: "authenticated"; username: string; csrf: string };
+  { kind: "authenticated"; username: string; csrf: string; staff?: true };
 
 export function headerReturnTo(pathname: string, search: string): string {
   const parameters = new URLSearchParams(search);
@@ -31,7 +31,9 @@ export async function loadHeaderAccount(signal: AbortSignal, fetcher: typeof fet
   if ("kind" in body && body.kind === "authenticated" && "user" in body && body.user &&
       typeof body.user === "object" && "username" in body.user && typeof body.user.username === "string" &&
       "csrf" in body && typeof body.csrf === "string" && /^[A-Za-z0-9_-]{43}$/.test(body.csrf)) {
-    return { kind: "authenticated", username: body.user.username, csrf: body.csrf };
+    // `staff` only decides whether to show the admin link; the admin area re-checks role and MFA.
+    const staff = "staff" in body.user && body.user.staff === true;
+    return { kind: "authenticated", username: body.user.username, csrf: body.csrf, ...(staff ? { staff: true as const } : {}) };
   }
   throw new TypeError("Invalid account response");
 }
