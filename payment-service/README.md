@@ -370,6 +370,17 @@ GOMAXPROCS=2 go test -p 2 ./internal/kafka -run '^TestRequestConsumer'
 # lost gateway response, Kafka acknowledgment failure and concurrent duplicates
 GOMAXPROCS=2 go test -race -p 2 ./internal/kafka -run '^TestRequestConsumerProviderIdempotency$'
 
+# Decline vs unresolved mapping (unit) and per-attempt replay dedupe (real Postgres)
+go test ./internal/stripehttp -run 'TestClassify|TestAttemptID|TestDeclinedAttempts'
+
+# Opt-in live Stripe TEST-mode check: confirms disposable PaymentIntents (no
+# order/payment metadata, so webhooks for them are rejected) with
+# pm_card_chargeDeclined{InsufficientFunds,ExpiredCard,IncorrectCvc,ProcessingError}
+# and pm_card_visa, then retries each decline on the same intent. Refuses
+# non-sk_test_ keys; never logs the key.
+STRIPE_SANDBOX_LIVE_TEST=1 STRIPE_SECRET_KEY=sk_test_... \
+  go test -count=1 -v ./internal/stripehttp -run TestStripeSandboxDeclineMapping
+
 # Full refund/runtime-ledger, independent consumer offsets, finality and migration upgrade
 go test -race ./internal/events ./internal/store ./internal/kafka \
   -run 'TestRefund|TestPaymentSucceededLegacy|TestDurableProviderRefundLedger|TestIndependentRefundConsumer'
