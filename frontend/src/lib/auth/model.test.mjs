@@ -69,6 +69,12 @@ describe("storefront authentication return contract", () => {
     expect(() => safeReturnTo(route)).toThrow(AuthError);
   });
 
+  test("accepts staff console return paths for post-MFA navigation", () => {
+    for (const route of ["/admin", "/admin/security", "/admin/products", "/admin/orders/11111111-1111-4111-8111-111111111111"]) {
+      expect(safeReturnTo(route)).toBe(route);
+    }
+  });
+
   test("defaults only an absent requested route", () => {
     expect(safeReturnTo(undefined)).toBe("/");
     expect(() => safeReturnTo([])).toThrow(AuthError);
