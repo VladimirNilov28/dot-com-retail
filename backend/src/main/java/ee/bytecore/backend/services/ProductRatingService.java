@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import ee.bytecore.backend.entities.product.Product;
+import ee.bytecore.backend.exceptions.ReviewPurchaseRequiredException;
 import ee.bytecore.backend.repositories.product.ProductRatingRepository;
 import ee.bytecore.backend.repositories.product.ProductRatingRepository.ReviewOwnership;
 import ee.bytecore.backend.repositories.product.ProductRepository;
@@ -20,6 +21,7 @@ import ee.bytecore.backend.repositories.user.UserRepository;
 import ee.bytecore.backend.services.audit.AuditService;
 import ee.bytecore.backend.services.catalog.SearchPageInfo;
 import ee.bytecore.backend.services.review.RatingSummary;
+import ee.bytecore.backend.services.review.ReviewEligibility;
 import ee.bytecore.backend.services.review.ReviewPage;
 import ee.bytecore.backend.services.review.ReviewSortOption;
 
@@ -29,6 +31,9 @@ import jakarta.persistence.EntityNotFoundException;
  * Star ratings and written reviews share one caller-owned row per user/product.
  * Reviews are post-moderated: visible immediately, staff may hide/restore them.
  * HIDDEN rows are excluded from public listings and from every product aggregate.
+ * Creating a rating or written review requires a qualifying purchase
+ * ({@link ProductRatingRepository#hasQualifyingPurchase}); editing the caller's existing
+ * rating or written review does not, so pre-policy reviews stay editable and visible.
  */
 @Service
 public class ProductRatingService {
@@ -67,6 +72,9 @@ public class ProductRatingService {
         validateStars(stars);
         requireActive(currentUserId);
         Product product = requireProduct(productId);
+        if (ratings.findOwn(productId, currentUserId).isEmpty()) {
+            requirePurchase(currentUserId, productId);
+        }
         ratings.submit(product, currentUserId, stars);
         return product;
     }
@@ -81,6 +89,9 @@ public class ProductRatingService {
         String cleanBody = plainText(body, "Review text", BODY_MIN, BODY_MAX, true);
         requireActive(currentUserId);
         requireProduct(productId);
+        if (!hasWrittenReview(currentUserId, productId)) {
+            requirePurchase(currentUserId, productId);
+        }
         ratings.upsertReview(productId, currentUserId, stars, cleanTitle, cleanBody);
         return ratings.findOwn(productId, currentUserId).orElseThrow();
     }
@@ -100,6 +111,23 @@ public class ProductRatingService {
             throw new AccessDeniedException("Active account is required");
         }
         return ratings.findOwn(productId, currentUserId);
+    }
+
+    /** Drives the storefront form: an existing written review can always be edited. */
+    @Transactional(readOnly = true)
+    public ReviewEligibility eligibility(Long currentUserId, long productId) {
+        if (currentUserId == null) {
+            throw new AccessDeniedException("Active account is required");
+        }
+        if (!products.existsById(productId)) {
+            throw new EntityNotFoundException("Product with id " + productId + " not found");
+        }
+        if (hasWrittenReview(currentUserId, productId)) {
+            return new ReviewEligibility(true, true, null);
+        }
+        return ratings.hasQualifyingPurchase(currentUserId, productId)
+                ? new ReviewEligibility(true, false, null)
+                : new ReviewEligibility(false, false, ReviewEligibility.PURCHASE_REQUIRED);
     }
 
     @Transactional
@@ -207,6 +235,16 @@ public class ProductRatingService {
             throw notFound(reviewId);
         }
         return review;
+    }
+
+    private boolean hasWrittenReview(long userId, long productId) {
+        return ratings.findOwn(productId, userId).map(row -> row.body() != null).orElse(false);
+    }
+
+    private void requirePurchase(long userId, long productId) {
+        if (!ratings.hasQualifyingPurchase(userId, productId)) {
+            throw new ReviewPurchaseRequiredException();
+        }
     }
 
     private void requireActive(Long currentUserId) {

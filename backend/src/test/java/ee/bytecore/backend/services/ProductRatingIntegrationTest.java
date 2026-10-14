@@ -71,6 +71,7 @@ class ProductRatingIntegrationTest {
 
     @AfterEach
     void cleanFixtures() {
+        PurchaseFixture.cleanup(jdbc, userIds);
         productIds.forEach(id -> jdbc.update("DELETE FROM products WHERE id = ?", id));
         userIds.forEach(id -> jdbc.update("DELETE FROM users WHERE id = ?", id));
     }
@@ -78,8 +79,8 @@ class ProductRatingIntegrationTest {
     @Test
     void shouldPersistRatingsAndUpdateOnlyTheCurrentOwnersRowTest() {
         Product product = product();
-        Long alice = user();
-        Long bob = user();
+        Long alice = buyer(product);
+        Long bob = buyer(product);
         assertAggregate(product.getId(), null, 0);
         assertThat(ratings.rate(alice, product.getId(), 5).getAverageRating()).isEqualTo(5.0);
         ratings.rate(bob, product.getId(), 3);
@@ -110,7 +111,7 @@ class ProductRatingIntegrationTest {
     @Test
     void shouldEnforceDatabaseRangeUniquenessAndForeignKeysTest() {
         Product product = product();
-        Long owner = user();
+        Long owner = buyer(product);
         assertThatThrownBy(() -> jdbc.update(
                         "INSERT INTO product_ratings(product_id,user_id,stars) VALUES (?,?,0)", product.getId(), owner))
                 .isInstanceOf(DataIntegrityViolationException.class);
@@ -145,7 +146,7 @@ class ProductRatingIntegrationTest {
     void shouldKeepAggregatesCorrectForConcurrentDistinctOwnersAndUpdatesTest() throws Exception {
         Product product = product();
         List<Long> owners = new ArrayList<>();
-        for (int i = 0; i < 8; i++) owners.add(user());
+        for (int i = 0; i < 8; i++) owners.add(buyer(product));
         concurrentRatings(product.getId(), owners, false);
         assertAggregate(product.getId(), 2.625, 8);
         concurrentRatings(product.getId(), owners, true);
@@ -158,7 +159,7 @@ class ProductRatingIntegrationTest {
     @Test
     void shouldDeduplicateConcurrentSubmissionsByTheSameOwnerTest() throws Exception {
         Product product = product();
-        Long owner = user();
+        Long owner = buyer(product);
         concurrentRatings(product.getId(), java.util.Collections.nCopies(8, owner), false);
         Product result = products.findById(product.getId()).orElseThrow();
         assertThat(result.getRatingCount()).isEqualTo(1);
@@ -173,15 +174,17 @@ class ProductRatingIntegrationTest {
     @Test
     void shouldRecomputeAfterAccountRatingRemovalAndCascadeProductDeletionTest() {
         Product product = product();
-        Long first = user();
-        Long second = user();
+        Long first = buyer(product);
+        Long second = buyer(product);
         ratings.rate(first, product.getId(), 5);
         ratings.rate(second, product.getId(), 1);
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> users.deleteRatings(first));
         assertAggregate(product.getId(), 1.0, 1);
+        PurchaseFixture.cleanup(jdbc, List.of(second));
         jdbc.update("DELETE FROM users WHERE id = ?", second);
         assertAggregate(product.getId(), null, 0);
         ratings.rate(first, product.getId(), 3);
+        PurchaseFixture.cleanup(jdbc, List.of(first));
         products.deleteById(product.getId());
         assertThat(jdbc.queryForObject(
                         "SELECT count(*) FROM product_ratings WHERE product_id = ?", Integer.class, product.getId()))
@@ -196,6 +199,10 @@ class ProductRatingIntegrationTest {
         Product low = product();
         Long owner = user();
         Long anotherOwner = user();
+        for (Product bought : List.of(firstTie, secondTie, low)) {
+            PurchaseFixture.paid(jdbc, owner, bought.getId());
+            PurchaseFixture.paid(jdbc, anotherOwner, bought.getId());
+        }
         ratings.rate(owner, firstTie.getId(), 5);
         ratings.rate(anotherOwner, firstTie.getId(), 3);
         ratings.rate(owner, secondTie.getId(), 4);
@@ -227,12 +234,15 @@ class ProductRatingIntegrationTest {
         Product cheap = product();
         Product expensive = product();
         Long owner = user();
-        ratings.rate(owner, cheap.getId(), 1);
-        ratings.rate(owner, expensive.getId(), 5);
         variants.create(cheap.getId(), prefix + "-cheap", new BigDecimal("10"), Map.of("color", "blue"), null, null);
         variants.create(
                 expensive.getId(), prefix + "-expensive", new BigDecimal("40"), Map.of("color", "blue"), null, null);
         variants.create(expensive.getId(), prefix + "-red", new BigDecimal("5"), Map.of("color", "red"), null, null);
+        // Purchases reuse each product's first variant, so the price facets stay unchanged.
+        PurchaseFixture.paid(jdbc, owner, cheap.getId());
+        PurchaseFixture.paid(jdbc, owner, expensive.getId());
+        ratings.rate(owner, cheap.getId(), 1);
+        ratings.rate(owner, expensive.getId(), 5);
         var asc = search.search(filtered(ProductSortOption.PRICE_ASC));
         var desc = search.search(filtered(ProductSortOption.PRICE_DESC));
         var rated = search.search(filtered(ProductSortOption.RATING_DESC));
@@ -282,6 +292,12 @@ class ProductRatingIntegrationTest {
         Product result = products.create(name, name, null, null);
         productIds.add(result.getId());
         return result;
+    }
+
+    private Long buyer(Product product) {
+        Long id = user();
+        PurchaseFixture.paid(jdbc, id, product.getId());
+        return id;
     }
 
     private Long user() {

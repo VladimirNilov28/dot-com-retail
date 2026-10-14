@@ -9,6 +9,7 @@ import ee.bytecore.backend.services.review.ReviewSortOption;
 
 import com.netflix.dgs.codegen.generated.types.ProductReview;
 import com.netflix.dgs.codegen.generated.types.ProductReviewPage;
+import com.netflix.dgs.codegen.generated.types.ReviewEligibility;
 import com.netflix.dgs.codegen.generated.types.ReviewSort;
 import com.netflix.graphql.dgs.DgsComponent;
 import com.netflix.graphql.dgs.DgsMutation;
@@ -52,6 +53,13 @@ public class ProductReviewDataFetcher {
         return reviews.myReview(viewer, parseId(productId, "product"))
                 .map(row -> ReviewMapper.toGraphQlType(row, viewer))
                 .orElse(null);
+    }
+
+    @DgsQuery
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).RATING_WRITE)")
+    public ReviewEligibility myReviewEligibility(@InputArgument String productId) {
+        return ReviewMapper.toGraphQlType(
+                reviews.eligibility(currentUser.getCurrentUserId(), parseId(productId, "product")));
     }
 
     @DgsMutation

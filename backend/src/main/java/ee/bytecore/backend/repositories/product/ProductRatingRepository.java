@@ -19,6 +19,23 @@ import jakarta.persistence.EntityManager;
 
 @Repository
 public class ProductRatingRepository {
+    /**
+     * A qualifying purchase of product :productId by user :userId: an order owned by the user,
+     * containing a variant of the product, in PAID/PROCESSING/SHIPPING/COMPLETED with a SUCCEEDED
+     * payment and no SUCCEEDED refund. Unpaid, declined and cancelled orders never qualify.
+     */
+    static final String QUALIFYING_PURCHASE =
+            """
+            EXISTS (SELECT 1 FROM orders o
+                    JOIN order_items oi ON oi.order_id = o.id
+                    JOIN product_variants pv ON pv.id = oi.product_variant_id
+                    WHERE o.user_id = %s AND pv.product_id = %s
+                      AND o.status IN ('PAID', 'PROCESSING', 'SHIPPING', 'COMPLETED')
+                      AND o.payment_status = 'SUCCEEDED'
+                      AND NOT EXISTS (SELECT 1 FROM order_refunds rf
+                                      WHERE rf.order_id = o.id AND rf.status = 'SUCCEEDED'))
+            """;
+
     // author_name is the public handle; a username that looks like an e-mail address is never published.
     private static final String SELECT_REVIEW =
             """
@@ -28,11 +45,13 @@ public class ProductRatingRepository {
                    (SELECT count(*) FROM review_votes v WHERE v.review_id = r.id) AS helpful_count,
                    EXISTS (SELECT 1 FROM review_votes v
                            WHERE v.review_id = r.id AND v.user_id = CAST(:viewer AS bigint)) AS viewer_voted,
+                   %s AS verified_purchase,
                    r.created_at, r.updated_at, r.moderation_reason, r.moderated_at
             FROM product_ratings r
             JOIN products p ON p.id = r.product_id
             JOIN users u ON u.id = r.user_id
-            """;
+            """
+                    .formatted(QUALIFYING_PURCHASE.formatted("r.user_id", "r.product_id"));
 
     private final EntityManager entityManager;
     private final NamedParameterJdbcTemplate jdbc;
@@ -77,6 +96,13 @@ public class ProductRatingRepository {
                         .addValue("body", body),
                 Long.class);
         return id == null ? 0L : id;
+    }
+
+    public boolean hasQualifyingPurchase(long userId, long productId) {
+        return Boolean.TRUE.equals(jdbc.queryForObject(
+                "SELECT " + QUALIFYING_PURCHASE.formatted(":userId", ":productId"),
+                Map.of("userId", userId, "productId", productId),
+                Boolean.class));
     }
 
     public boolean deleteOwn(long productId, long userId) {
@@ -241,6 +267,7 @@ public class ProductRatingRepository {
                 rs.getString("status"),
                 rs.getLong("helpful_count"),
                 rs.getBoolean("viewer_voted"),
+                rs.getBoolean("verified_purchase"),
                 instant(rs.getTimestamp("created_at")),
                 instant(rs.getTimestamp("updated_at")),
                 rs.getString("moderation_reason"),

@@ -543,6 +543,7 @@ type ProductReview {
   status: ReviewStatus!
   title: String
   updatedAt: Instant!
+  verifiedPurchase: Boolean!
   viewerHasVoted: Boolean!
   viewerIsAuthor: Boolean!
 }
@@ -618,6 +619,7 @@ type Query {
   myCart: Cart!
   myOrders(filter: OrderFilter, page: Int = 0, size: Int = 20): OrderPage!
   myReview(productId: ID!): ProductReview
+  myReviewEligibility(productId: ID!): ReviewEligibility!
   myWishlist: Wishlist!
   order(id: ID, publicId: UUID): Order
   product(id: ID, slug: String): Product
@@ -635,6 +637,12 @@ type Query {
 type RatingDistributionBucket {
   count: Int!
   stars: Int!
+}
+
+type ReviewEligibility {
+  canReview: Boolean!
+  hasReview: Boolean!
+  reason: ReviewIneligibleReason
 }
 
 type SearchPageInfo {
@@ -1051,6 +1059,10 @@ enum ProductSort {
   PRICE_DESC
   RATING_DESC
   RELEVANCE
+}
+
+enum ReviewIneligibleReason {
+  PURCHASE_REQUIRED
 }
 
 enum ReviewSort {
