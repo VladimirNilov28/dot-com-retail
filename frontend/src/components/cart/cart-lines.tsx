@@ -16,7 +16,7 @@ export function CartLines({ lines, onNavigate }: { lines: CartLine[]; onNavigate
         const ceiling = line.limit !== null && line.limit < 10 ? Math.max(line.limit, 1) : maxQuantity;
         return (
           <li key={line.id} className="cart-line">
-            <div className="cart-thumb"><ProductImage image={line.image} /></div>
+            <div className="cart-thumb"><ProductImage image={line.image} sizes="4.5rem" /></div>
             <div className="cart-line-body">
               <Link href={variantHref(line.slug, line.variantId)} className="store-link cart-line-name" onClick={onNavigate}>{line.name}</Link>
               {line.options ? <p className="text-sm text-muted">{line.options}</p> : null}

@@ -8,8 +8,14 @@ const base = { id: "1", name: "Card", slug: "card", averageRating: null, ratingC
 const html = (product) => renderToStaticMarkup(createElement(ProductCard, { product }));
 const image = { url: "/media/products/fdb0541c-1203-4a01-ad5e-ee900df3734e.png", altText: "Front", width: 640, height: 480 };
 
-test("card shows the first available image", () => {
-  expect(html({ ...base, images: [image] })).toContain('src="/media/products/fdb0541c-1203-4a01-ad5e-ee900df3734e.png"');
+test("card shows the first available image from the thumbnail variant with a medium 2x candidate", () => {
+  const markup = html({ ...base, images: [image] });
+  expect(markup).toContain('src="/media/products/fdb0541c-1203-4a01-ad5e-ee900df3734e.png?size=thumb"');
+  expect(markup).toContain('srcSet="/media/products/fdb0541c-1203-4a01-ad5e-ee900df3734e.png?size=thumb 320w, ' +
+    '/media/products/fdb0541c-1203-4a01-ad5e-ee900df3734e.png?size=medium 640w"');
+  expect(markup).toContain('sizes="(min-width: 80rem) 22rem, (min-width: 40rem) 33vw, 50vw"');
+  expect(markup).toContain('alt="Front"');
+  expect(markup).toContain('loading="lazy"');
 });
 test("empty or missing (stale cached) media renders the neutral fallback without crashing", () => {
   for (const images of [[], undefined]) {
