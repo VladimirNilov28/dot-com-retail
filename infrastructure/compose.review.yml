@@ -1,0 +1,207 @@
+# Reviewer stack override: HTTPS everywhere, containerized storefront, no
+# host-published ports except the Caddy TLS edge. Opt-in only; the dev stack
+# (`make dev`, compose.yml alone) is unaffected. Start it with
+# scripts/review-up.sh (`make review`), which runs:
+#
+#   docker compose -p bytecore-review -f infrastructure/compose.yml \
+#     -f infrastructure/compose.review.yml --env-file .env.review up -d --build --wait
+#
+# Public origins (same host and port inside and outside Docker; containers
+# resolve REVIEW_HOST to the Caddy edge through a network alias):
+#   storefront  https://${REVIEW_HOST}:${REVIEW_STOREFRONT_PORT}  (default 8443)
+#   kratos      https://${REVIEW_HOST}:${REVIEW_KRATOS_PORT}      (default 8433)
+#   hydra       https://${REVIEW_HOST}:${REVIEW_HYDRA_PORT}       (default 8444)
+#   bridge      https://${REVIEW_HOST}:${REVIEW_BRIDGE_PORT}      (default 8446)
+#   mailpit     https://${REVIEW_HOST}:${REVIEW_MAILPIT_PORT}     (default 8425)
+# See docs/review-setup.md.
+
+x-review-ca: &review-ca ./review/certs/ca.crt:/review-certs/ca.crt:ro
+
+services:
+  postgres:
+    container_name: !reset null
+    ports: !reset []
+    # TLS-only for every network client (see review/pg_hba.conf).
+    entrypoint: ["/review/postgres-tls-entrypoint.sh"]
+    volumes:
+      - ./review/postgres-tls-entrypoint.sh:/review/postgres-tls-entrypoint.sh:ro
+      - ./review/pg_hba.conf:/etc/postgresql/review/pg_hba.conf:ro
+      - ./review/certs/postgres.crt:/review-certs/postgres.crt:ro
+      - ./review/certs/postgres.key:/review-certs/postgres.key:ro
+
+  hydra-migrate:
+    container_name: !reset null
+    volumes:
+      - *review-ca
+
+  hydra:
+    container_name: !reset null
+    ports: !reset []
+    environment:
+      URLS_SELF_ISSUER: https://${REVIEW_HOST:-bytecore.localhost}:${REVIEW_HYDRA_PORT:-8444}
+      URLS_LOGIN: https://${REVIEW_HOST:-bytecore.localhost}:${REVIEW_BRIDGE_PORT:-8446}/login
+      URLS_CONSENT: https://${REVIEW_HOST:-bytecore.localhost}:${REVIEW_BRIDGE_PORT:-8446}/consent
+      URLS_LOGOUT: https://${REVIEW_HOST:-bytecore.localhost}:${REVIEW_STOREFRONT_PORT:-8443}/account
+      # --dev makes Hydra emit SameSite=None cookies without Secure, which
+      # browsers drop; all review origins are same-site, so Lax is enough.
+      SERVE_COOKIES_SAME_SITE_MODE: Lax
+      SERVE_COOKIES_SECURE: "true"
+    volumes:
+      - *review-ca
+
+  hydra-public:
+    ports: !reset []
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:4444/health/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  kratos-migrate:
+    container_name: !reset null
+    volumes:
+      - *review-ca
+
+  kratos:
+    container_name: !reset null
+    ports: !reset []
+    environment:
+      PUBLIC_STOREFRONT_ORIGIN: https://${REVIEW_HOST:-bytecore.localhost}:${REVIEW_STOREFRONT_PORT:-8443}
+      PUBLIC_KRATOS_ORIGIN: https://${REVIEW_HOST:-bytecore.localhost}:${REVIEW_KRATOS_PORT:-8433}
+      PUBLIC_BRIDGE_ORIGIN: https://${REVIEW_HOST:-bytecore.localhost}:${REVIEW_BRIDGE_PORT:-8446}
+      GOOGLE_CALLBACK_BASE_URL: https://${REVIEW_HOST:-bytecore.localhost}:${REVIEW_STOREFRONT_PORT:-8443}
+      # Production-like password policy (compose.yml disables HIBP for dev only).
+      SELFSERVICE_METHODS_PASSWORD_CONFIG_HAVEIBEENPWNED_ENABLED: "true"
+    volumes:
+      - *review-ca
+
+  mailpit:
+    container_name: !reset null
+    ports: !reset []
+
+  oauth-service:
+    container_name: !reset null
+    ports: !reset []
+    environment:
+      KRATOS_BROWSER_URL: https://${REVIEW_HOST:-bytecore.localhost}:${REVIEW_KRATOS_PORT:-8433}
+      OAUTH_BRIDGE_BROWSER_URL: https://${REVIEW_HOST:-bytecore.localhost}:${REVIEW_BRIDGE_PORT:-8446}
+      BFF_REDIRECT_URI: https://${REVIEW_HOST:-bytecore.localhost}:${REVIEW_STOREFRONT_PORT:-8443}/auth/callback
+    volumes:
+      - *review-ca
+
+  hive-router:
+    container_name: !reset null
+    ports: !reset []
+
+  backend:
+    container_name: !reset null
+    ports: !reset []
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/retail?sslmode=verify-full&sslrootcert=/review-certs/ca.crt
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: https://${REVIEW_HOST:-bytecore.localhost}:${REVIEW_HYDRA_PORT:-8444}
+      CART_GUEST_SECURE: "true"
+      CART_GUEST_ALLOWEDORIGINS_0: https://${REVIEW_HOST:-bytecore.localhost}:${REVIEW_STOREFRONT_PORT:-8443}
+    volumes:
+      - *review-ca
+
+  kafka:
+    container_name: !reset null
+    ports: !reset []
+
+  payment-service:
+    container_name: !reset null
+    ports: !reset []
+    volumes:
+      - *review-ca
+
+  # Next.js storefront + server-side BFF (frontend/Dockerfile).
+  frontend:
+    build:
+      context: ../frontend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+      hive-router:
+        condition: service_started
+      oauth-service:
+        condition: service_healthy
+    environment:
+      HIVE_GRAPHQL_URL: http://hive-router:4000/graphql
+      MEDIA_BACKEND_URL: http://backend:8080
+      STOREFRONT_ORIGIN: https://${REVIEW_HOST:-bytecore.localhost}:${REVIEW_STOREFRONT_PORT:-8443}
+      AUTH_OAUTH_ISSUER: https://${REVIEW_HOST:-bytecore.localhost}:${REVIEW_HYDRA_PORT:-8444}
+      AUTH_KRATOS_URL: https://${REVIEW_HOST:-bytecore.localhost}:${REVIEW_KRATOS_PORT:-8433}
+      AUTH_BRIDGE_URL: https://${REVIEW_HOST:-bytecore.localhost}:${REVIEW_BRIDGE_PORT:-8446}
+      AUTH_DATABASE_URL: postgres://${AUTH_DB_USER:?AUTH_DB_USER is required}:${AUTH_DB_PASSWORD:?AUTH_DB_PASSWORD is required}@postgres:5432/storefront_auth?sslmode=verify-full&sslrootcert=/review-certs/ca.crt
+      AUTH_CLIENT_ID: ${BFF_CLIENT_ID:?BFF_CLIENT_ID is required}
+      AUTH_CLIENT_SECRET: ${BFF_CLIENT_SECRET:?BFF_CLIENT_SECRET is required}
+      AUTH_BRIDGE_SECRET: ${AUTH_BRIDGE_SECRET:?AUTH_BRIDGE_SECRET is required}
+      AUTH_SEAL_KEYS: ${AUTH_SEAL_KEYS:?AUTH_SEAL_KEYS is required}
+      # Server-side calls to the public HTTPS origins go through Caddy.
+      NODE_EXTRA_CA_CERTS: /review-certs/ca.crt
+    volumes:
+      - *review-ca
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+      - /app/.next/cache:rw,noexec,nosuid,size=256m,uid=1000,gid=1000
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+
+  # The only service with published ports: TLS edge for every public origin.
+  caddy:
+    image: caddy:2.10-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+    depends_on:
+      frontend:
+        condition: service_healthy
+      kratos:
+        condition: service_healthy
+      hydra-public:
+        condition: service_healthy
+      oauth-service:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
+      payment-service:
+        condition: service_healthy
+    environment:
+      REVIEW_HOST: ${REVIEW_HOST:-bytecore.localhost}
+      REVIEW_STOREFRONT_PORT: ${REVIEW_STOREFRONT_PORT:-8443}
+      REVIEW_KRATOS_PORT: ${REVIEW_KRATOS_PORT:-8433}
+      REVIEW_HYDRA_PORT: ${REVIEW_HYDRA_PORT:-8444}
+      REVIEW_BRIDGE_PORT: ${REVIEW_BRIDGE_PORT:-8446}
+      REVIEW_MAILPIT_PORT: ${REVIEW_MAILPIT_PORT:-8425}
+    ports:
+      - "${REVIEW_BIND:-127.0.0.1}:${REVIEW_STOREFRONT_PORT:-8443}:${REVIEW_STOREFRONT_PORT:-8443}"
+      - "${REVIEW_BIND:-127.0.0.1}:${REVIEW_KRATOS_PORT:-8433}:${REVIEW_KRATOS_PORT:-8433}"
+      - "${REVIEW_BIND:-127.0.0.1}:${REVIEW_HYDRA_PORT:-8444}:${REVIEW_HYDRA_PORT:-8444}"
+      - "${REVIEW_BIND:-127.0.0.1}:${REVIEW_BRIDGE_PORT:-8446}:${REVIEW_BRIDGE_PORT:-8446}"
+      - "${REVIEW_BIND:-127.0.0.1}:${REVIEW_MAILPIT_PORT:-8425}:${REVIEW_MAILPIT_PORT:-8425}"
+    volumes:
+      - ./review/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./review/certs/server.crt:/certs/server.crt:ro
+      - ./review/certs/server.key:/certs/server.key:ro
+    read_only: true
+    tmpfs:
+      - /data:rw,noexec,nosuid,size=16m
+      - /config:rw,noexec,nosuid,size=16m
+    networks:
+      default:
+        aliases:
+          - ${REVIEW_HOST:-bytecore.localhost}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
+networks:
+  default:
+    # Let Docker pick a free subnet instead of the dev stack's pinned one.
+    ipam: !reset {}

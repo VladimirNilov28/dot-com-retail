@@ -10,7 +10,7 @@ RESET  = \033[0m
 
 .PHONY: dev front-dev dev-clean debug debug-clean test test-unit test-graphql test-integration test-e2e \
 	coverage format format-check build status logs down clean help restart config doctor firewall-check \
-	seed-test-data check-env
+	seed-test-data check-env review review-down
 
 help:
 	@echo "$(CYAN)Available commands:$(RESET)"
@@ -37,6 +37,8 @@ help:
 	@echo "  $(GREEN)make doctor$(RESET)          🩺 diagnose the local dev stack (env, network, ports, health)"
 	@echo "  $(GREEN)make firewall-check$(RESET)  ℹ️ legacy target: no Docker-to-host Spring rule is needed"
 	@echo "  $(GREEN)make seed-test-data$(RESET)  🌱 wipe and repopulate the dev database with test data"
+	@echo "  $(GREEN)make review$(RESET)          🔒 one-command HTTPS reviewer stack in Docker (docs/review-setup.md)"
+	@echo "  $(GREEN)make review-down$(RESET)     🛑 stop the reviewer stack (keeps volumes; scripts/review-down.sh --volumes deletes them)"
 
 check-env:
 	@test -f .env || { echo "$(YELLOW)✗ .env not found — run: cp .env.example .env$(RESET)"; exit 1; }
@@ -133,3 +135,9 @@ firewall-check:
 seed-test-data:
 	@echo "$(CYAN)🌱 seeding dev database with test data...$(RESET)"
 	@$(GRADLE) testData -PdbName=retail -PdbUser=retail -PdbPassword=retail
+
+review:
+	@./scripts/review-up.sh
+
+review-down:
+	@./scripts/review-down.sh
