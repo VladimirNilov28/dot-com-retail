@@ -11,6 +11,7 @@ import {
   type MyReviewQueryVariables,
   type ProductReviewsQuery,
   type ProductReviewsQueryVariables,
+  type ReviewIneligibleReason,
   type ReviewSort,
   type ReviewStatus,
   type UnvoteReviewHelpfulMutation,
@@ -63,6 +64,19 @@ function status(value: unknown): ReviewStatus {
   throw new TypeError("Unknown review status");
 }
 
+function ineligibleReason(value: unknown): ReviewIneligibleReason | null {
+  if (value === null) return null;
+  if (value === "PURCHASE_REQUIRED") return value;
+  throw new TypeError("Unknown review eligibility reason");
+}
+
+function eligibility(value: unknown) {
+  const result = object(value);
+  return {
+    canReview: boolean(result.canReview), hasReview: boolean(result.hasReview), reason: ineligibleReason(result.reason),
+  };
+}
+
 function ownReview(value: unknown) {
   const review = object(value);
   return {
@@ -97,6 +111,7 @@ export const productReviews: Operation<ProductReviewsQuery, ProductReviewsQueryV
           return {
             id: id(review.id), stars: stars(review.stars), title: nullableText(review.title), body: nullableText(review.body),
             authorName: text(review.authorName), helpfulCount: count(review.helpfulCount),
+            verifiedPurchase: boolean(review.verifiedPurchase),
             viewerHasVoted: boolean(review.viewerHasVoted), viewerIsAuthor: boolean(review.viewerIsAuthor),
             createdAt: text(review.createdAt), updatedAt: text(review.updatedAt),
           };
@@ -115,8 +130,9 @@ export const myReview: Operation<MyReviewQuery, MyReviewQueryVariables> = {
   name: "MyReview", source: MyReviewSource, kind: "query", access: "authenticated",
   variables(value) { return { productId: id(variables(value, ["productId"]).productId) }; },
   decode(value) {
-    const review = object(value).myReview;
-    return { myReview: review === null ? null : ownReview(review) };
+    const data = object(value);
+    const review = data.myReview;
+    return { myReview: review === null ? null : ownReview(review), myReviewEligibility: eligibility(data.myReviewEligibility) };
   },
 };
 

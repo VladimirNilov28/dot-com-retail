@@ -294,7 +294,7 @@ mutation MyCartRemove($id: ID!) {
 
 query ProductReviews($productId: ID!, $page: Int, $size: Int, $sort: ReviewSort) {
   productReviews(productId: $productId, page: $page, size: $size, sort: $sort) {
-    items { id stars title body authorName helpfulCount viewerHasVoted viewerIsAuthor createdAt updatedAt }
+    items { id stars title body authorName helpfulCount verifiedPurchase viewerHasVoted viewerIsAuthor createdAt updatedAt }
     pageInfo { page size totalItems totalPages }
     averageRating
     ratingCount
@@ -304,6 +304,7 @@ query ProductReviews($productId: ID!, $page: Int, $size: Int, $sort: ReviewSort)
 
 query MyReview($productId: ID!) {
   myReview(productId: $productId) { id stars title body status createdAt updatedAt }
+  myReviewEligibility(productId: $productId) { canReview hasReview reason }
 }
 
 mutation UpsertMyReview($productId: ID!, $stars: Int!, $title: String!, $body: String!) {

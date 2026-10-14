@@ -68,7 +68,12 @@ export function ProductReviews({ productId, slug, initial }: { productId: string
         </ul>}
       </div>
 
-      {state.viewer === "customer" ? <OwnReviewForm key={state.mine?.id ?? "new"} productId={productId} mine={state.mine}
+      {state.viewer === "customer" && state.eligibility?.canReview === false ? <div className="text-sm" role="note">
+        {state.mine && <p className="text-muted">You rated this product {ratingLabel(state.mine.stars)}.</p>}
+        <p>Only customers who bought this product can write a review. Reviews open once your payment is confirmed;
+          refunded orders don&apos;t count.</p>
+      </div> :
+        state.viewer === "customer" ? <OwnReviewForm key={state.mine?.id ?? "new"} productId={productId} mine={state.mine}
         onChanged={(text) => { setNotice({ tone: "success", text }); refresh(state.sort, 0); }} /> :
         state.viewer === "staff" ? <p className="text-sm text-muted">Reviews are written from customer accounts.</p> :
         <p className="text-sm"><Link href={loginHref} className="store-link">Sign in</Link> to write a review or mark reviews as helpful.</p>}
@@ -100,6 +105,7 @@ export function ProductReviews({ productId, slug, initial }: { productId: string
                 By {review.authorName}{review.viewerIsAuthor ? " (you)" : ""} · <time dateTime={review.createdAt}>{reviewDate(review.createdAt)}</time>
                 {review.updatedAt !== review.createdAt ? " · edited" : ""}
               </p>
+              {review.verifiedPurchase && <p className="text-xs font-semibold">Verified purchase</p>}
               <p className="review-body">{review.body}</p>
               <div className="review-helpful">
                 {state.viewer === "customer" && !review.viewerIsAuthor ?
