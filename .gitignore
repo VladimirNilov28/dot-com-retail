@@ -219,3 +219,6 @@ __pycache__/
 # Uploaded product media from local runs; binaries are never committed
 backend/media-data/
 media-data/
+
+# k6 raw load-test output (summaries are recorded in docs/performance/report.md)
+perf/results/
