@@ -404,8 +404,8 @@ Lookup codes are serially single-use. Email recovery (Mailpit UI `:8025`) is a
 different mechanism and does not authorize bypassing enrolled-user AAL2.
 
 Enrollment does **not** retroactively upgrade/revoke already-issued Hydra refresh
-grants. Revoke the pre-enrollment grant explicitly as shown. Existing JWTs remain
-valid until their normal 30-minute expiry. Refresh/logout behavior is otherwise
+grants. Revoke the pre-enrollment grant explicitly as shown; once revoked, its
+JWTs are rejected by Spring's introspection check (cache window ≤ 10 s). Refresh/logout behavior is otherwise
 unchanged; a cross-system enrollment-revocation hook is out of scope.
 
 - [ ] Normal USER password login succeeds with correct canonical subject/role/scopes.

@@ -38,15 +38,21 @@ Runtime database permissions exclude schema changes; migrations and bounded
 expiry/revocation maintenance are explicit deployment steps. Process-local
 memory is not a production session or replay store.
 
-The Foundation working specification asks for access tokens in memory, rather
-than browser persistent storage. This BFF satisfies the browser-exposure goal:
-no access/refresh tokens enter browser storage or client JavaScript. Its durable
-server store is encrypted PostgreSQL rather than literal memory-only storage.
-That architectural interpretation needs reviewer acceptance and remains
-explicitly Unverified in the submission matrix; we do not move tokens into the
-browser to imitate an example. Hydra's 30-minute access/7-day refresh lifetimes
-meet the supplied 15–60 minute/3–7 day bounds; BFF idle/absolute limits can end a
-browser session sooner.
+**Token storage (reviewer interpretation required).** OAuth access and refresh
+tokens are sealed server-side by the BFF (authenticated encryption, versioned key
+ring) in the PostgreSQL `storefront_auth` database and are used only by the Next
+server. They are never sent to the browser: not in client JavaScript, not in
+`localStorage`/`sessionStorage`/IndexedDB, not in readable cookies — the browser
+holds only an opaque HttpOnly session identifier. The Foundation working
+specification asks for "access tokens in memory"; we interpret that requirement
+as "never in browser persistent storage or reachable from page scripts", which
+this BFF satisfies more strictly than an in-memory SPA token would. The server
+store is encrypted durable PostgreSQL rather than literal process memory (needed
+for multi-process refresh locking and durable revocation). That interpretation
+needs explicit reviewer acceptance and remains marked Unverified in the
+submission matrix; we do not move tokens into the browser to imitate an example.
+Hydra's 30-minute access/7-day refresh lifetimes meet the supplied 15–60
+minute/3–7 day bounds; BFF idle/absolute limits can end a browser session sooner.
 
 Absence of a cookie does not make anonymous browsing depend on auth services.
 An invalid/expired cookie differs from an auth-service outage. Private account
@@ -321,9 +327,11 @@ end the paired Kratos session and revoke the Hydra refresh grant. An upstream
 failure cannot leave BFF access alive or claim provider logout succeeded;
 durable pending revocation supports bounded maintenance/retry.
 
-Spring remains stateless. Already-issued JWTs can remain valid until their
-configured expiry; no global immediate revocation is promised. Role/assurance
-changes require current checks and fresh authorization. Guest cookies retain
+Spring stays session-less but checks revocation on every bearer token (see
+[Token revocation](#token-revocation)): a revoked access JWT is rejected with 401
+within the bounded introspection cache window (10 s by default), not at its
+30-minute expiry. Role changes revoke the user's grants; assurance changes still
+require current checks and fresh authorization. Guest cookies retain
 Path=/graphql and are not repurposed as BFF authentication.
 
 Login, existing-factor challenges, verification and logout use server forms.
@@ -331,6 +339,69 @@ The ALTCHA widget requires JavaScript: no-JS registration explains that
 requirement and retains usable sign-in/store navigation, never a CAPTCHA bypass.
 No cart, checkout, wishlist, social login, profile editor or account dashboard
 is introduced by this package.
+
+## Token revocation
+
+Hydra issues JWT access tokens (30 min) and rotating refresh tokens (168 h).
+Local JWT checks alone would keep a logged-out token usable until expiry, so the
+Spring resource server adds a revocation check that also covers requests sent
+straight to Spring (`:8080`) or Hive, bypassing the BFF:
+
+1. `NimbusJwtDecoder` verifies signature (Hydra JWKS), issuer and expiry exactly
+   as before; role/scope/AAL2 authority mapping in `SecurityConfig` is unchanged.
+2. Only a token that passed those checks is introspected at Hydra's admin API
+   (`POST {hydra.admin-url}/admin/oauth2/introspect`, internal network only;
+   `HydraTokenIntrospector`). It must be `active=true` and its `sub` must equal
+   the JWT `sub`; otherwise the request gets `401 invalid_token`. The same decoder
+   authenticates GraphQL WebSocket `connection_init`.
+3. **Fail closed:** an introspection error, non-2xx response or timeout
+   (`security.token-introspection.timeout`, 2 s) rejects the token with 401;
+   errors are never cached.
+4. **Bounded cache:** results (active and inactive) are cached in an in-process
+   LRU map keyed by the SHA-256 of the token (raw tokens are never stored), at
+   most `cache-max-entries` (10,000) entries, each for `cache-ttl` (10 s; values
+   above 30 s are rejected at startup) and never past the token's own `exp`.
+   **Revocation delay:** a revoked token may be accepted for at most `cache-ttl`
+   after it was last introspected as active, per backend instance.
+
+Configuration: `security.token-introspection.enabled` (env
+`TOKEN_INTROSPECTION_ENABLED`, default `true`, set explicitly in
+`infrastructure/compose.yml`, inherited by the review stack) plus the existing
+`hydra.admin-url` (`HYDRA_ADMIN_URL`). Hydra's admin API has no client
+credentials in this deployment; it is reachable only on the internal Compose
+network (dev publishes it on loopback only). Narrow Spring test slices mock
+`JwtDecoder`, so they are unaffected; the check is covered by
+`HydraTokenIntrospectorTest` and `JwtDecoderConfigurationTest`.
+
+What revokes tokens (verified live against Hydra v26.2.0, see below):
+
+| Event | Revocation | Effect on access JWTs |
+| --- | --- | --- |
+| BFF logout | `revokeGrant` → Hydra `/oauth2/revoke` for that session's refresh token | That grant chain's access tokens become inactive; other devices unaffected |
+| Refresh | Hydra rotates the refresh token (new value each time); the old one is rejected with `invalid_grant` | Previous access token becomes inactive immediately; replaying an old refresh token also revokes the newer generation (reuse detection) |
+| Account → Sessions: revoke one / sign out others | Disables the selected Kratos session(s) only | Each affected BFF session fails its next per-request provider check, is revoked and queued for durable grant revocation (`auth:maintenance`) |
+| `updateUserRole`, provisioning role change | `UserService` revokes all of the user's Hydra consent + login sessions **after commit** (`HydraClient#revokeUser`); a failure surfaces as an error, and repeating the assignment retries it | All the user's grants become inactive; next sign-in mints the new role |
+| Account deletion | Same `revokeUser` (existing) | All grants inactive |
+
+"Sign out all other sessions" deliberately does not revoke the current device's
+grant; there is no global "sign out everywhere" that revokes Hydra grants for all
+devices other than the role-change/deletion paths above.
+
+Live check (running dev stack; never prints tokens):
+
+```bash
+node scripts/verify-token-revocation.mjs                   # Hydra + Spring at :8080
+SPRING_URL=http://127.0.0.1:18080 node scripts/verify-token-revocation.mjs
+```
+
+It mints grants for a disposable synthetic subject through Hydra's real
+authorization-code + PKCE flow (challenges accepted via the admin API, like the
+oauth-service bridge; no Kratos identity or Spring user is created), checks
+rotation, reuse rejection, logout revocation and subject revocation both at
+Hydra introspection and at Spring `/graphql` directly, waits the cache TTL
+before post-revocation Spring checks, and deletes the subject's Hydra sessions.
+Against a backend built before this change the Spring "rejected" checks fail
+(HTTP 200), which is the gap this design closes.
 
 ## Implemented protocol and recovery
 
@@ -511,8 +582,10 @@ The BFF reads and binds that continuation, exposes only password settings at
 enabled. Arbitrary settings IDs cannot open reset. Reset revokes other Kratos
 sessions via the existing hook, discards the recovery session and requires fresh
 login. Other BFF sessions fail their next provider check and enter the existing
-durable revocation path. Previously issued direct JWTs retain their bounded
-lifetime; this is not a claim of instantaneous global JWT invalidation.
+durable revocation path; once that path revokes a grant, its access JWTs are
+rejected by Spring within the introspection cache window (see
+[Token revocation](#token-revocation)). A grant whose revocation is still
+pending keeps working until maintenance revokes it or it expires.
 
 Customer account settings (`/account/*`; policy, step-up, recovery and limits in
 [`account-management.md`](account-management.md)) use authenticated,

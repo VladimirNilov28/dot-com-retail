@@ -29,11 +29,11 @@ def perform_logout(
         satisfy the minimum logout contract. A Kratos-side failure is
         logged, not raised, so a partially-stale Kratos session never masks
         the fact that the refresh capability was actually revoked.
-      - This does NOT invalidate an already-issued, still-unexpired Hydra
-        access-token JWT — Hydra's JWT access tokens are self-contained and
-        not checked against a revocation list on every request. That JWT
-        remains valid until its own (short, 30m) expiry regardless of
-        logout; only its ability to be refreshed is removed here.
+      - Revoking the refresh token also marks that grant's access-token JWTs
+        inactive in Hydra. The Spring resource server introspects every bearer
+        token, so the JWT is rejected within its short introspection cache
+        window rather than staying valid until its 30m expiry
+        (docs/auth/browser-contract.md "Token revocation").
     """
     hydra_client.revoke_token(config.dev_client_id, refresh_token)
 
