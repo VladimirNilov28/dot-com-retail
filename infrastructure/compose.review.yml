@@ -128,6 +128,7 @@ services:
   frontend:
     build:
       context: ../frontend
+      target: runtime
     depends_on:
       postgres:
         condition: service_healthy
@@ -137,7 +138,7 @@ services:
         condition: service_started
       oauth-service:
         condition: service_healthy
-    environment:
+    environment: &frontend-env
       HIVE_GRAPHQL_URL: http://hive-router:4000/graphql
       MEDIA_BACKEND_URL: http://backend:8080
       STOREFRONT_ORIGIN: https://${REVIEW_HOST:-bytecore.localhost}:${REVIEW_STOREFRONT_PORT:-8443}
@@ -157,6 +158,23 @@ services:
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=64m
       - /app/.next/cache:rw,noexec,nosuid,size=256m,uid=1000,gid=1000
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+
+  # Runs `bun run auth:maintenance` every minute: retires expired BFF
+  # sessions and retries pending Hydra grant revocations
+  # (docs/auth/browser-contract.md).
+  auth-maintenance:
+    build:
+      context: ../frontend
+      target: maintenance
+    depends_on:
+      frontend:
+        condition: service_healthy
+    environment: *frontend-env
+    volumes:
+      - *review-ca
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     restart: unless-stopped

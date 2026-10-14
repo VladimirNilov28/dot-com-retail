@@ -656,7 +656,9 @@ under the active key. Do not remove an old key merely because 24 hours elapsed.
 | BFF maintenance | Up to 500 expiry marks, 50 provider revocations, 500 deletions per cleanup category/run |
 | Registration maintenance | Up to 500 CAPTCHA rows, 50 abandoned reservations/run |
 
-Schedule both jobs at least every minute, with non-overlapping job execution,
+In the review stack the BFF job runs every 60 s in the `auth-maintenance`
+service (`frontend/Dockerfile` target `maintenance`, sequential loop). Elsewhere,
+schedule both jobs at least every minute, with non-overlapping job execution,
 bounded retries and monitoring of failures/pending-revocation backlog:
 
 ```bash
