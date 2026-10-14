@@ -14,6 +14,7 @@ import { handleSecuritySettings } from "./settings";
 import { handleAccount, notifySecurityEvent, recoveryMode, accountStatus, sessionFacts } from "./account";
 import { assertBrowserNavigation, assertCsrf, authBoundary, authHeaders, boundedForm, browserCookie,
   clearBrowserCookies, redirectResponse, setBrowserCookie } from "./http";
+import { cancelLoginAttempt } from "./attempt";
 
 function flowRoute(kind: FormKind): string {
   return kind === "registration" ? "/register" : kind === "verification" ? "/verify" :
@@ -32,15 +33,16 @@ async function start(request: NextRequest, securityReauth = false): Promise<Next
       jar = await withBrowser(previous, async (state, _client, row) => {
         if (!row.authenticated) throw new AuthError("expired", 401);
         assurance = state.provider?.aal ?? "aal1";
-        return state.jar;
+        return securityReauth ? state.jar : emptyJar();
       });
       previousSessionHash = identifierHash(previous);
     } catch (error) {
       if (!(error instanceof AuthError) || error.code !== "expired") throw error;
     }
-  } else if (request.cookies.has(authConfig().flowCookie)) {
+  }
+  if (request.cookies.has(authConfig().flowCookie)) {
     try {
-      jar = await withBrowser(browserCookie(request), async (state) => state.jar);
+      await cancelLoginAttempt(browserCookie(request));
     } catch (error) {
       if (!(error instanceof AuthError) || error.code !== "expired") throw error;
     }
@@ -49,11 +51,37 @@ async function start(request: NextRequest, securityReauth = false): Promise<Next
   const browser = await createBrowser({
     jar, csrf: identifier(), returnTo, transactionState: transaction.state, previousSessionHash,
     securityReauth: securityReauth ? assurance : undefined,
+    revokeProvider: !securityReauth || !previousSessionHash,
   });
   await createTransaction(browser.id, transaction);
   const response = redirectResponse(await authorizationUrl(transaction));
   setBrowserCookie(response, browser.id, browser.expiresAt);
   return response;
+}
+
+async function attemptAction(request: NextRequest, cancel: boolean): Promise<NextResponse> {
+  const form = await boundedForm(request);
+  if (request.headers.get("origin") !== authConfig().origin) throw new AuthError("forbidden", 403);
+  const browser = browserCookie(request);
+  const flow = flowIdentifier(oneParameter(form, "flow"));
+  const csrf = oneParameter(form, "_csrf");
+  if (!csrf) throw new AuthError("forbidden", 403);
+  if (cancel) {
+    const destination = await withBrowser(browser, async (state) =>
+      (state.revokeProvider ?? !state.previousSessionHash) ? "/login" : state.returnTo, true);
+    await cancelLoginAttempt(browser, { flow, csrf });
+    // No cookie deletion: a late A response must not delete B's newer cookie,
+    // an established login, guest-cart or checkout proof.
+    return request.headers.get("accept")?.includes("text/html") ? redirectResponse(destination) :
+      NextResponse.json({ cancelled: true }, { headers: authHeaders });
+  }
+  await withBrowser(browser, async (state, client) => {
+    assertCsrf(request, form, state.csrf);
+    if (!state.transactionState) throw new AuthError("expired", 401);
+    await transactionFor(browser, state.transactionState, client);
+    await assertFlow(client, browser, flow, "login");
+  });
+  return NextResponse.json({ active: true }, { headers: authHeaders });
 }
 
 async function handoff(browser: string): Promise<NextResponse> {
@@ -84,6 +112,7 @@ async function loginChallenge(request: NextRequest): Promise<NextResponse> {
   const refreshFlow = await withBrowser(browser, async (state, client) => {
     if (!state.transactionState) throw new AuthError("expired", 401);
     await transactionFor(browser, state.transactionState, client);
+    await bridgeRequest("login/validate", { challenge, state: state.transactionState });
     state.loginChallenge = challenge;
     if (state.securityReauth) {
       const assurance = state.securityReauth;
@@ -148,12 +177,12 @@ async function callback(request: NextRequest): Promise<NextResponse> {
   if (!state) throw new AuthError("invalid_request", 400);
   for (const field of ["code", "error", "error_description", "iss"]) oneParameter(form, field);
   const browser = browserCookie(request);
-  const transaction = await claimTransaction(browser, state);
-  if (oneParameter(form, "error")) throw new AuthError("forbidden", 403);
-  const tokens = await exchangeCode(new Request(`${config.origin}/auth/callback`, {
-    method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: form.toString(),
-  }), transaction);
   return withBrowser(browser, async (context, client) => {
+    const transaction = await claimTransaction(browser, state, client);
+    if (oneParameter(form, "error")) throw new AuthError("forbidden", 403);
+    const tokens = await exchangeCode(new Request(`${config.origin}/auth/callback`, {
+      method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: form.toString(),
+    }), transaction);
     if (!context.provider || context.transactionState !== transaction.state ||
         tokens.claims()?.sub !== context.provider.userId) {
       throw new AuthError("invalid_request", 400);
@@ -319,9 +348,10 @@ export async function handleAuth(request: NextRequest, action: string): Promise<
       if (action === "callback") return callback(request);
       if (action === "submit") return submit(request);
       if (action === "logout") return logout(request);
+      if (action === "cancel" || action === "check-attempt") return attemptAction(request, action === "cancel");
     }
     return NextResponse.json({ error: "not_found" }, { status: 404, headers: authHeaders });
-  }, ["start", "challenge", "consent", "resume", "flow", "captcha", "callback", "submit", "logout", "session"].includes(action)
+  }, ["start", "challenge", "consent", "resume", "flow", "captcha", "callback", "submit", "logout", "session", "cancel", "check-attempt"].includes(action)
     ? action : "unknown", request, async () => {
       const config = authConfig();
       if (!request.cookies.has(config.flowCookie)) return undefined;

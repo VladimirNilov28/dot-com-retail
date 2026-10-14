@@ -10,6 +10,7 @@ import { readFlow } from "@/lib/auth/flows";
 import { withBrowser } from "@/lib/auth/store";
 import { authFieldId, formMessages, formMethods, temporaryAuthMessage } from "@/lib/auth/view";
 import { passwordErrorMessage } from "@/lib/auth/password";
+import { AuthAttemptGuard } from "./auth-attempt-guard";
 
 export type AuthSearch = Promise<Record<string, string | string[] | undefined>>;
 
@@ -41,6 +42,7 @@ export async function AuthPage({ kind, searchParams }: { kind: FormKind; searchP
         const flow = await readFlow(state, browser, flowIdentifier(flowId), kind, client);
         const google = kind === "registration" && state.googleRegistration?.flow === flow.id ? state.googleRegistration : undefined;
         return { kind: "flow" as const, flow, csrf: state.csrf, returnTo: state.returnTo,
+          stepUp: !(state.revokeProvider ?? !state.previousSessionHash),
           google,
           methods: kind === "verification" && flow.state === "passed_challenge" ? [] : formMethods(flow.nodes, kind, google),
           messages: [...new Set([...formMessages(google && (!google.submitted || !google.providerValidation) ?
@@ -92,7 +94,7 @@ export async function AuthPage({ kind, searchParams }: { kind: FormKind; searchP
         kind === "recovery" ? "Request a secure email code to reset your password." :
           kind === "reset" ? "Choose a new password, then sign in again. Other sessions will be invalidated." :
         "Complete email verification before signing in.";
-  return (
+  const page = (
     <section className="auth-page" aria-labelledby="auth-title">
       <div className="auth-heading">
         {secondFactor || kind === "verification"
@@ -138,6 +140,11 @@ export async function AuthPage({ kind, searchParams }: { kind: FormKind; searchP
         ))}
       </div>
       <div className="auth-secondary text-sm">
+        {secondFactor ? <form method="post" action="/auth/cancel">
+          <input type="hidden" name="flow" value={view.flow.id} />
+          <input type="hidden" name="_csrf" value={view.csrf} />
+          <button type="submit" className="store-link">{view.stepUp ? "Cancel verification" : "Use another account"}</button>
+        </form> : null}
         {kind === "registration" ? <>Already have an account? <a className="store-link" href={`/login?returnTo=${encodeURIComponent(view.returnTo)}`}>Sign in</a></> :
           kind === "login" ? <>New to ByteCore? <a className="store-link" href={`/register?returnTo=${encodeURIComponent(view.returnTo)}`}>Create an account</a></> :
             kind === "recovery" || kind === "reset" ? <a className="store-link" href="/recover">Request a new recovery code</a> :
@@ -149,6 +156,7 @@ export async function AuthPage({ kind, searchParams }: { kind: FormKind; searchP
       </div>
     </section>
   );
+  return kind === "login" ? <AuthAttemptGuard flow={view.flow.id} csrf={view.csrf}>{page}</AuthAttemptGuard> : page;
 }
 
 export function AuthProblem({ code, kind = "login", returnTo = "/" }: {

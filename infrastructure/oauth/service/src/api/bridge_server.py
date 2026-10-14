@@ -134,6 +134,14 @@ def make_bridge_handler(
                         config, hydra_client, kratos_client, spring_auth_client,
                         body["challenge"], body["cookie"], body["state"],
                     ))
+                elif path in ("/internal/login/validate", "/internal/login/cancel"):
+                    if set(body) != {"challenge", "state"}:
+                        raise ValueError("Invalid login binding")
+                    if path.endswith("/cancel"):
+                        login_consent.cancel_bff_login(config, hydra_client, body["challenge"], body["state"])
+                    else:
+                        login_consent.validate_bff_login(config, hydra_client, body["challenge"], body["state"])
+                    self._respond(204, b"")
                 elif path == "/internal/consent":
                     target = login_consent.handle_consent(
                         config, hydra_client, body["challenge"], config.bff_client_id, body["state"],
@@ -168,6 +176,8 @@ def make_bridge_handler(
                     self._respond(204, b"")
                 else:
                     self._dictionary(404, {"error": "not_found"})
+            except login_consent.LoginBindingError:
+                self._dictionary(403, {"error": "forbidden"})
             except account.AccountConflict:
                 self._dictionary(409, {"error": "conflict"})
             except RegistrationRejected as error:

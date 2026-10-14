@@ -156,6 +156,14 @@ test("Google entry starts authorization with an empty form: no profile fields, C
   }
 });
 
+test("fresh Google login explicitly requests the provider account chooser", async () => {
+  const current = state();
+  const result = await submitFlow(current, browser, id, "login",
+    new URLSearchParams({ method: "oidc", provider: "google", csrf_token: "fixture-csrf" }), client);
+  expect(postedSocial.upstream_parameters).toEqual({ prompt: "select_account" });
+  expect(new URL(result.socialRedirect).searchParams.get("prompt")).toBe("select_account");
+});
+
 test("provider-authenticated registration continuation completes through canonical handoff, not a second redirect", async () => {
   availability = { email_available: true, username_available: true };
   const submitted = form("must-not-forward");

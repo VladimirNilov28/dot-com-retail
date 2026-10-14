@@ -9,6 +9,7 @@ import { refreshGrant, revokeGrant } from "./oauth";
 import { withBrowser, withBrowserHash, revokeBrowser, database, identifierHash } from "./store";
 import { storefrontMe } from "@/lib/graphql/operations";
 import { hiveConfig, requestHive } from "@/lib/graphql/server-transport";
+import { finishCancelledAttempt } from "./attempt";
 
 export type AccountState =
   | { kind: "anonymous" }
@@ -91,17 +92,26 @@ export async function revokeSession(id: string): Promise<void> {
 
 export async function maintainSessions(): Promise<{ revoked: number; pending: number }> {
   await database().query(
+    "UPDATE browser_sessions SET revoked_at=COALESCE(revoked_at,now()),revocation_pending=true "
+      + "WHERE authenticated=false AND revoked_at IS NULL AND (expires_at<=now() OR idle_until<=now())",
+  );
+  await database().query(
     "WITH expired AS (SELECT id_hash FROM browser_sessions WHERE authenticated=true AND revoked_at IS NULL "
       + "AND (expires_at<=now() OR idle_until<=now()) ORDER BY expires_at LIMIT 500 FOR UPDATE SKIP LOCKED) "
       + "UPDATE browser_sessions SET revoked_at=now(),revocation_pending=true FROM expired "
       + "WHERE browser_sessions.id_hash=expired.id_hash",
   );
-  const rows = await database().query<{ id_hash: string }>(
-    "SELECT id_hash FROM browser_sessions WHERE revocation_pending=true ORDER BY created_at LIMIT 50",
+  const rows = await database().query<{ id_hash: string; authenticated: boolean }>(
+    "SELECT id_hash,authenticated FROM browser_sessions WHERE revocation_pending=true ORDER BY created_at LIMIT 50",
   );
   let revoked = 0;
   for (const row of rows.rows) {
     try {
+      if (!row.authenticated) {
+        await finishCancelledAttempt(row.id_hash);
+        revoked++;
+        continue;
+      }
       await withBrowserHash(row.id_hash, async (state, client) => {
         if (!state.provider || !state.tokens) throw new AuthError("unavailable");
         if (state.revokeProvider !== false) await bridgeRequest("logout", { session_id: state.provider.sessionId });
@@ -116,7 +126,7 @@ export async function maintainSessions(): Promise<{ revoked: number; pending: nu
   await database().query(
     "WITH expired AS (SELECT id_hash FROM browser_sessions WHERE authenticated=false AND expires_at<=now() "
       + "ORDER BY expires_at LIMIT 500 FOR UPDATE SKIP LOCKED) "
-      + "DELETE FROM browser_sessions USING expired WHERE browser_sessions.id_hash=expired.id_hash",
+      + "DELETE FROM browser_sessions USING expired WHERE browser_sessions.id_hash=expired.id_hash AND revocation_pending=false",
   );
   await database().query(
     "WITH retired AS (SELECT id_hash FROM browser_sessions WHERE revoked_at<now()-interval '1 hour' "

@@ -114,6 +114,35 @@ disconnect Google when the account has no password ("Create a password first").
 Kratos also enforces its own minimum number of first factors. A matching email never
 merges accounts.
 
+## Unfinished sign-in and cancellation
+
+Leaving an unfinished login for a storefront page cancels its server-side
+transaction and bound forms. This includes document/RSC navigation, cached
+history restoration and the second-factor form's **Use another account** action.
+Authentication callbacks, validation errors and refresh of a valid form remain
+in the same attempt. BFF login lifetime is capped at the OAuth transaction's
+10-minute deadline; canceled/expired forms and callbacks cannot authenticate.
+
+Fresh login uses a new provider cookie jar and Google's outgoing authorization
+request includes `prompt=select_account`. Cancellation rejects the bound Hydra
+challenge and revokes only the provisional Kratos session. Provider cleanup
+failures remain durably pending for the existing session-maintenance retry;
+the BFF attempt is already unusable. Scoped cancellation does not delete
+browser cookies, so a delayed response cannot erase a newer attempt, guest cart
+or protected checkout proof.
+
+**Cancel verification** during explicit account-security step-up preserves the
+established login. Normal fresh login, even with an existing session, has its own
+provisional session. Cancellation never changes TOTP enrollment, validation
+windows or secrets.
+
+Focused connected verification: `bun --conditions=react-server
+scripts/auth-regression-smoke.mjs` from `frontend/`, with `PLAYWRIGHT_MODULE`
+pointing to the installed Playwright module. It creates its own disposable
+customer and TOTP enrollment; it does not verify real Google consent or a
+selected Google identity's TOTP. Complete that part interactively in an
+incognito browser without sharing credentials or codes.
+
 ## Sessions
 
 The page lists the user's other active Kratos sessions with sign-in times. A user

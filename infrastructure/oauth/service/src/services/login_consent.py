@@ -1,5 +1,6 @@
 from typing import Optional
 from urllib.parse import urlencode, parse_qs, urlparse
+import requests
 
 from clients.hydra import HydraClient
 from clients.kratos import KratosClient, KratosSecondFactorRequiredError
@@ -160,13 +161,31 @@ def bff_session(kratos_client: KratosClient, spring_auth_client: SpringAuthClien
     }
 
 
-def bff_login(config: Config, hydra_client: HydraClient, kratos_client: KratosClient,
-              spring_auth_client: SpringAuthClient, challenge: str, cookie: str, state: str) -> dict:
+def validate_bff_login(config: Config, hydra_client: HydraClient, challenge: str, state: str) -> dict:
     request = hydra_client.get_login_request(challenge)
     if (request.get("client") or {}).get("client_id") != config.bff_client_id:
-        raise BridgeError("Login belongs to a different OAuth client")
+        raise LoginBindingError("Login belongs to a different OAuth client")
     if parse_qs(urlparse(request.get("request_url", "")).query).get("state") != [state]:
-        raise BridgeError("Login does not match the authorization transaction")
+        raise LoginBindingError("Login does not match the authorization transaction")
+    return request
+
+
+class LoginBindingError(BridgeError):
+    pass
+
+
+def cancel_bff_login(config: Config, hydra_client: HydraClient, challenge: str, state: str) -> None:
+    try:
+        validate_bff_login(config, hydra_client, challenge, state)
+        hydra_client.reject_login_request(challenge)
+    except requests.HTTPError as error:
+        if error.response is None or error.response.status_code not in (404, 409, 410):
+            raise
+
+
+def bff_login(config: Config, hydra_client: HydraClient, kratos_client: KratosClient,
+              spring_auth_client: SpringAuthClient, challenge: str, cookie: str, state: str) -> dict:
+    request = validate_bff_login(config, hydra_client, challenge, state)
     try:
         session = bff_session(kratos_client, spring_auth_client, cookie)
     except KratosSecondFactorRequiredError:

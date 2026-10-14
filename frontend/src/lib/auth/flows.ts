@@ -141,7 +141,9 @@ export async function submitFlow(
     if (method === "oidc") {
       if (field(form, "provider", 32) !== "google") throw new AuthError("invalid_request", 400);
       if (kind === "login") {
-        result = (await provider.api.updateLoginFlow({ flow: id, updateLoginFlowBody: { method: "oidc", provider: "google", csrf_token } })).data;
+        result = (await provider.api.updateLoginFlow({ flow: id, updateLoginFlowBody: {
+          method: "oidc", provider: "google", csrf_token, upstream_parameters: { prompt: "select_account" },
+        } })).data;
       } else if (kind === "registration") {
         for (const name of form.keys()) {
           if (!["flow", "_csrf", "method", "provider", "csrf_token", "traits.username", "traits.dateOfBirth", "altcha"].includes(name) ||
@@ -294,7 +296,7 @@ export async function submitFlow(
       if (typeof redirect !== "string") throw new AuthError("unavailable");
       const url = new URL(redirect);
       if (method === "oidc" && url.origin === "https://accounts.google.com") {
-        const destination = googleAuthorization(redirect);
+        const destination = googleAuthorization(redirect, kind === "login" || !state.googleRegistration);
         state.social = { state: text(destination.searchParams.get("state")), flow: id,
           kind: kind === "registration" ? "registration" : "login" };
         return { complete: true, socialRedirect: destination.href };

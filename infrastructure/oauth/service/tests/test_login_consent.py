@@ -15,7 +15,30 @@ from services.login_consent import (  # noqa: E402
     effective_aal,
     handle_login,
     resolve_canonical_user,
+    validate_bff_login,
+    cancel_bff_login,
 )
+
+
+class BffLoginBindingTest(unittest.TestCase):
+    def test_old_challenge_cannot_replace_a_new_transaction(self):
+        config = make_config()
+        hydra = Mock()
+        hydra.get_login_request.return_value = {
+            "client": {"client_id": config.bff_client_id},
+            "request_url": "http://hydra/oauth2/auth?state=attempt-A",
+        }
+        with self.assertRaises(BridgeError):
+            validate_bff_login(config, hydra, "old-challenge", "attempt-B")
+        hydra.accept_login_request.assert_not_called()
+        validate_bff_login(config, hydra, "old-challenge", "attempt-A")
+        hydra.accept_login_request.assert_not_called()
+        cancel_bff_login(config, hydra, "old-challenge", "attempt-A")
+        hydra.reject_login_request.assert_called_once_with("old-challenge")
+        hydra.reject_login_request.reset_mock()
+        with self.assertRaises(BridgeError):
+            cancel_bff_login(config, hydra, "old-challenge", "attempt-B")
+        hydra.reject_login_request.assert_not_called()
 
 
 def make_config(**overrides) -> Config:

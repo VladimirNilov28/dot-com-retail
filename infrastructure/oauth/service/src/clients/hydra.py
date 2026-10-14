@@ -76,6 +76,15 @@ class HydraClient:
         response.raise_for_status()
         return response.json()
 
+    def reject_login_request(self, login_challenge: str) -> None:
+        response = requests.put(
+            f"{self._admin_url}/admin/oauth2/auth/requests/login/reject",
+            params={"login_challenge": login_challenge},
+            json={"error": "access_denied", "error_description": "Authentication attempt cancelled"},
+            timeout=10,
+        )
+        response.raise_for_status()
+
     def get_consent_request(self, consent_challenge: str) -> dict:
         response = requests.get(
             f"{self._admin_url}/admin/oauth2/auth/requests/consent",

@@ -26,7 +26,7 @@ export function socialFailureReason(value: unknown): string {
   return "provider_callback_rejected";
 }
 
-export function googleAuthorization(value: unknown): URL {
+export function googleAuthorization(value: unknown, selectAccount = false): URL {
   if (typeof value !== "string") throw new AuthError("unavailable");
   const url = new URL(value);
   const state = oneParameter(url.searchParams, "state");
@@ -37,6 +37,7 @@ export function googleAuthorization(value: unknown): URL {
       !state || state.length < 16 || state.length > 4096 || /[\u0000-\u0020\u007f]/.test(state)) {
     throw new AuthError("unavailable");
   }
+  if (selectAccount) url.searchParams.set("prompt", "select_account");
   return url;
 }
 

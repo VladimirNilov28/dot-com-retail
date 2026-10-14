@@ -146,13 +146,20 @@ export async function createTransaction(browser: string, transaction: OAuthTrans
     "INSERT INTO oauth_transactions(state_hash,browser_hash,sealed,expires_at) VALUES($1,$2,$3,$4)",
     [hash, identifierHash(browser), await seal("oauth", hash, transaction), new Date(Date.now() + 600000)],
   );
+  await (client ?? database()).query(
+    "UPDATE browser_sessions SET expires_at=LEAST(expires_at,now()+interval '10 minutes'),"
+      + "idle_until=LEAST(idle_until,now()+interval '10 minutes') WHERE id_hash=$1 AND authenticated=false",
+    [identifierHash(browser)],
+  );
 }
 
-export async function claimTransaction(browser: string, state: string): Promise<OAuthTransaction> {
+export async function claimTransaction(browser: string, state: string, client?: PoolClient): Promise<OAuthTransaction> {
   const hash = identifierHash(state);
-  const result = await database().query<{ sealed: string }>(
+  const result = await (client ?? database()).query<{ sealed: string }>(
     "UPDATE oauth_transactions SET used_at=now() WHERE state_hash=$1 AND browser_hash=$2 "
-      + "AND used_at IS NULL AND expires_at>now() RETURNING sealed", [hash, identifierHash(browser)],
+      + "AND used_at IS NULL AND expires_at>now() AND EXISTS(SELECT 1 FROM browser_sessions b "
+      + "WHERE b.id_hash=browser_hash AND b.revoked_at IS NULL AND b.expires_at>now() AND b.idle_until>now()) RETURNING sealed",
+    [hash, identifierHash(browser)],
   );
   if (result.rowCount !== 1) throw new AuthError("invalid_request", 400);
   return decodeTransaction(await unseal("oauth", hash, result.rows[0].sealed));
