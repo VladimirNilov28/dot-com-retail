@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.Base64;
+
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -48,5 +49,25 @@ class FieldCipherTest {
                 .isInstanceOf(IllegalStateException.class);
         assertThatThrownBy(() -> FieldCipher.fromKeyRing("", null)).isInstanceOf(IllegalStateException.class);
         assertThatThrownBy(() -> FieldCipher.fromKeyRing("v1:AAAA", null)).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void userEmailIndexIsVersionedNormalizedAndUsesADedicatedKey() {
+        FieldCipher cipher = FieldCipher.fromKeyRing("v1:" + K1, null);
+        String index = cipher.userEmailIndex("Ada@Example.test");
+        assertThat(index).startsWith(FieldCipher.USER_EMAIL_INDEX_VERSION + ":").doesNotContain("ada", "example");
+        assertThat(cipher.userEmailIndex("  ada@example.TEST ")).isEqualTo(index);
+        assertThat(cipher.userEmailIndex("bob@example.test")).isNotEqualTo(index);
+        assertThat(index).doesNotContain(cipher.blindIndex("ada@example.test"));
+        assertThat(FieldCipher.fromKeyRing("v1:" + K2, null).userEmailIndex("ada@example.test"))
+                .isNotEqualTo(index);
+        assertThat(cipher.userEmailIndex(null)).isNull();
+    }
+
+    @Test
+    void userEmailIndexSurvivesActiveKeyRotationWhileTheFirstKeyIsKept() {
+        String before = FieldCipher.fromKeyRing("v1:" + K1, null).userEmailIndex("ada@example.test");
+        FieldCipher rotated = FieldCipher.fromKeyRing("v1:" + K1 + ",v2:" + K2, "v2");
+        assertThat(rotated.userEmailIndex("ada@example.test")).isEqualTo(before);
     }
 }

@@ -29,6 +29,8 @@ import ee.bytecore.backend.integration.HydraClient;
 import ee.bytecore.backend.integration.KratosClient;
 import ee.bytecore.backend.repositories.user.UserRegistrationReservationRepository;
 import ee.bytecore.backend.repositories.user.UserRepository;
+import ee.bytecore.backend.security.crypto.FieldCipher;
+import ee.bytecore.backend.security.crypto.FieldEncryption;
 
 @Service
 public class UserService {
@@ -110,7 +112,12 @@ public class UserService {
     }
 
     private void lockRegistrationClaims(String username, String email) {
-        Stream.of("email:" + email, "username:" + username).sorted().forEach(registrationRepository::lockClaim);
+        Stream.of(emailClaim(email), "username:" + username).sorted().forEach(registrationRepository::lockClaim);
+    }
+
+    /** Emails are unique case-insensitively, so their advisory lock key uses the normalized form. */
+    private static String emailClaim(String email) {
+        return "email:" + FieldCipher.normalizeEmail(email);
     }
 
     private void requireUnreserved(String username, String email, UUID allowedReservation) {
@@ -326,7 +333,11 @@ public class UserService {
         if (user.getEmail().equals(email)) {
             return user;
         }
-        registrationRepository.lockClaim("email:" + email);
+        if (Objects.equals(FieldCipher.normalizeEmail(user.getEmail()), FieldCipher.normalizeEmail(email))) {
+            user.setEmail(email);
+            return userRepository.saveAndFlush(user);
+        }
+        registrationRepository.lockClaim(emailClaim(email));
         if (registrationRepository.findByEmail(email).isPresent()) {
             throw new UserAlreadyExistsException("Account identifiers are reserved by a registration.");
         }
@@ -456,8 +467,13 @@ public class UserService {
         String trimmed = query == null ? "" : query.trim().toLowerCase(java.util.Locale.ROOT);
         if (trimmed.length() > 100) throw new IllegalArgumentException("Search query must be at most 100 characters");
         String escaped = trimmed.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+        // Emails are encrypted at rest: they match exactly through the blind index, never by substring.
+        String emailIndex = trimmed.contains("@") ? FieldEncryption.userEmailIndex(trimmed) : null;
+        Long id = trimmed.matches("\\d{1,18}") ? Long.valueOf(trimmed) : null;
         return userRepository.searchActive(
                 "%" + escaped + "%",
+                emailIndex,
+                id,
                 role,
                 org.springframework.data.domain.PageRequest.of(
                         page, size, org.springframework.data.domain.Sort.by("id")));

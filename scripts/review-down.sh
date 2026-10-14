@@ -21,7 +21,8 @@ esac
 docker compose -p "$PROJECT" -f "$ROOT/infrastructure/compose.yml" \
   -f "$ROOT/infrastructure/compose.review.yml" --env-file "$ENV_FILE" "${args[@]}"
 if [ "${1:-}" = --volumes ]; then
-  echo "Removed project '$PROJECT' and its volumes. $ENV_FILE and the certificates were kept."
+  echo "Removed project '$PROJECT' and its volumes. $ENV_FILE, the certificates and the" \
+    "Postgres storage key (infrastructure/review/secrets/) were kept."
 else
   echo "Stopped project '$PROJECT'; data volumes kept (use --volumes to delete them)."
 fi

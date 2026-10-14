@@ -216,6 +216,8 @@ docs/generated/
 infrastructure/volumes/*
 # Review-stack TLS material from scripts/gen-review-certs.sh (keys never committed)
 infrastructure/review/certs/
+# Review-stack Postgres storage encryption key from scripts/review-up.sh
+infrastructure/review/secrets/
 infrastructure/jenkins/venv/
 __pycache__/
 *.pyc

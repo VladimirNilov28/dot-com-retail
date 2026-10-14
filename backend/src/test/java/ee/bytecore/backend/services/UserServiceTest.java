@@ -419,13 +419,16 @@ class UserServiceTest {
 
     @Test
     void shouldEscapeLikeWildcardsAndBoundSizeInUserSearchTest() {
-        when(userRepository.searchActive(any(), any(), any())).thenReturn(org.springframework.data.domain.Page.empty());
+        when(userRepository.searchActive(any(), any(), any(), any(), any()))
+                .thenReturn(org.springframework.data.domain.Page.empty());
 
         userService.searchActive(" 50%_A ", UserRole.ADMIN, 0, 25);
 
         verify(userRepository)
                 .searchActive(
                         org.mockito.ArgumentMatchers.eq("%50\\%\\_a%"),
+                        org.mockito.ArgumentMatchers.isNull(),
+                        org.mockito.ArgumentMatchers.isNull(),
                         org.mockito.ArgumentMatchers.eq(UserRole.ADMIN),
                         any());
         assertThatThrownBy(() -> userService.searchActive(null, null, 0, 101))

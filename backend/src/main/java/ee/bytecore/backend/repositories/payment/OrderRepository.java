@@ -40,7 +40,8 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
               AND (CAST(:toAt AS timestamptz) IS NULL OR o.created_at < CAST(:toAt AS timestamptz))
               AND (CAST(:query AS varchar) IS NULL
                    OR CAST(o.public_id AS varchar) LIKE lower(CAST(:query AS varchar)) || '%'
-                   OR lower(u.email) = lower(CAST(:query AS varchar))
+                   OR u.email_index = CAST(:userEmailIndex AS varchar)
+                   OR (u.email_index IS NULL AND lower(u.email) = lower(CAST(:query AS varchar)))
                    OR lower(u.username) = lower(CAST(:query AS varchar))
                    OR o.checkout_snapshot ->> 'contactEmailIndex' = CAST(:emailIndex AS varchar))
             """;
@@ -60,14 +61,22 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             @Param("toAt") java.time.OffsetDateTime toAt,
             @Param("query") String query,
             @Param("emailIndex") String emailIndex,
+            @Param("userEmailIndex") String userEmailIndex,
             Pageable pageable);
 
-    /** Guest contact emails are encrypted at rest, so they are matched through their keyed blind index. */
+    /** Account and guest contact emails are encrypted at rest, so they are matched through keyed blind indexes. */
     default Page<Order> search(
-            Long userId, String status, java.time.OffsetDateTime fromAt, java.time.OffsetDateTime toAt,
-            String query, Pageable pageable) {
+            Long userId,
+            String status,
+            java.time.OffsetDateTime fromAt,
+            java.time.OffsetDateTime toAt,
+            String query,
+            Pageable pageable) {
         String emailIndex = query == null || !query.contains("@")
-                ? null : ee.bytecore.backend.security.crypto.FieldEncryption.contactEmailIndex(query);
-        return searchIndexed(userId, status, fromAt, toAt, query, emailIndex, pageable);
+                ? null
+                : ee.bytecore.backend.security.crypto.FieldEncryption.contactEmailIndex(query);
+        String userEmailIndex =
+                emailIndex == null ? null : ee.bytecore.backend.security.crypto.FieldEncryption.userEmailIndex(query);
+        return searchIndexed(userId, status, fromAt, toAt, query, emailIndex, userEmailIndex, pageable);
     }
 }

@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 # One-command reviewer stack: HTTPS storefront + every backing service in Docker.
-# Prerequisite: Docker with Compose v2.24+ (plus the Stripe CLI if you test webhooks).
+# Prerequisite: Docker with Compose v2.24.4+ on a host that provides /dev/fuse
+# (Postgres storage is gocryptfs-encrypted), plus the Stripe CLI if you test webhooks.
 #
 #   scripts/review-up.sh            # or: make review
 #
 # Environment overrides:
 #   REVIEW_PROJECT        Compose project name            (default bytecore-review)
 #   REVIEW_ENV_FILE       generated secrets/config file   (default ./.env.review)
+#   REVIEW_PGDATA_KEY_FILE Postgres storage key (generated if absent;
+#                         default ./infrastructure/review/secrets/pgdata.key)
 #   REVIEW_HOST, REVIEW_*_PORT, REVIEW_BIND  public origin (see .env.review.example)
 #   REVIEW_SEED=0         skip the demo catalog seed on an empty database
 #   REVIEW_WAIT_TIMEOUT   seconds to wait for healthy services (default 900)
@@ -75,8 +78,46 @@ STORE_URL="https://$REVIEW_HOST:${REVIEW_STOREFRONT_PORT:-8443}"
 
 REVIEW_HOST="$REVIEW_HOST" "$ROOT/scripts/gen-review-certs.sh"
 
+# Key for the gocryptfs-encrypted Postgres data directory. Kept outside the
+# encrypted volume and never committed; losing it makes the volume unreadable.
+if [ -z "$(printenv REVIEW_PGDATA_KEY_FILE || true)" ]; then
+  value="$(env_value REVIEW_PGDATA_KEY_FILE)"
+  export REVIEW_PGDATA_KEY_FILE="${value:-$ROOT/infrastructure/review/secrets/pgdata.key}"
+fi
+case "$REVIEW_PGDATA_KEY_FILE" in
+  /*) ;;
+  *) REVIEW_PGDATA_KEY_FILE="$ROOT/infrastructure/$REVIEW_PGDATA_KEY_FILE" ;; # Compose resolves it there
+esac
+if [ -d "$REVIEW_PGDATA_KEY_FILE" ]; then # Docker creates a directory for a missing bind source
+  rmdir "$REVIEW_PGDATA_KEY_FILE" 2>/dev/null ||
+    { echo "$REVIEW_PGDATA_KEY_FILE is a non-empty directory, not a key file" >&2; exit 1; }
+fi
+if [ ! -s "$REVIEW_PGDATA_KEY_FILE" ]; then
+  if docker volume inspect "${PROJECT}_postgres_crypt_volume" >/dev/null 2>&1; then
+    echo "Encrypted Postgres volume ${PROJECT}_postgres_crypt_volume exists but its key file" \
+      "$REVIEW_PGDATA_KEY_FILE is missing. Restore the key from your backup (a new key cannot" \
+      "open the existing data), or delete the data with scripts/review-down.sh --volumes." >&2
+    exit 1
+  fi
+  info "Generating the Postgres storage encryption key $REVIEW_PGDATA_KEY_FILE"
+  (umask 077 && mkdir -p "$(dirname "$REVIEW_PGDATA_KEY_FILE")")
+  key="$(docker run --rm --network none --entrypoint /bin/sh "$OPENSSL_IMAGE" -c 'openssl rand -base64 32')"
+  [ "${#key}" -eq 44 ] || { echo "Key generation failed" >&2; exit 1; }
+  (umask 077 && printf '%s\n' "$key" >"$REVIEW_PGDATA_KEY_FILE")
+  unset key
+fi
+chmod 600 "$REVIEW_PGDATA_KEY_FILE"
+[ "$(uname -s)" != Linux ] || [ -c /dev/fuse ] || [ -n "${DOCKER_HOST:-}" ] ||
+  warn "/dev/fuse not found on this host; the encrypted Postgres needs it (see docs/review-setup.md)"
+
 COMPOSE=(docker compose -p "$PROJECT" -f "$ROOT/infrastructure/compose.yml"
   -f "$ROOT/infrastructure/compose.review.yml" --env-file "$ENV_FILE")
+
+if docker volume inspect "${PROJECT}_postgres_volume" >/dev/null 2>&1 &&
+  ! docker volume inspect "${PROJECT}_postgres_crypt_volume" >/dev/null 2>&1; then
+  warn "Found the unencrypted volume ${PROJECT}_postgres_volume from an older review stack. It is left"
+  warn "untouched; this run starts a new encrypted database (migrate: docs/security/encryption-at-rest.md)."
+fi
 
 info "Building and starting project '$PROJECT' (first build takes several minutes)"
 "${COMPOSE[@]}" up -d --build --wait --wait-timeout "${REVIEW_WAIT_TIMEOUT:-900}"
@@ -112,6 +153,7 @@ Bootstrap administrator: ${admin_user}@bytecore.ee
 
 Stripe webhooks (optional):
   stripe listen --forward-to $STORE_URL/webhooks/stripe --skip-verify
+Postgres storage is encrypted at rest; key: $REVIEW_PGDATA_KEY_FILE (back it up, never commit it)
 Stop: scripts/review-down.sh   (data volumes are kept unless --volumes is given)
 Docs: docs/review-setup.md
 EOF

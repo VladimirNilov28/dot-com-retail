@@ -138,7 +138,8 @@ class AccountDeletionIntegrationTest {
                 .isEqualTo(user.getId());
         assertThat(jdbc.queryForObject("SELECT count(*) FROM order_items WHERE order_id=?", Integer.class, orderId))
                 .isEqualTo(1);
-        assertThat(jdbc.queryForObject("SELECT email FROM users WHERE id=?", String.class, user.getId()))
+        assertThat(ee.bytecore.backend.security.crypto.FieldEncryption.open(
+                        jdbc.queryForObject("SELECT email FROM users WHERE id=?", String.class, user.getId())))
                 .isNotEqualTo(user.getEmail());
         for (String table : new String[] {
             "user_address", "user_payment_methods", "carts", "wishlists", "product_ratings", "review_votes"
@@ -149,7 +150,10 @@ class AccountDeletionIntegrationTest {
         }
         assertThat(userService.findById(user.getId())).isEmpty();
         assertThat(users.findById(user.getId())).isEmpty();
-        assertThat(jdbc.queryForObject("SELECT date_of_birth FROM users WHERE id=?", LocalDate.class, user.getId()))
+        String storedBirth =
+                jdbc.queryForObject("SELECT date_of_birth FROM users WHERE id=?", String.class, user.getId());
+        assertThat(storedBirth).startsWith("enc:");
+        assertThat(LocalDate.parse(ee.bytecore.backend.security.crypto.FieldEncryption.open(storedBirth)))
                 .isEqualTo(LocalDate.of(1970, 1, 1));
         assertThat(jdbc.queryForObject("SELECT role::text FROM users WHERE id=?", String.class, user.getId()))
                 .isEqualTo("USER");
@@ -198,7 +202,8 @@ class AccountDeletionIntegrationTest {
             assertThatThrownBy(() -> userService.deleteById(user.getId())).isInstanceOf(RuntimeException.class);
             assertThat(jdbc.queryForObject("SELECT deleted FROM users WHERE id=?", Boolean.class, user.getId()))
                     .isFalse();
-            assertThat(jdbc.queryForObject("SELECT email FROM users WHERE id=?", String.class, user.getId()))
+            assertThat(ee.bytecore.backend.security.crypto.FieldEncryption.open(
+                            jdbc.queryForObject("SELECT email FROM users WHERE id=?", String.class, user.getId())))
                     .isEqualTo(user.getEmail());
             assertThat(jdbc.queryForObject(
                             "SELECT deletion_identity_id FROM users WHERE id=?", UUID.class, user.getId()))
@@ -220,7 +225,8 @@ class AccountDeletionIntegrationTest {
         User user = users.save(User.create("retry-hydra", "retry-hydra@example.com", LocalDate.of(1990, 2, 3)));
         doThrow(new IdentitySyncException("Retry deletion")).when(hydra).revokeUser(user.getId());
         assertThatThrownBy(() -> userService.deleteById(user.getId())).isInstanceOf(IdentitySyncException.class);
-        assertThat(jdbc.queryForObject("SELECT email FROM users WHERE id=?", String.class, user.getId()))
+        assertThat(ee.bytecore.backend.security.crypto.FieldEncryption.open(
+                        jdbc.queryForObject("SELECT email FROM users WHERE id=?", String.class, user.getId())))
                 .isEqualTo(user.getEmail());
         assertThat(users.findById(user.getId())).isEmpty();
         assertThatThrownBy(() -> userService.reserveRegistration(

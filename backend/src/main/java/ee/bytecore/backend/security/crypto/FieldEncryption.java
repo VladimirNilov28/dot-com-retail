@@ -11,8 +11,9 @@ import org.springframework.stereotype.Component;
 public class FieldEncryption {
     private static volatile FieldCipher current;
 
-    public FieldEncryption(@Value("${app.data-encryption.keys:}") String keys,
-                           @Value("${app.data-encryption.active-key:}") String activeKey) {
+    public FieldEncryption(
+            @Value("${app.data-encryption.keys:}") String keys,
+            @Value("${app.data-encryption.active-key:}") String activeKey) {
         current = FieldCipher.fromKeyRing(keys, activeKey);
     }
 
@@ -32,6 +33,11 @@ public class FieldEncryption {
 
     public static String contactEmailIndex(String email) {
         return SealedSnapshotConverter.emailIndex(required(), email);
+    }
+
+    /** Keyed, versioned blind index used for account email lookups and uniqueness. */
+    public static String userEmailIndex(String email) {
+        return required().userEmailIndex(email);
     }
 
     static FieldCipher required() {
