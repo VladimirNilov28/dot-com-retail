@@ -3,7 +3,7 @@ import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "About ByteCore",
-  description: "ByteCore is dot-com retail, a student e-commerce project by ByteCore OÜ: an electronics storefront with real catalog data, carts, checkout and accounts.",
+  description: "ByteCore is dot-com retail, a student e-commerce project by ByteCore OÜ: an online electronics store with a real catalog, carts, secure checkout and accounts.",
 };
 
 export default function AboutPage() {

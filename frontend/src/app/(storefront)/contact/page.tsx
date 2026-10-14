@@ -3,7 +3,7 @@ import { ContactForm } from "@/components/contact/contact-form";
 
 export const metadata: Metadata = {
   title: "Contact us",
-  description: "Contact ByteCore about orders, payments, products or your account. Send us a message with this form and our team will reply to you by email.",
+  description: "Contact ByteCore about orders, payments, products or your account. Send a message using our contact form and our support team will reply to you by email.",
 };
 
 export default function ContactPage() {

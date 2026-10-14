@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { clampText, productDescription } from "@/lib/seo";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Star } from "lucide-react";
@@ -16,8 +17,8 @@ export async function generateMetadata({ params }: PageProps<"/products/[slug]">
   const result = await getProduct((await params).slug);
   const product = result.status === "success" ? result.data.product : null;
   return {
-    title: product?.name ?? (result.status === "success" ? "Product not found" : "Product unavailable"),
-    description: product?.description?.trim() || (product ? `Explore ${product.name} and its variants at ByteCore.` : "This product is unavailable."),
+    title: product ? clampText(product.name, 48) : (result.status === "success" ? "Product not found" : "Product unavailable"),
+    description: product ? productDescription(product.name, product.description) : "This product is unavailable.",
     ...(product ? {} : { robots: { index: false, follow: false } }),
   };
 }
