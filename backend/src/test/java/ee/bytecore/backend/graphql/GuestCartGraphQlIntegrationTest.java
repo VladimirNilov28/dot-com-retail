@@ -2,7 +2,7 @@ package ee.bytecore.backend.graphql;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doAnswer;
 
 import java.math.BigDecimal;
 import java.net.HttpCookie;
@@ -129,7 +129,8 @@ class GuestCartGraphQlIntegrationTest {
     void setUp() {
         owner = user();
         variant = variant("19.99");
-        when(jwtDecoder.decode(anyString())).thenAnswer(invocation -> {
+        // doAnswer: stubbing must not invoke a stub left on the shared mock by another test class.
+        doAnswer(invocation -> {
             String token = invocation.getArgument(0);
             String[] parts = token.split("/", -1);
             if (parts.length != 2) {
@@ -143,7 +144,7 @@ class GuestCartGraphQlIntegrationTest {
                     .issuedAt(Instant.now())
                     .expiresAt(Instant.now().plusSeconds(120))
                     .build();
-        });
+        }).when(jwtDecoder).decode(anyString());
     }
 
     @Test
