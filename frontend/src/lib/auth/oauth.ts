@@ -6,7 +6,7 @@ import { AuthError, type OAuthTransaction } from "./model";
 let discovery: Promise<oidc.Configuration> | undefined;
 
 // Staff scopes are requested for every login; consent grants only those the user's role allows.
-const requestedScope = "openid offline_access user:read cart:read cart:write order:read order:write order:manage-status rating:write review:moderate user:manage-role product:read product:write category:read category:write warehouse:read warehouse:write audit:read shipping:manage";
+const requestedScope = "openid offline_access user:read user:write cart:read cart:write order:read order:write order:manage-status rating:write review:moderate user:manage-role product:read product:write category:read category:write warehouse:read warehouse:write audit:read shipping:manage";
 
 export async function oauthClient(): Promise<oidc.Configuration> {
   if (!discovery) {

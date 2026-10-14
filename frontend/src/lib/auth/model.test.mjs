@@ -35,6 +35,7 @@ describe("storefront authentication return contract", () => {
     });
     test("accepts review scopes only as optional role-filtered grants (#78 #85)", () => {
       for (const scope of ["openid user:read offline_access rating:write",
+        "openid user:read user:write offline_access",
         "openid user:read offline_access cart:read rating:write review:moderate"]) {
         expect(() => grantTokens({ ...grant, scope })).not.toThrow();
       }
@@ -54,7 +55,7 @@ describe("storefront authentication return contract", () => {
       for (const expires_in of [0, -1, 1.5, NaN, Infinity, 86401, "45"]) {
         expect(() => grantTokens({ ...grant, expires_in })).toThrow(AuthError);
       }
-      for (const scope of [undefined, "", "openid offline_access user:read user:write",
+      for (const scope of [undefined, "",
         "openid offline_access user:read user:read",
         "openid offline_access user:read payment:manage-status",
         "openid offline_access user:read user:manage-roles",

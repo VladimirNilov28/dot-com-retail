@@ -229,6 +229,7 @@ clients:
     # signed-in user's role, so customers never receive catalog/admin scopes.
     scopes:
       - user:read
+      - user:write
       - user:manage-role
       - product:read
       - product:write

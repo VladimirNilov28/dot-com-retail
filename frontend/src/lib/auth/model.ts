@@ -104,7 +104,7 @@ function decodeChallenge(value: unknown): EmailChallenge {
 // Roles may legitimately receive only a subset of the customer and staff scopes the BFF requests.
 function grantedScopesValid(scope: string): boolean {
   const granted = scope.split(" ");
-  const optional = new Set(["cart:read", "cart:write", "order:read", "order:write", "order:manage-status", "rating:write", "review:moderate", "user:manage-role", "product:read",
+  const optional = new Set(["cart:read", "cart:write", "order:read", "order:write", "order:manage-status", "rating:write", "review:moderate", "user:manage-role", "user:write", "product:read",
     "product:write", "category:read", "category:write", "warehouse:read", "warehouse:write", "audit:read", "shipping:manage"]);
   const required = ["offline_access", "openid", "user:read"];
   return new Set(granted).size === granted.length &&
