@@ -43,16 +43,27 @@ public interface UserRepository extends JpaRepository<User, Long> {
             + " and u.deleted = false and u.deletionIdentityId is null order by u.id")
     List<User> findActiveAdminsForUpdate();
 
+    /** Searches active users; a null role means any role. */
+    default Page<User> searchActive(String pattern, ee.bytecore.backend.enums.UserRole role, Pageable pageable) {
+        // An untyped "(:role is null or ...)" parameter cannot be typed by PostgreSQL, so filter by a role set.
+        return searchActiveInRoles(
+                pattern,
+                role == null
+                        ? java.util.EnumSet.allOf(ee.bytecore.backend.enums.UserRole.class)
+                        : java.util.EnumSet.of(role),
+                pageable);
+    }
+
     @Query(
             value = "select u from User u where u.deleted = false and u.deletionIdentityId is null"
-                    + " and (:role is null or u.role = :role)"
+                    + " and u.role in :roles"
                     + " and (lower(u.username) like :pattern escape '\\' or lower(u.email) like :pattern escape '\\')",
             countQuery = "select count(u) from User u where u.deleted = false and u.deletionIdentityId is null"
-                    + " and (:role is null or u.role = :role)"
+                    + " and u.role in :roles"
                     + " and (lower(u.username) like :pattern escape '\\' or lower(u.email) like :pattern escape '\\')")
-    Page<User> searchActive(
+    Page<User> searchActiveInRoles(
             @Param("pattern") String pattern,
-            @Param("role") ee.bytecore.backend.enums.UserRole role,
+            @Param("roles") java.util.Collection<ee.bytecore.backend.enums.UserRole> roles,
             Pageable pageable);
 
     @Modifying
