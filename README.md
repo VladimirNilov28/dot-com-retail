@@ -2,7 +2,8 @@
 
 For the standalone HeroUI v3 dark frontend foundation, see
 [`frontend/README.md`](frontend/README.md). Its component demonstration needs
-no backend services. Full-stack Docker reviewer setup remains separate work.
+no backend services. For the one-command, HTTPS, Docker-only reviewer stack
+(`make review`), see [`docs/review-setup.md`](docs/review-setup.md).
 
 ## Local development architecture
 
