@@ -53,5 +53,23 @@ jq '
 ' "$runtime/bytecore-base.json" |
   jq -f /etc/kratos/google-config.jq > "$runtime/bytecore-registration.json"
 rm "$runtime/bytecore-base.json"
+# Production SMTP (compose.prod.yml): when SMTP_HOST is given, the courier URI
+# is built from SMTP_* instead of kratos.yml's dev Mailpit URI. Credentials are
+# URL-encoded; plain SMTP is used only when neither TLS mode is requested.
+if [ -n "${SMTP_HOST:-}" ]; then
+  case "${SMTP_IMPLICIT_TLS:-false}" in true) scheme=smtps ;; *) scheme=smtp ;; esac
+  query=""
+  if [ "$scheme" = smtp ] && [ "${SMTP_STARTTLS:-false}" != true ]; then
+    query="?disable_starttls=true"
+  fi
+  userinfo=""
+  if [ -n "${SMTP_USERNAME:-}" ]; then
+    userinfo="$(jq -rn --arg u "$SMTP_USERNAME" --arg p "${SMTP_PASSWORD:-}" '($u|@uri) + ":" + ($p|@uri) + "@"')"
+  fi
+  COURIER_SMTP_CONNECTION_URI="${scheme}://${userinfo}${SMTP_HOST}:${SMTP_PORT:-587}/${query}"
+  export COURIER_SMTP_CONNECTION_URI
+  [ -z "${SMTP_FROM:-}" ] || export COURIER_SMTP_FROM_ADDRESS="$SMTP_FROM"
+  unset userinfo SMTP_PASSWORD
+fi
 unset AUTH_BRIDGE_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET
 exec kratos "$@" --config "$runtime/bytecore-registration.json"
