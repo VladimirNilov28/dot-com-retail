@@ -90,6 +90,15 @@ class AccountDeletionIntegrationTest {
         Long productId = jdbc.queryForObject(
                 "INSERT INTO products(name,slug) VALUES ('Retained','retained') RETURNING id", Long.class);
         jdbc.update("INSERT INTO product_ratings(product_id,user_id,stars) VALUES (?,?,5)", productId, user.getId());
+        User reviewer =
+                users.save(User.create("deleted-history-reviewer", "reviewer@example.com", LocalDate.of(1990, 2, 3)));
+        Long reviewId = jdbc.queryForObject(
+                "INSERT INTO product_ratings(product_id,user_id,stars,title,body) VALUES (?,?,4,'Kept','Kept review body')"
+                        + " RETURNING id",
+                Long.class,
+                productId,
+                reviewer.getId());
+        jdbc.update("INSERT INTO review_votes(review_id,user_id) VALUES (?,?)", reviewId, user.getId());
         Long variantId = jdbc.queryForObject(
                 "INSERT INTO product_variants(product_id,sku,price) VALUES (?,'retained',12.34) RETURNING id",
                 Long.class,
@@ -131,8 +140,9 @@ class AccountDeletionIntegrationTest {
                 .isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT email FROM users WHERE id=?", String.class, user.getId()))
                 .isNotEqualTo(user.getEmail());
-        for (String table :
-                new String[] {"user_address", "user_payment_methods", "carts", "wishlists", "product_ratings"}) {
+        for (String table : new String[] {
+            "user_address", "user_payment_methods", "carts", "wishlists", "product_ratings", "review_votes"
+        }) {
             assertThat(jdbc.queryForObject(
                             "SELECT count(*) FROM " + table + " WHERE user_id=?", Integer.class, user.getId()))
                     .isZero();

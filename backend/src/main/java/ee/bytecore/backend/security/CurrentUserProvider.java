@@ -12,7 +12,11 @@ import org.springframework.stereotype.Component;
 public class CurrentUserProvider {
 
     public Long getCurrentUserId() {
-        String sub = SecurityContextHolder.getContext().getAuthentication().getName();
+        var authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null) {
+            return null;
+        }
+        String sub = authentication.getName();
         try {
             return Long.valueOf(sub);
         } catch (NumberFormatException e) {

@@ -37,7 +37,7 @@ export async function authorizationUrl(transaction: OAuthTransaction): Promise<U
   const config = authConfig();
   return oidc.buildAuthorizationUrl(await oauthClient(), {
     redirect_uri: `${config.origin}/auth/callback`, response_type: "code", response_mode: "form_post",
-    scope: "openid offline_access user:read cart:read cart:write order:read order:write order:manage-status", state: transaction.state, nonce: transaction.nonce,
+    scope: "openid offline_access user:read cart:read cart:write order:read order:write order:manage-status rating:write review:moderate", state: transaction.state, nonce: transaction.nonce,
     // The BFF owns login state; Hydra's remembered subject can outlive local/provider logout.
     prompt: "login",
     code_challenge: await oidc.calculatePKCECodeChallenge(transaction.verifier), code_challenge_method: "S256",

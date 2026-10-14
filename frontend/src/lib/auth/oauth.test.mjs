@@ -37,7 +37,8 @@ test("storefront authorization cannot reuse a remembered Hydra subject from a lo
     expect(request.searchParams.get("code_challenge_method")).toBe("S256");
     expect(request.searchParams.get("response_mode")).toBe("form_post");
     expect(request.searchParams.get("scope").split(" ").sort()).toEqual([
-      "cart:read", "cart:write", "offline_access", "openid", "order:manage-status", "order:read", "order:write", "user:read",
+      "cart:read", "cart:write", "offline_access", "openid", "order:manage-status", "order:read", "order:write", "rating:write",
+      "review:moderate", "user:read",
     ]);
   } finally {
     provider.stop(true);

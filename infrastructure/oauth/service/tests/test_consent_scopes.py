@@ -16,7 +16,7 @@ ROLE_SCOPES = {
         "order:read", "order:write", "payment:read", "payment:write",
     },
     "SUPPORT": {"user:read", "user:write", "order:read", "payment:read"},
-    "CATALOG_MANAGER": {"product:read", "product:write", "category:read", "category:write"},
+    "CATALOG_MANAGER": {"product:read", "product:write", "category:read", "category:write", "review:moderate"},
     "ORDER_MANAGER": {"order:read", "order:manage-status", "payment:read", "payment:manage-status"},
     "WAREHOUSE": {"warehouse:read", "warehouse:write"},
 }

@@ -131,6 +131,9 @@ the `Product` entity — it's loaded via `ProductVariantRepository.findAllByProd
 | `createProduct` / `updateProduct` / `deleteProduct` | `Product!` / `Product!` / `Boolean!` |
 | `createProductVariant` / `updateProductVariant` / `deleteProductVariant` | `ProductVariant!` / `ProductVariant!` / `Boolean!` |
 | `rateProduct(productId: ID!, stars: Int!)` | `Product!` with fresh rating aggregates |
+| `upsertMyReview(productId, stars, title, body)` / `deleteMyReview(productId)` | `ProductReview!` / `Boolean!` |
+| `voteReviewHelpful(reviewId)` / `unvoteReviewHelpful(reviewId)` | `ProductReview!` |
+| `hideReview(reviewId, reason)` / `restoreReview(reviewId)` | `ModerationReview!` |
 
 #### P1 product ratings (#78)
 
@@ -152,6 +155,32 @@ serialized write wins, and identical repeats never inflate the count.
 Writes lock the active account, matching other self-service writes and excluding
 concurrent account deletion. Account deletion removes that account's ratings;
 physical user/product deletion cascades.
+
+#### P1 written reviews and moderation (#78 #79 #85)
+
+Reviews extend the rating model (one `product_ratings` row per owner/product, see
+`docs/database/FLYWAY_DB.md` V22); `rateProduct` and `upsertMyReview` edit the
+same row.
+
+| Operation | Access |
+|---|---|
+| `productReviews(productId, page, size ≤ 20, sort: NEWEST\|HELPFUL\|RATING_HIGH\|RATING_LOW)` | Public (anonymous allowed, like catalog reads). Visible written reviews, page info, visible `averageRating`/`ratingCount` and five-bucket `distribution` |
+| `myReview(productId)` | `rating:write`; caller's own row in any status, or null |
+| `upsertMyReview` / `deleteMyReview` | `rating:write`; caller-owned only (no owner/review id accepted) |
+| `voteReviewHelpful` / `unvoteReviewHelpful` | `rating:write`; idempotent; voting on your own review is `FORBIDDEN`; only visible written reviews |
+| `moderationReviews(status, page, size ≤ 20)` / `hideReview(reviewId, reason)` / `restoreReview(reviewId)` | `review:moderate` scope **and** role `CATALOG_MANAGER` or `ADMIN` (staff roles are only granted at aal2). Hide/restore are audited (`REVIEW_HIDE` / `REVIEW_RESTORE`, target `PRODUCT_REVIEW`) |
+
+Validation (server-authoritative, mirrored in the storefront): stars 1-5; title
+1-120 single-line, body 10-4000 characters (code points) after trimming; control
+characters and HTML-like markup (`<tag`, `<!--`, `<?`) are rejected, never
+sanitised; moderation reason 3-500. Text is stored and rendered as plain text.
+Hidden reviews are excluded from `Product.averageRating`/`ratingCount`,
+`RATING_DESC`, public lists, distribution and voting. `authorName` is the
+customer's username, shown as "Customer" when it looks like an email address.
+Signed-in reads of `productReviews` are `private, no-store` and expose
+`viewerHasVoted`/`viewerIsAuthor`; anonymous reads use the public cache policy.
+The `bytecore-storefront` OAuth client is allowed `rating:write` and
+`review:moderate`; `review:moderate` is granted to CATALOG_MANAGER (ADMIN via `*`).
 
 Aggregates are **computed**, not denormalized: PostgreSQL `AVG(stars)` and
 `COUNT(*)` are loaded with each Product via Hibernate formulas, with no extra

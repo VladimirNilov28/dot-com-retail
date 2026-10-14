@@ -243,6 +243,28 @@ type Inventory @join__type(graph: RETAIL) {
   warehouse: Warehouse!
 }
 
+type ModerationReview @join__type(graph: RETAIL) {
+  authorName: String!
+  body: String
+  createdAt: Instant!
+  helpfulCount: Int!
+  id: ID!
+  moderatedAt: Instant
+  moderationReason: String
+  productId: ID!
+  productName: String!
+  productSlug: String!
+  stars: Int!
+  status: ReviewStatus!
+  title: String
+  updatedAt: Instant!
+}
+
+type ModerationReviewPage @join__type(graph: RETAIL) {
+  items: [ModerationReview!]!
+  pageInfo: SearchPageInfo!
+}
+
 type Mutation @join__type(graph: RETAIL) {
   addCartItem(input: AddCartItemInput!): CartItem!
   addGuestCartItem(input: AddCartItemInput!): GuestCart!
@@ -267,6 +289,7 @@ type Mutation @join__type(graph: RETAIL) {
   deleteCategory(categoryId: ID!): Boolean!
   deleteMyAddress(addressId: ID!): Boolean!
   deleteMyPaymentMethod(paymentMethodId: ID!): Boolean!
+  deleteMyReview(productId: ID!): Boolean!
   deleteProduct(productId: ID!): Boolean!
   deleteProductImage(imageId: ID!): Boolean!
   deleteProductVariant(variantId: ID!): Boolean!
@@ -275,6 +298,7 @@ type Mutation @join__type(graph: RETAIL) {
   deleteUserAddress(addressId: ID!, userId: ID!): Boolean!
   deleteUserPaymentMethod(paymentMethodId: ID!, userId: ID!): Boolean!
   deleteWarehouse(warehouseId: ID!): Boolean!
+  hideReview(reason: String!, reviewId: ID!): ModerationReview!
   mergeGuestCart(requestId: UUID!): GuestCartMergeResult!
   """
   Submit/update the caller's integer 1-5 star rating. Requires rating:write and an
@@ -289,11 +313,13 @@ type Mutation @join__type(graph: RETAIL) {
   """imageIds must list each of the product's images exactly once."""
   reorderProductImages(imageIds: [ID!]!, productId: ID!): [ProductImage!]!
   requestRefund(input: RequestRefundInput!): OrderRefundRequest!
+  restoreReview(reviewId: ID!): ModerationReview!
   setInventory(input: SetInventoryInput!): Inventory!
   setOrderTracking(input: SetOrderTrackingInput!): Order!
   """Moves the image to position 0, keeping the others' relative order."""
   setPrimaryProductImage(imageId: ID!): [ProductImage!]!
   startGuestCart: StartGuestCartResult!
+  unvoteReviewHelpful(reviewId: ID!): ProductReview!
   updateCartItem(cartItemId: ID!, input: UpdateCartItemInput!): CartItem!
   updateCategory(categoryId: ID!, input: UpdateCategoryInput!): Category!
   updateGuestCartItem(cartItemId: ID!, input: UpdateCartItemInput!): GuestCart!
@@ -304,6 +330,8 @@ type Mutation @join__type(graph: RETAIL) {
   updateProductVariant(input: UpdateProductVariantInput!, variantId: ID!): ProductVariant!
   updateUserRole(input: UpdateRoleInput, userId: ID!): User!
   updateWarehouse(input: UpdateWarehouseInput!, warehouseId: ID!): Warehouse!
+  upsertMyReview(body: String!, productId: ID!, stars: Int!, title: String!): ProductReview!
+  voteReviewHelpful(reviewId: ID!): ProductReview!
 }
 
 type Order @join__type(graph: RETAIL) {
@@ -461,6 +489,29 @@ type ProductImage @join__type(graph: RETAIL) {
   width: Int!
 }
 
+type ProductReview @join__type(graph: RETAIL) {
+  authorName: String!
+  body: String
+  createdAt: Instant!
+  helpfulCount: Int!
+  id: ID!
+  productId: ID!
+  stars: Int!
+  status: ReviewStatus!
+  title: String
+  updatedAt: Instant!
+  viewerHasVoted: Boolean!
+  viewerIsAuthor: Boolean!
+}
+
+type ProductReviewPage @join__type(graph: RETAIL) {
+  averageRating: Float
+  distribution: [RatingDistributionBucket!]!
+  items: [ProductReview!]!
+  pageInfo: SearchPageInfo!
+  ratingCount: Int!
+}
+
 type ProductSearchResult @join__type(graph: RETAIL) {
   facets: ProductFacets!
   items: [Product!]!
@@ -518,11 +569,14 @@ type Query @join__type(graph: RETAIL) {
   guestOrder(publicId: UUID, requestId: UUID): CheckoutOrder
   guestPaymentSession(requestId: UUID!): CheckoutPaymentSession!
   me: User!
+  moderationReviews(page: Int = 0, size: Int = 20, status: ReviewStatus): ModerationReviewPage!
   myCart: Cart!
   myOrders(filter: OrderFilter, page: Int = 0, size: Int = 20): OrderPage!
+  myReview(productId: ID!): ProductReview
   myWishlist: Wishlist!
   order(id: ID, publicId: UUID): Order
   product(id: ID, slug: String): Product
+  productReviews(page: Int = 0, productId: ID!, size: Int = 10, sort: ReviewSort = NEWEST): ProductReviewPage!
   productSearchSuggestions(limit: Int, query: String!): [ProductSuggestion!]!
   products: [Product!]!
   searchProducts(input: ProductSearchInput!): ProductSearchResult!
@@ -530,6 +584,11 @@ type Query @join__type(graph: RETAIL) {
   user(id: ID!): User!
   warehouse(id: ID!): Warehouse
   warehouses: [Warehouse!]!
+}
+
+type RatingDistributionBucket @join__type(graph: RETAIL) {
+  count: Int!
+  stars: Int!
 }
 
 type SearchPageInfo @join__type(graph: RETAIL) {
@@ -932,6 +991,18 @@ enum ProductSort @join__type(graph: RETAIL) {
   PRICE_DESC @join__enumValue(graph: RETAIL)
   RATING_DESC @join__enumValue(graph: RETAIL)
   RELEVANCE @join__enumValue(graph: RETAIL)
+}
+
+enum ReviewSort @join__type(graph: RETAIL) {
+  HELPFUL @join__enumValue(graph: RETAIL)
+  NEWEST @join__enumValue(graph: RETAIL)
+  RATING_HIGH @join__enumValue(graph: RETAIL)
+  RATING_LOW @join__enumValue(graph: RETAIL)
+}
+
+enum ReviewStatus @join__type(graph: RETAIL) {
+  HIDDEN @join__enumValue(graph: RETAIL)
+  VISIBLE @join__enumValue(graph: RETAIL)
 }
 
 enum Role @join__type(graph: RETAIL) {
