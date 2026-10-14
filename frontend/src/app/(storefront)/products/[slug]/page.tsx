@@ -9,6 +9,8 @@ import { formatPrice, catalogHref } from "@/lib/catalog/model";
 import { CatalogLink } from "@/components/catalog-link";
 import { ProductGallery } from "@/components/product-gallery";
 import { ProductRecovery } from "@/components/product-recovery";
+import { ProductReviews } from "@/components/reviews/product-reviews";
+import { loadReviews } from "@/lib/reviews/actions";
 
 export async function generateMetadata({ params }: PageProps<"/products/[slug]">): Promise<Metadata> {
   const result = await getProduct((await params).slug);
@@ -35,6 +37,7 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
   // Live read, separate from the cached product document; failure is "unknown", never "out of stock".
   const stock = selected ? (await getAvailability(slug))?.get(selected.id) ?? null : null;
   const availability = stock?.availability ?? null;
+  const reviews = await loadReviews(product.id, "NEWEST", 0);
   return <article className="product-page">
     <nav aria-label="Breadcrumb" className="catalog-breadcrumb">
       <Link href="/" className="store-link">Home</Link><span aria-hidden="true">/</span>
@@ -114,5 +117,6 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
       </div>)}</div>
     </div>
     </div>
+    <ProductReviews productId={product.id} slug={slug} initial={reviews} />
   </article>;
 }

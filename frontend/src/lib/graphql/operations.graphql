@@ -291,3 +291,33 @@ mutation MyCartUpdate($id: ID!, $input: UpdateCartItemInput!) {
 mutation MyCartRemove($id: ID!) {
   removeCartItem(cartItemId: $id)
 }
+
+query ProductReviews($productId: ID!, $page: Int, $size: Int, $sort: ReviewSort) {
+  productReviews(productId: $productId, page: $page, size: $size, sort: $sort) {
+    items { id stars title body authorName helpfulCount viewerHasVoted viewerIsAuthor createdAt updatedAt }
+    pageInfo { page size totalItems totalPages }
+    averageRating
+    ratingCount
+    distribution { stars count }
+  }
+}
+
+query MyReview($productId: ID!) {
+  myReview(productId: $productId) { id stars title body status createdAt updatedAt }
+}
+
+mutation UpsertMyReview($productId: ID!, $stars: Int!, $title: String!, $body: String!) {
+  upsertMyReview(productId: $productId, stars: $stars, title: $title, body: $body) { id stars title body status createdAt updatedAt }
+}
+
+mutation DeleteMyReview($productId: ID!) {
+  deleteMyReview(productId: $productId)
+}
+
+mutation VoteReviewHelpful($reviewId: ID!) {
+  voteReviewHelpful(reviewId: $reviewId) { id helpfulCount viewerHasVoted }
+}
+
+mutation UnvoteReviewHelpful($reviewId: ID!) {
+  unvoteReviewHelpful(reviewId: $reviewId) { id helpfulCount viewerHasVoted }
+}
