@@ -22,9 +22,12 @@ oauth2:
   # Custom claims set via the consent session's access_token data are nested
   # under the "ext" claim unless explicitly whitelisted here — this promotes
   # "role" to a genuine top-level JWT claim so Spring's JWT authority
-  # conversion (which reads a top-level `role` claim) can find it.
+  # conversion (which reads a top-level `role` claim) can find it. `aal` is
+  # promoted too: the backend and the admin gate require a top-level aal2
+  # claim before granting staff authorities.
   allowed_top_level_claims:
     - role
+    - aal
 
 # Short-lived access token (project requirement: 15-60 min) and a
 # refresh-token lifetime bounded to a week (project requirement: 3-7

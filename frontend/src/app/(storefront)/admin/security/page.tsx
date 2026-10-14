@@ -4,6 +4,7 @@ import { AccountHeading } from "@/components/account/account-gate";
 import { Notice } from "@/components/account/notice";
 import { AuthenticatorPanel } from "@/components/account/security-panels";
 import { AuthProblem } from "@/components/auth-page";
+import { adminAccess } from "@/lib/admin/gate";
 import { authConfig } from "@/lib/auth/config";
 import { AuthError, adminNext, authCookie, hasSessionCookie } from "@/lib/auth/model";
 import { loadStaffSecurity, type StaffSecurity } from "@/lib/auth/settings";
@@ -50,13 +51,21 @@ export default async function AdminSecurity({ searchParams }: { searchParams: Pr
   }
   if (!security.fresh || query.reauth === "required") return <Reconfirm next={next} />;
   const enrolled = security.totpEnabled;
+  // Already verified on this session: offer the way forward instead of another sign-in loop.
+  const verified = enrolled && (await adminAccess(staffRoles)).kind === "ok";
   return (
     <div className="account-main">
       <AccountHeading title="Authenticator"
         description="Administrative access needs an authenticator app on every staff sign-in." />
       {query.saved ? <Notice tone="success">Authenticator confirmed. Verify it once to open the admin area.</Notice> : null}
       {query.invalid === "1" ? <Notice tone="error">That code was not accepted. Check your app and try again.</Notice> : null}
-      {enrolled ? (
+      {verified ? (
+        <section className="account-card" aria-labelledby="verified-h">
+          <h2 id="verified-h" className="text-lg font-semibold">Authenticator verified</h2>
+          <p className="text-sm text-muted">This session is verified with your authenticator app.</p>
+          <a className="store-cta justify-self-start" href={next}>Continue to admin</a>
+        </section>
+      ) : enrolled ? (
         <section className="account-card" aria-labelledby="verify-h">
           <h2 id="verify-h" className="text-lg font-semibold">Verify authenticator</h2>
           <p className="text-sm text-muted">Enter the current code from your authenticator app to unlock the admin area.</p>
@@ -68,6 +77,8 @@ export default async function AdminSecurity({ searchParams }: { searchParams: Pr
     </div>
   );
 }
+
+const staffRoles: ReadonlySet<string> = new Set(["ADMIN", "CATALOG_MANAGER", "ORDER_MANAGER", "WAREHOUSE", "SUPPORT"]);
 
 function Reconfirm({ next }: { next: string }) {
   return (
