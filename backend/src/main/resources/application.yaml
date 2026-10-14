@@ -99,6 +99,19 @@ payment:
   service-url: ${PAYMENT_SERVICE_URL:http://localhost:8081}
   internal-token: ${PAYMENT_INTERNAL_TOKEN:}
 
+# Access-token revocation (docs/auth/browser-contract.md "Token revocation"). After
+# local JWT validation every bearer token is introspected at Hydra's admin API
+# (hydra.admin-url) and must be active=true with a matching sub; errors/timeouts
+# reject the request (fail closed). Results are cached per token hash in a bounded
+# LRU map, so a revoked token is accepted for at most cache-ttl (max 30s) after
+# its last successful introspection.
+security:
+  token-introspection:
+    enabled: ${TOKEN_INTROSPECTION_ENABLED:true}
+    timeout: PT2S
+    cache-ttl: PT10S
+    cache-max-entries: 10000
+
 # Token-bucket rate limiting (docs/security/rate-limiting.md). Buckets live in
 # PostgreSQL (rate_limit_buckets) so limits hold across backend instances.
 # capacity = burst size; refill-tokens per refill-period = sustained rate.

@@ -17,6 +17,9 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.core.OAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
@@ -29,6 +32,7 @@ import org.springframework.util.function.SingletonSupplier;
 import org.springframework.web.client.RestTemplate;
 
 import ee.bytecore.backend.security.GuestCartHttpFilter;
+import ee.bytecore.backend.security.HydraTokenIntrospector;
 import ee.bytecore.backend.security.JwtWebSocketInterceptor;
 import ee.bytecore.backend.security.ratelimit.RateLimitFilter;
 
@@ -49,7 +53,15 @@ public class SecurityConfig {
     @Bean
     JwtDecoder jwtDecoder(
             @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}") String issuerUri,
-            @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri:}") String jwkSetUri) {
+            @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri:}") String jwkSetUri,
+            ObjectProvider<HydraTokenIntrospector> introspector) {
+        return buildJwtDecoder(issuerUri, jwkSetUri, introspector.getIfAvailable());
+    }
+
+    // Local checks (signature, issuer, expiry) run first; only a token that passes
+    // them is introspected at Hydra, so revoked tokens are rejected (401) even when
+    // sent straight to Spring. See docs/auth/browser-contract.md "Token revocation".
+    static JwtDecoder buildJwtDecoder(String issuerUri, String jwkSetUri, HydraTokenIntrospector introspector) {
         var requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(DISCOVERY_TIMEOUT);
         requestFactory.setReadTimeout(DISCOVERY_TIMEOUT);
@@ -64,7 +76,14 @@ public class SecurityConfig {
                     : NimbusJwtDecoder.withJwkSetUri(jwkSetUri)
                             .restOperations(restTemplate)
                             .build();
-            decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(issuerUri));
+            OAuth2TokenValidator<Jwt> local = JwtValidators.createDefaultWithIssuer(issuerUri);
+            decoder.setJwtValidator(
+                    introspector == null
+                            ? local
+                            : jwt -> {
+                                OAuth2TokenValidatorResult result = local.validate(jwt);
+                                return result.hasErrors() ? result : introspector.validate(jwt);
+                            });
             return decoder;
         });
 

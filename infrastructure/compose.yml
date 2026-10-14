@@ -300,6 +300,9 @@ services:
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://hydra:4444/.well-known/jwks.json
       KRATOS_ADMIN_URL: http://kratos:4434
       HYDRA_ADMIN_URL: http://hydra:4445
+      # Reject revoked access JWTs via Hydra admin introspection (fail closed, 10 s cache;
+      # docs/auth/browser-contract.md "Token revocation").
+      TOKEN_INTROSPECTION_ENABLED: "true"
       OAUTH_SERVICE_CLIENT_ID: ${OAUTH_SERVICE_CLIENT_ID:?OAUTH_SERVICE_CLIENT_ID is required}
       MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED: "true"
       MEDIA_STORAGE_DIR: /app/media-data
