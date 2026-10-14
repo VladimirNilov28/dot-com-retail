@@ -48,6 +48,7 @@ replay_pid*
 .env.*
 !.env.example
 !.env.review.example
+!.env.prod.example
 
 # =====================================================
 # Secrets
@@ -218,6 +219,8 @@ infrastructure/volumes/*
 infrastructure/review/certs/
 # Review-stack Postgres storage encryption key from scripts/review-up.sh
 infrastructure/review/secrets/
+# Production-mode private material from scripts/prod.sh (storage key, TLS keys)
+infrastructure/prod/secrets/
 infrastructure/jenkins/venv/
 __pycache__/
 *.pyc

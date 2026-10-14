@@ -1,0 +1,56 @@
+# Hive Router configuration — production (infrastructure/compose.prod.yml).
+# Same routing and header forwarding as hive/router.config.yaml, but without
+# introspection or the built-in GraphQL IDE. Browsers never call the router:
+# the Next.js BFF calls it server-side over the internal network, so CORS is off.
+supergraph:
+  source: file
+  path: ./supergraph.graphql
+
+http:
+  host: 0.0.0.0
+  port: 4000
+
+headers:
+  all:
+    request:
+      - propagate:
+          named: Authorization
+  subgraphs:
+    retail:
+      request:
+        - propagate:
+            named: [Cookie, Origin, X-Guest-Cart-Request]
+        # Client address set by the BFF; Spring honours it only because the
+        # router's fixed address is a configured trusted proxy.
+        - propagate:
+            named: X-Forwarded-For
+      response:
+        - propagate:
+            named: Set-Cookie
+            algorithm: append
+        - propagate:
+            named: [Cache-Control, Vary]
+            algorithm: append
+        - propagate:
+            named: Retry-After
+            algorithm: last
+
+cors:
+  enabled: false
+  policies: []
+
+introspection: false
+
+subscriptions:
+  enabled: true
+  websocket:
+    subgraphs:
+      retail:
+        path: /graphql
+
+error_masking:
+  all:
+    enabled: true
+  subgraphs:
+    retail:
+      enabled: false

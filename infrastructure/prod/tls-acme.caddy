@@ -1,0 +1,7 @@
+# Public certificate via ACME (PROD_TLS_MODE=acme). Requires PROD_HOST to be a
+# real DNS name resolving to this host, with ports 80 and/or 443 reachable from
+# the internet for the HTTP-01/TLS-ALPN-01 challenge. Account and certificates
+# persist in the caddy_data volume.
+tls {$PROD_ACME_EMAIL} {
+	protocols tls1.2 tls1.3
+}

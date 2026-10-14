@@ -1,0 +1,71 @@
+# Production TLS edge (infrastructure/compose.prod.yml). Every public origin is
+# HTTPS on {$PROD_HOST}; each listener uses the same port inside and outside the
+# container, and containers reach these URLs through the {$PROD_HOST} network
+# alias of this service. Certificates: tls-acme.caddy (public ACME issuance for
+# a real domain) or tls-manual.caddy (operator-supplied or self-signed files),
+# selected by scripts/prod.sh through PROD_CADDY_TLS.
+#
+# Caddy trusts no upstream proxies (default): a client-supplied
+# X-Forwarded-For is discarded and replaced by the TCP peer address.
+{
+	http_port {$PROD_HTTP_PORT}
+	https_port {$PROD_HTTPS_PORT}
+	# Admin API stays on the container loopback (healthcheck only).
+	admin 127.0.0.1:2019
+	# Several HTTPS sites share PROD_HOST; the automatic redirect could pick
+	# any of them, so HTTP is redirected explicitly to the storefront below.
+	# ACME HTTP-01 challenges are still answered on PROD_HTTP_PORT.
+	auto_https disable_redirects
+}
+
+(edge) {
+	import /etc/caddy/tls-{$PROD_CADDY_TLS}.caddy
+	header {
+		Strict-Transport-Security "max-age={$PROD_HSTS_MAX_AGE}"
+		-Server
+	}
+	encode zstd gzip
+}
+
+http://{$PROD_HOST}:{$PROD_HTTP_PORT} {
+	redir https://{$PROD_HOST}:{$PROD_HTTPS_PORT}{uri} 308
+}
+
+# Storefront (Next.js BFF) and the Stripe webhook endpoint.
+https://{$PROD_HOST}:{$PROD_HTTPS_PORT} {
+	import edge
+	@stripeWebhook {
+		method POST
+		path /webhooks/stripe
+	}
+	handle @stripeWebhook {
+		reverse_proxy payment-service:8081
+	}
+	handle /webhooks/stripe {
+		respond 405
+	}
+	handle {
+		reverse_proxy frontend:3000 {
+			header_up -Forwarded
+			header_up -X-Real-IP
+		}
+	}
+}
+
+# Ory Kratos public API.
+https://{$PROD_HOST}:{$PROD_KRATOS_PORT} {
+	import edge
+	reverse_proxy kratos:4433
+}
+
+# Ory Hydra public API (through its form_post nginx shim).
+https://{$PROD_HOST}:{$PROD_HYDRA_PORT} {
+	import edge
+	reverse_proxy hydra-public:4444
+}
+
+# oauth-service login/consent bridge.
+https://{$PROD_HOST}:{$PROD_BRIDGE_PORT} {
+	import edge
+	reverse_proxy oauth-service:4446
+}
