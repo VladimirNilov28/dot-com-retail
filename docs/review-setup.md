@@ -9,7 +9,14 @@ That workflow is unchanged, because everything described here is opt-in through
 
 ## Prerequisites
 
-- Docker Engine with Docker Compose **v2.24 or newer** (the override uses `!reset`).
+- Docker Engine with Docker Compose **v2.24.4 or newer** (the override uses `!reset`
+  and `!override`).
+- A Docker host that provides `/dev/fuse` (standard on Linux). The review Postgres
+  stores its data directory in a gocryptfs-encrypted volume, and its container gets
+  `/dev/fuse`, `CAP_SYS_ADMIN` and `apparmor:unconfined`. `review-up.sh` generates
+  the storage key in `infrastructure/review/secrets/pgdata.key` (Git-ignored).
+  Back it up: without it the database cannot be opened. See
+  [`security/encryption-at-rest.md`](security/encryption-at-rest.md#storage-layer-encryption-review-stack).
 - `bash` and the repository checkout. On Windows, use WSL2 or Git Bash.
 - Optional: the [Stripe CLI](https://docs.stripe.com/stripe-cli) for webhooks, and
   Google OAuth credentials.
@@ -227,8 +234,15 @@ The stack was verified against a disposable project
   `scripts/gen-review-certs.sh --force`, then `make review`, then re-import `ca.crt`.
 - **`bytecore.localhost` does not resolve** (some non-browser tools): add
   `127.0.0.1 bytecore.localhost` to the hosts file.
-- **`!reset` errors:** your Docker Compose is older than v2.24; upgrade it.
+- **`!reset`/`!override` errors:** your Docker Compose is older than v2.24.4; upgrade it.
+- **Postgres exits with `encrypted-storage: FATAL: …`:** the log line names the cause.
+  - *Wrong key* or *key file missing*: restore `infrastructure/review/secrets/pgdata.key`
+    from your backup.
+  - */dev/fuse* or *could not mount*: the host lacks FUSE, or a security profile blocks
+    it. See the fallback in
+    [`security/encryption-at-rest.md`](security/encryption-at-rest.md#storage-layer-encryption-review-stack).
 - **Sign-in fails after regenerating `.env.review`:** the volumes still hold the old
   secrets. Run `scripts/review-down.sh --volumes` and then `make review`.
-- **A clean slate:** run `scripts/review-down.sh --volumes`, delete `.env.review` and
-  `infrastructure/review/certs/`, then run `make review`.
+- **A clean slate:** run `scripts/review-down.sh --volumes`, delete `.env.review`,
+  `infrastructure/review/certs/` and `infrastructure/review/secrets/`, then run
+  `make review`.

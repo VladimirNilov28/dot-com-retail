@@ -167,11 +167,177 @@ Evidence: `EncryptionAtRestIntegrationTest` (Testcontainers) checks four things:
 at rest. On the dev database, the first start reported:
 `sealed 34 addresses, 55 order snapshots, 104 notifications`.
 
+## Provider-owned data (Kratos, Hydra)
+
+Kratos and Hydra (both `v26.2.0`, see `infrastructure/compose.yml`) keep their own
+tables in the same PostgreSQL server. We do not patch or fork them. What these
+versions actually protect:
+
+| Data | Kratos/Hydra behaviour |
+|---|---|
+| Passwords | Hashed (bcrypt/argon2); never stored reversibly |
+| OIDC (social sign-in) tokens | Encrypted with Kratos `secrets.cipher`. This is the **only** use of `secrets.cipher` |
+| TOTP secrets | **Plaintext**: `identity_credentials.config` stores `{"totp_url":"otpauth://…"}` |
+| Identity traits (email, username, date of birth) | **Plaintext** JSON in `identities.traits` |
+| Session tokens | Stored as issued in `sessions.token` |
+| Hydra JWK private keys | Encrypted with Hydra `secrets.system` |
+| Hydra OAuth2 tokens | Hydra stores token signatures, not the bearer tokens |
+
+These findings come from the Kratos source for this version: `encryptOAuth2Tokens`
+in the OIDC strategy is the only caller of the cipher, and the TOTP credential
+config is written as plain JSON. A disposable Kratos confirmed the plaintext TOTP
+URL and traits in the database. Kratos offers no application-level encryption for
+those columns, so they are protected at the **storage layer** instead.
+
+## Storage-layer encryption (review stack)
+
+The reviewer stack (`infrastructure/compose.review.yml`, started by
+`scripts/review-up.sh`) runs PostgreSQL from
+`infrastructure/review/postgres-encrypted/`. This is `postgres:17` plus
+[gocryptfs](https://nuetzlich.net/gocryptfs/), which encrypts file contents
+(AES-256-GCM) and file names.
+
+- The named volume `postgres_crypt_volume` holds **ciphertext only**. The plaintext
+  `postgres_volume` of the dev stack is not mounted.
+- `encrypted-storage-entrypoint.sh` reads the key file, mounts the decrypted view at
+  `PGDATA` inside the container only, then execs the normal (TLS) Postgres
+  entrypoint. Postgres runs as PID 1 as usual.
+- Everything under `PGDATA` is encrypted. That covers all databases in the server
+  (`retail`, Kratos, Hydra, BFF `storefront_auth`, payment service), WAL, temporary
+  files and the server configuration.
+- Key: `infrastructure/review/secrets/pgdata.key` (Git-ignored; override with
+  `REVIEW_PGDATA_KEY_FILE`). `review-up.sh` generates it once (32 random bytes,
+  mode 600) and bind-mounts it read-only at `/run/secrets/pgdata_key`. It is
+  separate from `APP_DATA_KEYS` and lives outside the encrypted volume.
+  `review-down.sh --volumes` deletes the data but keeps the key.
+- **Fail closed:** Postgres does not start, and the container exits 1 with a
+  clear `encrypted-storage: FATAL: …` log line, if:
+  - the key is missing, empty or wrong;
+  - `/dev/fuse` or `CAP_SYS_ADMIN` is missing;
+  - the cipher volume holds non-gocryptfs data;
+  - unencrypted data is already present at `PGDATA`.
+
+  If the volume exists but the key file is gone, `review-up.sh` refuses to
+  generate a new key.
+- **Host prerequisites:** a Linux Docker host (or Docker Desktop VM) that provides
+  `/dev/fuse`. The container gets `--device /dev/fuse`, `cap_add: SYS_ADMIN` and
+  `security_opt: apparmor:unconfined`; the last is needed only on AppArmor hosts
+  (Ubuntu, Debian), where the default profile blocks FUSE mounts. Rootless Docker
+  and hosts without FUSE are not supported.
+- **Fallback when FUSE is unavailable:** encrypt the Docker data root at the host
+  instead (LUKS/dm-crypt, FileVault, BitLocker), and run Postgres with a plaintext
+  volume by removing the `build`, `image`, `devices`, `cap_add`, `security_opt`,
+  `environment` keys of the `postgres` service in `compose.review.yml`. Also set
+  `entrypoint: ["/review/postgres-tls-entrypoint.sh"]`, and in the `!override`
+  volume list replace the cipher and key mounts with
+  `postgres_volume:/var/lib/postgresql/data`. Document that choice in the deployment.
+
+### Threat boundary
+
+| Protected | Not protected |
+|---|---|
+| Copies of the Docker volume or disk, file-level backups and snapshots of `postgres_crypt_volume`, a stolen host disk (with the key file kept elsewhere) | Query results and anything a database role can read while the stack runs |
+| WAL, temp files and file names | Logical dumps (`pg_dump`/`pg_dumpall`): they are plaintext and must be encrypted separately |
+| | Host root or a container with access to the running mount, memory, or the key file |
+
+Key separation: the storage key (`pgdata.key`) and the application data keys
+(`APP_DATA_KEYS`) are independent. Spring field encryption still protects its
+columns from database roles and dumps; storage encryption protects provider tables
+that Spring cannot encrypt. Store `pgdata.key` apart from volume backups: a backup
+of the key with the volume defeats the purpose.
+
+### Verification evidence
+
+Verified on disposable resources (`dcr-crypto-tmp-*`, removed afterwards). Results
+are counts and booleans only:
+
+1. **Standalone image with a disposable Kratos `v26.2.0`:**
+   - Registration, login and TOTP enrollment via the native API all succeeded.
+   - Decrypted database: identities with the marker trait = 1; TOTP credentials
+     with a plaintext `otpauth` URL = 1.
+   - Plaintext view inside the container: files containing the marker = 8,
+     `otpauth` = 3, the session token = 3.
+   - Raw cipher volume (1742 files): files containing the marker = 0, `otpauth`
+     = 0, the session token = 0; `PG_VERSION` file names = 0.
+   - After `docker restart` and after recreating the container (crash
+     simulation), login still worked and the old session was still valid.
+   - Wrong key, missing key, no `/dev/fuse` and no `CAP_SYS_ADMIN` each exited 1
+     with a clear log line.
+2. **The review `postgres` service from the merged compose files (TLS entrypoint
+   and init scripts):**
+   - The service became healthy; non-template databases = 6; `ssl` = on.
+   - Decrypted marker rows = 1; files in the plaintext view with the marker = 2.
+   - Raw volume (2520 files): files with the marker = 0; `PG_VERSION` and
+     `pg_wal` names = 0.
+   - Marker rows after restart = 1.
+   - A wrong or missing key made `up --wait` fail, and the container exited 1.
+     Recovering with the right key gave marker rows = 1.
+3. **`review-up.sh` key handling:**
+   - It generated a 44-character key with mode 600 in a 700 directory.
+   - An existing key was left unchanged.
+   - A directory left behind by Docker was replaced with a key file.
+   - A missing key with an existing encrypted volume made it exit 1 without
+     generating a key.
+
+Not verified: the complete review stack end to end with this override, AppArmor
+hosts, and Docker Desktop on macOS or Windows.
+
+### Owner dev stack: cutover procedure (pending)
+
+The dev stack (`make dev`, `compose.yml`) still uses the plaintext `postgres_volume`
+and is **not converted**. To move an existing installation to encrypted storage
+without data loss:
+
+1. **Back up.**
+   ```bash
+   # stop every database client first (and a Spring app / storefront running on the host)
+   docker compose -f infrastructure/compose.yml stop backend payment-service oauth-service kratos hydra hydra-public
+   docker exec postgres pg_dumpall -U "$DB_USERNAME" --clean --if-exists > backup.sql   # plaintext: keep it safe
+   ```
+2. **Verify the backup on a disposable server.**
+   ```bash
+   docker run -d --name pg-restore-check -e POSTGRES_PASSWORD=x postgres:17
+   docker exec -i pg-restore-check psql -U postgres -v ON_ERROR_STOP=0 < backup.sql
+   ```
+   Compare row counts with the live server, e.g. `users`, `orders`, Kratos
+   `identities`, then run `docker rm -f pg-restore-check`.
+3. **Stop and create the encrypted volume.**
+   ```bash
+   docker compose -f infrastructure/compose.yml stop postgres
+   umask 077 && mkdir -p infrastructure/review/secrets && openssl rand -base64 32 > infrastructure/review/secrets/pgdata.key
+   ```
+   Back the key up separately, e.g. in a password manager.
+4. **Switch the compose config.** Copy the `postgres` block of
+   `compose.review.yml` (build, image, devices, cap_add, security_opt,
+   `PGDATA_KEY_FILE`, `volumes: !override` with `postgres_crypt_volume` and the key)
+   into a local override, without the TLS entrypoint and certificates. Use
+   `entrypoint: ["encrypted-storage-entrypoint.sh", "docker-entrypoint.sh"]` and
+   `command: ["postgres"]`, and declare `postgres_crypt_volume`.
+5. **Start and restore.**
+   ```bash
+   docker compose -f infrastructure/compose.yml -f <override> up -d postgres
+   docker exec -i postgres psql -U "$DB_USERNAME" -d postgres -v ON_ERROR_STOP=0 < backup.sql
+   ```
+   The init scripts create the users and databases first; the dump then replaces
+   their contents.
+6. **Verify.**
+   - The counts from step 2 match.
+   - `docker compose up -d` brings up a healthy stack; login and TOTP work.
+   - `grep -rl` of a known value in the raw `postgres_crypt_volume` returns
+     nothing.
+7. **Clean up after confirmation.** Keep the old `postgres_volume` until the
+   encrypted stack has been confirmed over normal use, then remove it with
+   `docker volume rm`. Shred `backup.sql`, or keep it encrypted (e.g. `gpg -c`).
+
+Existing **review** installations need the same steps to keep their data. Without
+them, `review-up.sh` leaves the old `bytecore-review_postgres_volume` untouched,
+warns about it, and starts a fresh encrypted database.
+
 ## Limitations
 
 - Ciphertext can only be filtered by the email blind index. Free-text search over
   encrypted fields is intentionally unsupported.
-- PostgreSQL volume- or disk-level encryption is a deployment concern and is not
-  configured for local Docker.
+- Storage-layer encryption is on by default in the review stack only. The dev stack
+  awaits the owner cutover above.
 - TLS protects data in transit on the reviewer stack. See
   [`../review-setup.md`](../review-setup.md).
