@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { buildSchema, parse, validate } from "graphql";
 import * as documents from "./documents";
 import {
-  isOrderReference, noteText, orderVariables, pageCount, parseOrderSearch, safeTrackingUrl, searchHref, trackingInput,
+  declineReasonText, paymentStatusLabel, isOrderReference, noteText, orderVariables, pageCount, parseOrderSearch, safeTrackingUrl, searchHref, trackingInput,
 } from "./model";
 
 describe("order list search params", () => {
@@ -70,4 +70,22 @@ test("every order document validates against the composed supergraph", () => {
   for (const [name, source] of sources) {
     expect({ name, errors: validate(schema, parse(source)).map((error) => error.message) }).toEqual({ name, errors: [] });
   }
+});
+
+describe("payment state labels", () => {
+  test("a definite decline is distinct from an unknown gateway outcome", () => {
+    expect(paymentStatusLabel("DECLINED")).toBe("Payment declined");
+    expect(paymentStatusLabel("UNRESOLVED")).toBe("Payment being confirmed");
+    expect(paymentStatusLabel("PENDING")).toBe("Payment pending");
+    expect(paymentStatusLabel("SUCCEEDED")).toBe("Paid");
+    expect(paymentStatusLabel("FAILED")).toBe("Payment failed");
+  });
+  test("decline codes map to friendly text and unknown codes stay generic", () => {
+    expect(declineReasonText("insufficient_funds")).toBe("The card has insufficient funds.");
+    expect(declineReasonText("expired_card")).toBe("The card has expired.");
+    expect(declineReasonText("incorrect_cvc")).toContain("security code");
+    expect(declineReasonText("incorrect_number")).toContain("card number");
+    expect(declineReasonText("<script>")).toBe("The card issuer declined the payment.");
+    expect(declineReasonText(null)).toBe("The card issuer declined the payment.");
+  });
 });

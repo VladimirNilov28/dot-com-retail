@@ -1,7 +1,8 @@
 import Link from "next/link";
 import type { OrderAddress, OrderDetail, OrderSummary } from "@/lib/orders/documents";
 import {
-  dateTime, money, orderStatuses, pageCount, safeTrackingUrl, searchHref, statusLabel, type OrderSearch,
+  dateTime, declineReasonText, money, orderStatuses, pageCount, paymentStatusLabel, safeTrackingUrl, searchHref, statusLabel,
+  type OrderSearch,
 } from "@/lib/orders/model";
 
 const okStatuses = new Set(["PAID", "PROCESSING", "SHIPPING", "COMPLETED", "SUCCEEDED", "APPROVED"]);
@@ -56,6 +57,8 @@ export function OrderList({ base, items, staff = false }: { base: string; items:
           </div>
           <div className="flex flex-wrap gap-2">
             <StatusBadge value={order.status} />
+            {order.status === "PENDING" && ["DECLINED", "UNRESOLVED"].includes(order.payment.status) ?
+              <span className="account-badge" data-tone="off">{paymentStatusLabel(order.payment.status)}</span> : null}
             {order.refund.status !== "NONE" ? <span className="account-badge">Refund {statusLabel(order.refund.status).toLowerCase()}</span> : null}
           </div>
         </li>
@@ -146,15 +149,27 @@ export function OrderDelivery({ order }: { order: OrderDetail }) {
   );
 }
 
-export function PaymentState({ order }: { order: OrderDetail }) {
+/** `retryHref` is the customer's original confirmation page, where a declined payment can be retried. */
+export function PaymentState({ order, retryHref }: { order: OrderDetail; retryHref?: string }) {
+  const declined = order.status === "PENDING" && order.payment.status === "DECLINED";
   return (
     <section className="account-card" aria-labelledby="payment-heading">
       <h2 id="payment-heading" className="text-lg font-semibold">Payment and refunds</h2>
       <div className="flex flex-wrap gap-2 items-center">
-        <span className="text-sm">Payment</span><StatusBadge value={order.payment.status} />
+        <span className="text-sm">Payment</span>
+        <span className="account-badge" data-tone={order.payment.status === "SUCCEEDED" ? "ok" : "off"}>{paymentStatusLabel(order.payment.status)}</span>
         <span className="text-sm">Refund</span><StatusBadge value={order.refund.status} />
         {order.refund.amount ? <span className="text-sm">{money(order.refund.amount, order.refund.currency)}</span> : null}
       </div>
+      {declined ? (
+        <p className="text-sm" role="status">
+          {declineReasonText(order.payment.declineReason)} The order and its reserved items are kept.
+          {retryHref ? <> <Link prefetch={false} className="store-link" href={retryHref}>Retry payment</Link></> : null}
+        </p>
+      ) : null}
+      {order.status === "PENDING" && order.payment.status === "UNRESOLVED" ? (
+        <p className="text-sm text-muted">The payment provider has not confirmed the outcome yet; this updates automatically.</p>
+      ) : null}
       {order.refund.failureReason ? <p className="text-sm text-muted">The refund could not be completed automatically; our team has been notified.</p> : null}
       {order.cancellationReason ? <p className="text-sm text-muted">Cancellation: {statusLabel(order.cancellationReason)}</p> : null}
       {order.refundRequests.length ? (

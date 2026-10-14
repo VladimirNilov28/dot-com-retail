@@ -14,7 +14,7 @@ fragment CheckoutDetailsFields on CheckoutDetails {
 
 fragment CheckoutOrderFields on CheckoutOrder {
   publicId requestId status cancellationReason createdAt paymentInteraction
-  payment { status }
+  payment { status declineReason }
   refund { status amount currency failureReason }
   cancellationEligibility { allowed reason }
   lines { productVariantId productName sku attributes quantity unitPrice subtotal }

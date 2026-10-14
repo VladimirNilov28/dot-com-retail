@@ -98,6 +98,36 @@ export function statusLabel(status: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+const paymentLabels: Record<string, string> = {
+  PENDING: "Payment pending",
+  UNRESOLVED: "Payment being confirmed",
+  DECLINED: "Payment declined",
+  SUCCEEDED: "Paid",
+  FAILED: "Payment failed",
+  UNKNOWN: "Payment pending",
+};
+
+/** Customer-facing payment state. DECLINED (definite, retryable) is kept distinct from UNRESOLVED (outcome unknown). */
+export function paymentStatusLabel(status: string): string {
+  return paymentLabels[status] ?? statusLabel(status);
+}
+
+const declineReasons: Record<string, string> = {
+  insufficient_funds: "The card has insufficient funds.",
+  expired_card: "The card has expired.",
+  incorrect_cvc: "The security code (CVC) was incorrect.",
+  incorrect_number: "The card number was incorrect.",
+  invalid_expiry: "The expiry date was invalid.",
+  card_not_supported: "This card does not support this purchase.",
+  authentication_failed: "Card authentication (3-D Secure) was not completed.",
+  card_declined: "The card issuer declined the payment.",
+};
+
+/** Maps the API's allow-listed decline code to friendly text; unknown codes stay generic. */
+export function declineReasonText(code: string | null | undefined): string {
+  return (code && declineReasons[code]) || declineReasons.card_declined;
+}
+
 export function formField(form: FormData, name: string): string {
   const value = form.get(name);
   return typeof value === "string" ? value.trim() : "";

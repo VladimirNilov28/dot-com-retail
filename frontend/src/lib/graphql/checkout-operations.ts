@@ -77,14 +77,14 @@ export function decodeOrder(value: unknown): CheckoutOrder {
   return {
     publicId: uuid(o.publicId), requestId: uuid(o.requestId), status, createdAt: text(o.createdAt),
     cancellationReason: nullableText(o.cancellationReason), paymentInteraction: text(o.paymentInteraction),
-    payment: { status: paymentStatus(p.status) }, refund: { status: refundStatus(r.status), amount: r.amount === null ? null : decimal(r.amount),
+    payment: { status: paymentStatus(p.status), declineReason: nullableText(p.declineReason ?? null) }, refund: { status: refundStatus(r.status), amount: r.amount === null ? null : decimal(r.amount),
       currency: nullableText(r.currency), failureReason: nullableText(r.failureReason) },
     cancellationEligibility: { allowed: boolean(c.allowed), reason: nullableText(c.reason) },
     lines: lines(o.lines), totals: totals(o.totals), details: details(o.details),
   };
 }
 function paymentStatus(value: unknown): CheckoutOrder["payment"]["status"] {
-  if (value === "PENDING" || value === "UNRESOLVED" || value === "SUCCEEDED" || value === "FAILED" || value === "UNKNOWN") return value;
+  if (value === "PENDING" || value === "UNRESOLVED" || value === "DECLINED" || value === "SUCCEEDED" || value === "FAILED" || value === "UNKNOWN") return value;
   throw new TypeError("Invalid payment state");
 }
 function refundStatus(value: unknown): CheckoutOrder["refund"]["status"] {

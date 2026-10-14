@@ -9,6 +9,7 @@ import type { UUID } from "@/lib/graphql/scalars";
 import { confirmationHref } from "@/lib/checkout/model";
 import { requestCheckout, verifyCheckoutIdentity } from "@/lib/checkout/identity";
 import { useCheckoutIdentity } from "./identity-boundary";
+import { declineReasonText } from "@/lib/orders/model";
 
 function HostedPayment({ requestId, mode, onUpdated }: { requestId: UUID; mode: "guest" | "user"; onUpdated(): void }) {
   const owner = useCheckoutIdentity();
@@ -84,8 +85,9 @@ export function StripePayment({ requestId, mode, onUpdated }: { requestId: UUID;
     return () => { controller.abort(); clearTimeout(timer); };
   }, [requestId, mode, revision, owner]);
   const refresh = () => setRevision((value) => value + 1);
-  const failure = session?.failureCode === "insufficient_funds" ? "The test card has insufficient funds. Use another test payment method." :
-    session?.failureCode ? "The payment was declined. Check your details or use another test payment method." : "";
+  const failure = !session?.failureCode ? "" : session.failureCode === "payment_failed" ?
+    "The last attempt did not complete. Check your details or use another test payment method." :
+    `Payment declined: ${declineReasonText(session.failureCode)}`;
   return <section className="checkout-section" aria-label="Secure payment">
     <h2 className="text-lg font-semibold">Payment</h2>
     {error ? <p role="alert" className="cart-line-issue">{error}</p> : null}
