@@ -37,9 +37,37 @@ enum join__Graph {
 
 scalar join__FieldSet
 
+type AdminUserPage @join__type(graph: RETAIL) {
+  items: [User!]!
+  totalElements: Int!
+  page: Int!
+  size: Int!
+}
+
 type AttributeValueFacet @join__type(graph: RETAIL) {
   count: Int!
   value: String!
+}
+
+type AuditLogEntry @join__type(graph: RETAIL) {
+  actorRoles: String
+  actorSubject: String!
+  actorUserId: ID
+  actorUsername: String
+  details: JSON!
+  id: ID!
+  occurredAt: Instant!
+  operation: String!
+  outcome: String!
+  targetId: String
+  targetType: String!
+}
+
+type AuditLogPage @join__type(graph: RETAIL) {
+  items: [AuditLogEntry!]!
+  page: Int!
+  size: Int!
+  totalElements: Int!
 }
 
 type Brand @join__type(graph: RETAIL) {
@@ -195,6 +223,21 @@ type CheckoutTotals @join__type(graph: RETAIL) {
   total: BigDecimal!
 }
 
+type DeliveryOption @join__type(graph: RETAIL) {
+  active: Boolean!
+  code: CheckoutShippingMethod!
+  createdAt: Instant!
+  currency: String!
+  description: String
+  estimatedMaxDays: Int!
+  estimatedMinDays: Int!
+  id: ID!
+  name: String!
+  price: BigDecimal!
+  sortOrder: Int!
+  updatedAt: Instant!
+}
+
 type GuestCart @join__type(graph: RETAIL) {
   createdAt: Instant!
   expiresAt: Instant!
@@ -256,12 +299,14 @@ type Mutation @join__type(graph: RETAIL) {
   """Get-or-create a brand by case-insensitive name."""
   createBrand(name: String!): Brand!
   createCategory(input: CreateCategoryInput!): Category!
+  createDeliveryOption(input: CreateDeliveryOptionInput!): DeliveryOption!
   createGuestOrder(input: PlaceOrderInput!): CheckoutOrder!
   createOrder(input: PlaceOrderInput!): Order!
   createProduct(input: CreateProductInput!): Product!
   createProductVariant(input: CreateProductVariantInput!): ProductVariant!
   createWarehouse(input: CreateWarehouseInput!): Warehouse!
   deleteCategory(categoryId: ID!): Boolean!
+  deleteDeliveryOption(id: ID!): Boolean!
   deleteMyAddress(addressId: ID!): Boolean!
   deleteMyPaymentMethod(paymentMethodId: ID!): Boolean!
   deleteProduct(productId: ID!): Boolean!
@@ -272,6 +317,7 @@ type Mutation @join__type(graph: RETAIL) {
   deleteUserAddress(addressId: ID!, userId: ID!): Boolean!
   deleteUserPaymentMethod(paymentMethodId: ID!, userId: ID!): Boolean!
   deleteWarehouse(warehouseId: ID!): Boolean!
+  importProducts(content: String!, format: ProductImportFormat!): ProductImportResult!
   mergeGuestCart(requestId: UUID!): GuestCartMergeResult!
   """
   Submit/update the caller's integer 1-5 star rating. Requires rating:write and an
@@ -290,6 +336,7 @@ type Mutation @join__type(graph: RETAIL) {
   startGuestCart: StartGuestCartResult!
   updateCartItem(cartItemId: ID!, input: UpdateCartItemInput!): CartItem!
   updateCategory(categoryId: ID!, input: UpdateCategoryInput!): Category!
+  updateDeliveryOption(id: ID!, input: UpdateDeliveryOptionInput!): DeliveryOption!
   updateGuestCartItem(cartItemId: ID!, input: UpdateCartItemInput!): GuestCart!
   updateMyAddress(addressId: ID!, input: UpdateAddressInput!): UserAddress!
   updateOrderStatus(input: UpdateOrderStatusInput!, orderId: ID!): Order!
@@ -412,6 +459,20 @@ type ProductImage @join__type(graph: RETAIL) {
   width: Int!
 }
 
+type ProductImportError @join__type(graph: RETAIL) {
+  field: String!
+  message: String!
+  row: Int!
+}
+
+type ProductImportResult @join__type(graph: RETAIL) {
+  brandsCreated: Int!
+  errors: [ProductImportError!]!
+  productsCreated: Int!
+  success: Boolean!
+  variantsCreated: Int!
+}
+
 type ProductSearchResult @join__type(graph: RETAIL) {
   facets: ProductFacets!
   items: [Product!]!
@@ -456,6 +517,9 @@ type ProductVariant @join__type(graph: RETAIL) {
 }
 
 type Query @join__type(graph: RETAIL) {
+  adminAuditLog(filter: AuditLogFilter, page: Int = 0, size: Int = 25): AuditLogPage!
+  adminDeliveryOptions: [DeliveryOption!]!
+  adminUsers(page: Int = 0, query: String, role: Role, size: Int = 25): AdminUserPage!
   brands: [Brand!]!
   categories: [Category!]!
   category(id: ID, slug: String): Category
@@ -861,6 +925,11 @@ enum ProductAvailability @join__type(graph: RETAIL) {
   OUT_OF_STOCK @join__enumValue(graph: RETAIL)
 }
 
+enum ProductImportFormat @join__type(graph: RETAIL) {
+  CSV @join__enumValue(graph: RETAIL)
+  JSON @join__enumValue(graph: RETAIL)
+}
+
 enum ProductSort @join__type(graph: RETAIL) {
   PRICE_ASC @join__enumValue(graph: RETAIL)
   PRICE_DESC @join__enumValue(graph: RETAIL)
@@ -900,6 +969,12 @@ input AddCartItemInput @join__type(graph: RETAIL) {
 
 input AddWishlistItemInput @join__type(graph: RETAIL) {
   productVariantId: ID!
+}
+
+input AuditLogFilter @join__type(graph: RETAIL) {
+  actor: String
+  operation: String
+  targetType: String
 }
 
 input CancelOrderInput @join__type(graph: RETAIL) {
@@ -946,6 +1021,18 @@ input CreateCategoryInput @join__type(graph: RETAIL) {
   name: String!
   parentId: ID
   slug: String!
+}
+
+input CreateDeliveryOptionInput @join__type(graph: RETAIL) {
+  active: Boolean = true
+  code: CheckoutShippingMethod!
+  currency: String = "EUR"
+  description: String
+  estimatedMaxDays: Int!
+  estimatedMinDays: Int!
+  name: String!
+  price: BigDecimal!
+  sortOrder: Int = 0
 }
 
 input CreatePaymentMethodInput @join__type(graph: RETAIL) {
@@ -1043,9 +1130,21 @@ input UpdateCartItemInput @join__type(graph: RETAIL) {
 }
 
 input UpdateCategoryInput @join__type(graph: RETAIL) {
+  clearParent: Boolean
   name: String
   parentId: ID
   slug: String
+}
+
+input UpdateDeliveryOptionInput @join__type(graph: RETAIL) {
+  active: Boolean
+  currency: String
+  description: String
+  estimatedMaxDays: Int
+  estimatedMinDays: Int
+  name: String
+  price: BigDecimal
+  sortOrder: Int
 }
 
 input UpdateOrderStatusInput @join__type(graph: RETAIL) {

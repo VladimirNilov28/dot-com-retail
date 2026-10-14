@@ -5,6 +5,9 @@ import { AuthError, type OAuthTransaction } from "./model";
 
 let discovery: Promise<oidc.Configuration> | undefined;
 
+// Staff scopes are requested for every login; consent grants only those the user's role allows.
+const requestedScope = "openid offline_access user:read cart:read cart:write order:read order:write user:manage-role product:read product:write category:read category:write warehouse:read warehouse:write audit:read shipping:manage";
+
 export async function oauthClient(): Promise<oidc.Configuration> {
   if (!discovery) {
     const config = authConfig();
@@ -37,7 +40,7 @@ export async function authorizationUrl(transaction: OAuthTransaction): Promise<U
   const config = authConfig();
   return oidc.buildAuthorizationUrl(await oauthClient(), {
     redirect_uri: `${config.origin}/auth/callback`, response_type: "code", response_mode: "form_post",
-    scope: "openid offline_access user:read cart:read cart:write order:read order:write", state: transaction.state, nonce: transaction.nonce,
+    scope: requestedScope, state: transaction.state, nonce: transaction.nonce,
     // The BFF owns login state; Hydra's remembered subject can outlive local/provider logout.
     prompt: "login",
     code_challenge: await oidc.calculatePKCECodeChallenge(transaction.verifier), code_challenge_method: "S256",
