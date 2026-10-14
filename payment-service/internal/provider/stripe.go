@@ -25,10 +25,19 @@ type StripeIntent struct {
 	Currency     string            `json:"currency"`
 	LiveMode     bool              `json:"livemode"`
 	Metadata     map[string]string `json:"metadata"`
-	LastError    *struct {
-		Code        string `json:"code"`
-		DeclineCode string `json:"decline_code"`
-	} `json:"last_payment_error"`
+	LastError    *StripeError      `json:"last_payment_error"`
+}
+
+// StripeError is the subset of last_payment_error the service relies on. The
+// provider message is deliberately not decoded so it can never be forwarded.
+type StripeError struct {
+	Type          string `json:"type"`
+	Code          string `json:"code"`
+	DeclineCode   string `json:"decline_code"`
+	Charge        string `json:"charge"`
+	PaymentMethod *struct {
+		ID string `json:"id"`
+	} `json:"payment_method"`
 }
 
 type Stripe struct {

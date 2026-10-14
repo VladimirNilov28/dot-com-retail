@@ -16,6 +16,7 @@ var Topics = []string{
 	events.PaymentSucceeded,
 	events.PaymentFailed,
 	events.PaymentUnresolved,
+	events.PaymentDeclined,
 	events.RefundRequested,
 	events.RefundRequested + DLQSuffix,
 	events.RefundSucceeded,

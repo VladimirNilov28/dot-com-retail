@@ -180,7 +180,19 @@ func (h *Handler) settle(ctx context.Context, id uuid.UUID, intent provider.Stri
 		}
 		return h.Store.RecordPaymentResultAndEnqueue(ctx, id, domain.StatusFailed, "provider_payment_canceled", intent.ID, events.PaymentFailed, payload)
 	case "requires_payment_method":
-		if intent.LastError != nil {
+		outcome, reason, attempt := ClassifyFailure(intent)
+		if outcome == OutcomeDeclined {
+			payload, err := json.Marshal(events.PaymentDeclinedEvent{
+				EventID: uuid.New(), RequestEventID: payment.RequestEventID, OrderID: payment.OrderID,
+				PaymentID: payment.ID, AttemptID: attempt, Reason: reason, OccurredAt: eventtime.Now(),
+			})
+			if err != nil {
+				return err
+			}
+			_, err = h.Store.RecordPaymentDeclined(ctx, id, attempt, reason, events.PaymentDeclined, payload)
+			return err
+		}
+		if outcome == OutcomeUnresolved {
 			payload, err := json.Marshal(events.PaymentUnresolvedEvent{
 				EventID: uuid.New(), RequestEventID: payment.RequestEventID, OrderID: payment.OrderID,
 				PaymentID: payment.ID, Reason: "payment_retry_required", OccurredAt: eventtime.Now(),
@@ -245,12 +257,11 @@ func (h *Handler) Session(w http.ResponseWriter, r *http.Request) {
 					response.ClientSecret = &intent.ClientSecret
 				}
 				if intent.LastError != nil {
+					// Same allow-listed vocabulary as payment.declined;
+					// anything not a definite decline stays generic.
 					code := "payment_failed"
-					if intent.LastError.DeclineCode == "insufficient_funds" {
-						code = "insufficient_funds"
-					}
-					if intent.LastError.Code == "card_declined" && code != "insufficient_funds" {
-						code = "card_declined"
+					if outcome, reason, _ := ClassifyFailure(intent); outcome == OutcomeDeclined {
+						code = reason
 					}
 					response.FailureCode = &code
 				}
