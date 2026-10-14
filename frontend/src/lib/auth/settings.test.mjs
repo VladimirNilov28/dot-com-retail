@@ -139,6 +139,14 @@ test("rejects foreign identities, staff schemas, wrong endpoint, duplicate IDs a
   ]) expect(() => projectSecuritySettings({ ...reply, ...change }, state())).toThrow();
 });
 
+test("accepts the bootstrapped staff schema only for staff roles", () => {
+  const staffReply = { ...reply, identity: { ...reply.identity, schema_id: "default" } };
+  const staff = state(); staff.provider = { ...staff.provider, role: "ADMIN" };
+  expect(() => projectSecuritySettings(staffReply, staff)).not.toThrow();
+  expect(() => projectSecuritySettings(staffReply, state())).toThrow();
+  expect(() => projectSecuritySettings({ ...reply, identity: { ...reply.identity, schema_id: "other" } }, staff)).toThrow();
+});
+
 test("projects generated/revealed backup codes without provider messages or context leakage", () => {
   const result = projectSecuritySettings(flow([
     ...enabledNodes(), input("lookup_secret", "lookup_secret_confirm"),
@@ -191,6 +199,9 @@ test("session check rejects stale reauth, lower AAL, foreign session and non-cus
     { authenticated_at: new Date(Date.now() + 60000).toISOString() },
     { authenticated_at: undefined }, { expires_at: new Date(0).toISOString() },
   ]) expect(() => assertSecuritySession({ ...fresh, ...change }, elevated, enabled)).toThrow();
+  const staffSession = { ...session, identity: { ...sessionIdentity, schema_id: "default" } };
+  expect(() => assertSecuritySession(staffSession, { ...provider, role: "ADMIN" })).not.toThrow();
+  expect(() => assertSecuritySession(staffSession, provider)).toThrow();
 });
 
 test("same-origin browser CSRF protection rejects foreign, missing and duplicated tokens", () => {

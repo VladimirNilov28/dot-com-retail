@@ -66,6 +66,11 @@ function pngDataUri(value: unknown): string {
 }
 
 /** Project only password, MFA and Google controls, never traits, credential configurations, HTML or provider URLs. */
+// Bootstrapped staff identities use Kratos' "default" schema; customers must stay on customer-v1.
+function schemaAllowed(schema: unknown, role: string): boolean {
+  return schema === "customer-v1" || (role !== "USER" && schema === "default");
+}
+
 export function projectSecuritySettings(value: unknown, state: BrowserState): SecuritySettings {
   const flow = record(value);
   const ui = record(flow.ui);
@@ -74,7 +79,7 @@ export function projectSecuritySettings(value: unknown, state: BrowserState): Se
   const expiresAt = text(flow.expires_at);
   const action = new URL(text(ui.action));
   if (!state.provider || identity.id !== state.provider.identityId ||
-      identity.schema_id !== "customer-v1") throw new AuthError("forbidden", 403);
+      !schemaAllowed(identity.schema_id, state.provider.role)) throw new AuthError("forbidden", 403);
   if (flow.type !== "browser" || !Number.isFinite(Date.parse(expiresAt)) ||
       action.origin !== authConfig().kratos || action.pathname !== "/self-service/settings" ||
       action.username || action.password || action.hash ||
@@ -198,7 +203,7 @@ export function assertSecuritySession(value: unknown, expected: ProviderSession,
   const session = record(value);
   const identity = record(session.identity);
   if (session.active !== true || session.id !== expected.sessionId || identity.id !== expected.identityId ||
-      identity.schema_id !== "customer-v1" || session.authenticator_assurance_level !== expected.aal ||
+      !schemaAllowed(identity.schema_id, expected.role) || session.authenticator_assurance_level !== expected.aal ||
       typeof session.expires_at !== "string" || !(Date.parse(session.expires_at) > Date.now())) {
     throw new AuthError("reauthentication_required", 401);
   }
