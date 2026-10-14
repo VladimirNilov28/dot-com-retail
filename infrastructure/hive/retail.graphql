@@ -370,7 +370,8 @@ type Mutation {
   """
   Create or edit the caller's own review (and star rating). title 1-120 and body
   10-4000 characters of plain text, trimmed; HTML markup is rejected. Editing keeps
-  the moderation status. Requires rating:write.
+  the moderation status. Creating a new written review requires a qualifying purchase
+  (errorType REVIEW_PURCHASE_REQUIRED); editing an existing one does not. Requires rating:write.
   """
   upsertMyReview(body: String!, productId: ID!, stars: Int!, title: String!): ProductReview!
   "Mark a visible review helpful (idempotent). Authors cannot vote on their own review."
@@ -622,7 +623,7 @@ type Query {
   adminAuditLog(filter: AuditLogFilter, page: Int = 0, size: Int = 25): AuditLogPage!
   "All delivery options including inactive ones. ADMIN only."
   adminDeliveryOptions: [DeliveryOption!]!
-  "Active users matching a username/email substring and optional role (size 1-100). ADMIN only."
+  "Active users whose username contains the query, whose email equals it (case-insensitive; emails are encrypted at rest, so no substring match) or whose id equals it, with optional role (size 1-100). ADMIN only."
   adminUsers(page: Int = 0, query: String, role: Role, size: Int = 25): AdminUserPage!
   brands: [Brand!]!
   categories: [Category!]!
@@ -643,6 +644,7 @@ type Query {
   myOrders(filter: OrderFilter, page: Int = 0, size: Int = 20): OrderPage!
   "The caller's own rating/review for a product (any status), or null. Requires rating:write."
   myReview(productId: ID!): ProductReview
+  "Whether the caller may create or edit a review for the product. Requires rating:write."
   myReviewEligibility(productId: ID!): ReviewEligibility!
   myWishlist: Wishlist!
   order(id: ID, publicId: UUID): Order
@@ -672,9 +674,12 @@ type RatingDistributionBucket {
   stars: Int!
 }
 
+"Whether the caller may write (or edit) a review for a product."
 type ReviewEligibility {
   canReview: Boolean!
+  "True when the caller already has a written review, which stays editable."
   hasReview: Boolean!
+  "Why canReview is false; null when allowed."
   reason: ReviewIneligibleReason
 }
 
@@ -1103,10 +1108,12 @@ enum ProductSort {
 }
 
 enum ReviewIneligibleReason {
+  "No paid, non-refunded order containing this product."
   PURCHASE_REQUIRED
 }
 
 enum ReviewSort {
+  "Most helpful votes first, then newest, then highest id."
   HELPFUL
   NEWEST
   RATING_HIGH
@@ -1117,7 +1124,9 @@ enum ReviewSort {
 Written product reviews extend the caller-owned 1-5 star rating (one row per
 user/product). Reviews are post-moderated: visible immediately, staff may hide or
 restore them. HIDDEN reviews never appear in public lists and are excluded from
-every product aggregate (averageRating, ratingCount, RATING_DESC).
+every product aggregate (averageRating, ratingCount, RATING_DESC). Creating a
+review or rating requires a qualifying purchase (paid, not refunded order of the
+product); otherwise the mutation fails with errorType REVIEW_PURCHASE_REQUIRED.
 """
 enum ReviewStatus {
   HIDDEN
