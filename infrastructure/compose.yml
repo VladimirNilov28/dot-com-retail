@@ -310,6 +310,10 @@ services:
       ORDER_MAIL_FROM: ${SMTP_FROM:-no-reply@bytecore.ee}
       APP_DATA_KEYS: ${APP_DATA_KEYS:?APP_DATA_KEYS is required (see .env.example)}
       APP_DATA_ACTIVE_KEY: ${APP_DATA_ACTIVE_KEY:-}
+      SUPPORT_MAIL_TO: ${SUPPORT_MAIL_TO:-vladimirnilov.it@gmail.com}
+      # Hive Router reaches Spring from the Compose network; only these peers may
+      # supply X-Forwarded-For for rate limiting (docs/security/rate-limiting.md).
+      RATE_LIMIT_TRUSTED_PROXIES: 127.0.0.1/32,::1/128,172.28.88.0/24
 
     volumes:
       - media_volume:/app/media-data

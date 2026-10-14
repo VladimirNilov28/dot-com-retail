@@ -6,7 +6,7 @@ export const metadata: Metadata = {
     default: "ByteCore",
     template: "%s | ByteCore",
   },
-  description: "The ByteCore storefront. Shopping features are coming soon.",
+  description: "ByteCore is an online electronics store: browse laptops, components, monitors and accessories with real EUR prices, live stock, ratings and secure checkout.",
 };
 
 export const viewport: Viewport = {

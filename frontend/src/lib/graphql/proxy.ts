@@ -1,9 +1,11 @@
 import { failure, type SafeFailure } from "./errors";
-import { cartGuestOperations, guestCartMerge, guestOperations, publicOperations, type Operation } from "./operations";
+import { cartGuestOperations, guestCartMerge, guestOperations, publicOperations, recommendedProducts, type Operation } from "./operations";
 import { object, parseJson, serializeJson } from "./scalars";
 import { requestHive, type HiveConfig } from "./server-transport";
 import { boundedText, type Result } from "./transport";
 import { checkoutOperations } from "./checkout-operations";
+import { addressOperations } from "./address-operations";
+import { submitContactMessage } from "./contact-operations";
 
 function jsonResponse<Data>(result: Result<Data>, cookies: string[] = [], status = 200) {
   const data = result.status === "failure" ? null : result.data;
@@ -16,12 +18,17 @@ function jsonResponse<Data>(result: Result<Data>, cookies: string[] = [], status
         failureKind: error.kind,
         ...(error.codes?.length ? { code: error.codes[0] } : {}),
         ...(error.httpStatus ? { http: { status: error.httpStatus } } : {}),
+        ...(error.retryAfterSeconds === undefined ? {} : { retryAfterSeconds: error.retryAfterSeconds }),
       },
     }] } : {}),
   });
   if (!body) throw new TypeError("Invalid GraphQL response");
   const headers = new Headers({ "Content-Type": "application/json", "Cache-Control": "private, no-store" });
   cookies.forEach((cookie) => headers.append("Set-Cookie", cookie));
+  if (error?.kind === "rate-limited") {
+    status = 429;
+    headers.set("Retry-After", String(error.retryAfterSeconds ?? 1));
+  }
   return new Response(body, { status, headers });
 }
 
@@ -34,6 +41,7 @@ export async function handleGuestRequest(
   // Browser-supplied bearer tokens are never accepted.
   resolveToken: () => Promise<string | undefined> = async () => undefined,
   validateCheckout: (scope: string | null, guest: boolean) => Promise<boolean> = async () => true,
+  clientAddress?: string,
 ) {
   if (request.method !== "POST") return proxyFailure(failure("validation", false), 405);
   if ((request.headers.has("Origin") && request.headers.get("Origin") !== config.origin) ||
@@ -82,7 +90,7 @@ export async function handleGuestRequest(
       if (!accessToken) return proxyFailure(failure("unauthenticated", false), 401);
       context = { kind: "authenticated", accessToken, guestCookieHeader: request.headers.get("Cookie") ?? undefined };
     }
-    const { result, setCookies } = await requestHive(operation, variables, config, context, { fetch: fetcher, signal, timeoutMs: Math.max(1, 10_000 - (Date.now() - started)) });
+    const { result, setCookies } = await requestHive(operation, variables, config, context, { fetch: fetcher, signal, timeoutMs: Math.max(1, 10_000 - (Date.now() - started)), clientAddress });
     return jsonResponse(result, setCookies);
   }
   const [shipping, cart, order] = guestOperations;
@@ -93,7 +101,11 @@ export async function handleGuestRequest(
   if (cartOperation) return dispatch(cartOperation as Operation<unknown, unknown>);
   const checkoutOperation = checkoutOperations.find((candidate) => candidate.name === envelope.operationName);
   if (checkoutOperation) return dispatch(checkoutOperation as Operation<unknown, unknown>);
+  if (envelope.operationName === submitContactMessage.name) return dispatch(submitContactMessage);
+  const addressOperation = addressOperations.find((candidate) => candidate.name === envelope.operationName);
+  if (addressOperation) return dispatch(addressOperation as Operation<unknown, unknown>);
   const [categories, listing, suggestions] = publicOperations;
+  if (envelope.operationName === recommendedProducts.name) return dispatch(recommendedProducts);
   if (envelope.operationName === categories.name) return dispatch(categories);
   if (envelope.operationName === listing.name) return dispatch(listing);
   if (envelope.operationName === suggestions.name) return dispatch(suggestions);

@@ -30,6 +30,7 @@ import org.springframework.web.client.RestTemplate;
 
 import ee.bytecore.backend.security.GuestCartHttpFilter;
 import ee.bytecore.backend.security.JwtWebSocketInterceptor;
+import ee.bytecore.backend.security.ratelimit.RateLimitFilter;
 
 @Configuration
 @EnableWebSecurity
@@ -112,9 +113,14 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(
             HttpSecurity http,
             JwtAuthenticationConverter jwtAuthenticationConverter,
-            ObjectProvider<GuestCartHttpFilter> guestFilters)
+            ObjectProvider<GuestCartHttpFilter> guestFilters,
+            ObjectProvider<RateLimitFilter> rateLimitFilters)
             throws Exception {
 
+        // Rate limiting runs after bearer authentication (to key by verified JWT
+        // subject) and before guest-cart handling and every handler.
+        RateLimitFilter rateLimitFilter = rateLimitFilters.getIfAvailable();
+        if (rateLimitFilter != null) http.addFilterAfter(rateLimitFilter, BearerTokenAuthenticationFilter.class);
         GuestCartHttpFilter guestFilter = guestFilters.getIfAvailable();
         if (guestFilter != null) http.addFilterAfter(guestFilter, BearerTokenAuthenticationFilter.class);
         return http

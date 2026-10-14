@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { parse, stringify, isLosslessNumber } from "lossless-json";
 import { execute, latestRequest } from "./transport";
-import { shippingOptions, guestCart, guestOrder } from "./operations";
+import { shippingOptions, guestCart, guestOrder, publicOperations } from "./operations";
 import { decimal, uuid, json, parseJson, serializeJson } from "./scalars";
 import { guestCookies, hiveConfig, requestHive, responseCookies } from "./server-transport";
 import { handleGuestRequest } from "./proxy";
@@ -342,5 +342,44 @@ describe("request isolation and same-origin guest boundary", () => {
     )));
     expect(cookies).toEqual(["retail_guest_cart=one", "retail_guest_cart=two"]);
     expect(results.every((result) => result.headers.get("Cache-Control") === "private, no-store")).toBe(true);
+  });
+});
+
+describe("rate limiting", () => {
+  test("maps HTTP 429 and the RATE_LIMITED code to a friendly rate-limited failure", async () => {
+    const http = await run(async () => response("busy", 429, { "Retry-After": "7" }));
+    expect(http.error.kind).toBe("rate-limited");
+    expect(http.error.retryAfterSeconds).toBe(7);
+    expect(http.error.message).toContain("Too many requests");
+    const graph = await run(async () => response(
+      '{"data":null,"errors":[{"message":"Too many requests. Please wait 12s","extensions":{"code":"RATE_LIMITED","retryAfterSeconds":12}}]}'));
+    expect(graph.error.kind).toBe("rate-limited");
+    expect(graph.error.retryAfterSeconds).toBe(12);
+    expect(graph.error.retryable).toBe(false);
+    const bogus = await run(async () => response("busy", 429, { "Retry-After": "Wed, 21 Oct 2015 07:28:00 GMT" }));
+    expect(bogus.error.retryAfterSeconds).toBeUndefined();
+  });
+
+  test("the proxy answers 429 with Retry-After and forwards only the resolved client address", async () => {
+    let forwarded;
+    const result = await handleGuestRequest(proxyRequest(shippingOptions, {}, { "X-Forwarded-For": "6.6.6.6" }), config,
+      async (_, options) => {
+        forwarded = options.headers;
+        return response('{"data":null,"errors":[{"message":"limited","extensions":{"code":"RATE_LIMITED","retryAfterSeconds":30}}]}');
+      }, undefined, undefined, "198.51.100.7");
+    expect(forwarded.get("X-Forwarded-For")).toBe("198.51.100.7");
+    expect(result.status).toBe(429);
+    expect(result.headers.get("Retry-After")).toBe("30");
+    const decoded = await run(async () => result);
+    expect(decoded.error.kind).toBe("rate-limited");
+    expect(decoded.error.retryAfterSeconds).toBe(30);
+  });
+
+  test("never forwards a malformed client address", async () => {
+    let forwarded;
+    await requestHive(publicOperations[0], {}, config, { kind: "public" }, {
+      fetch: async (_, options) => { forwarded = options.headers; return response(); }, clientAddress: "1.2.3.4\r\nX: y",
+    });
+    expect(forwarded.has("X-Forwarded-For")).toBe(false);
   });
 });

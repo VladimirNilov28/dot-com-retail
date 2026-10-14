@@ -5,6 +5,7 @@ import type { ProductImageData } from "@/components/product-image";
 export type CartLine = {
   id: string;
   variantId: string;
+  productId: string;
   sku: string;
   name: string;
   slug: string;
@@ -30,7 +31,7 @@ type RawCart = {
     productVariant: {
       id: string; sku: string; price: Decimal; attributes: JsonValue; isActive: boolean;
       availability: "AVAILABLE" | "OUT_OF_STOCK" | null; purchasableLimit: number | null;
-      product: { name: string; slug: string; images: ProductImageData[] };
+      product: { id: string; name: string; slug: string; images: ProductImageData[] };
     };
   }[];
 };
@@ -59,7 +60,7 @@ export function toCartView(raw: RawCart): CartView {
       quantity: item.quantity, availability: variant.availability, limit: variant.purchasableLimit,
     };
     return {
-      id: item.id, variantId: variant.id, sku: variant.sku, name: variant.product.name, slug: variant.product.slug,
+      id: item.id, variantId: variant.id, sku: variant.sku, productId: variant.product.id, name: variant.product.name, slug: variant.product.slug,
       options: optionText(variant.attributes), image: variant.product.images[0] ?? null,
       unitPrice: variant.price, lineTotal: item.subtotal, ...base,
       issue: lineIssue({ ...base, active: variant.isActive }),
@@ -80,6 +81,7 @@ export function cartErrorMessage(kind: string): string {
   switch (kind) {
     case "unauthenticated": case "forbidden": return "Your session changed. Reload the page to continue.";
     case "validation": return "That item or quantity can't be added right now. Check availability and try again.";
+    case "rate-limited": return "You're updating the cart very quickly. Wait a moment and try again.";
     case "read-unavailable": return "Your cart couldn't be loaded right now. Try again in a moment.";
     case "timeout": case "transport": case "unavailable": return "The cart service is unavailable. Your cart has not changed — try again.";
     default: return "The cart could not be updated. Your cart has not changed.";

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { clampText, productDescription } from "@/lib/seo";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Star } from "lucide-react";
@@ -11,13 +12,15 @@ import { ProductGallery } from "@/components/product-gallery";
 import { ProductRecovery } from "@/components/product-recovery";
 import { ProductReviews } from "@/components/reviews/product-reviews";
 import { loadReviews } from "@/lib/reviews/actions";
+import { RelatedProducts } from "@/components/related-products";
+import { getRecommendations } from "@/lib/catalog/server";
 
 export async function generateMetadata({ params }: PageProps<"/products/[slug]">): Promise<Metadata> {
   const result = await getProduct((await params).slug);
   const product = result.status === "success" ? result.data.product : null;
   return {
-    title: product?.name ?? (result.status === "success" ? "Product not found" : "Product unavailable"),
-    description: product?.description?.trim() || (product ? `Explore ${product.name} and its variants at ByteCore.` : "This product is unavailable."),
+    title: product ? clampText(product.name, 48) : (result.status === "success" ? "Product not found" : "Product unavailable"),
+    description: product ? productDescription(product.name, product.description) : "This product is unavailable.",
     ...(product ? {} : { robots: { index: false, follow: false } }),
   };
 }
@@ -38,6 +41,7 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
   const stock = selected ? (await getAvailability(slug))?.get(selected.id) ?? null : null;
   const availability = stock?.availability ?? null;
   const reviews = await loadReviews(product.id, "NEWEST", 0);
+  const related = await getRecommendations(product.id, 4);
   return <article className="product-page">
     <nav aria-label="Breadcrumb" className="catalog-breadcrumb">
       <Link href="/" className="store-link">Home</Link><span aria-hidden="true">/</span>
@@ -118,5 +122,6 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
     </div>
     </div>
     <ProductReviews productId={product.id} slug={slug} initial={reviews} />
+    {related.status === "success" ? <RelatedProducts title="Related products" products={related.data.recommendedProducts} /> : null}
   </article>;
 }

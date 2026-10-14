@@ -12,6 +12,15 @@ ALTER TABLE user_address
 
 ALTER TABLE order_notifications ALTER COLUMN recipient TYPE varchar(1024);
 
+-- Contact form: lengths stay enforced by ContactService validation before encryption.
+ALTER TABLE contact_messages
+    ALTER COLUMN name TYPE varchar(1024),
+    ALTER COLUMN email TYPE varchar(1024),
+    DROP CONSTRAINT IF EXISTS contact_messages_message_check;
+ALTER TABLE contact_notifications
+    ALTER COLUMN recipient TYPE varchar(1024),
+    ALTER COLUMN reply_to TYPE varchar(1024);
+
 -- Checkout snapshots stay immutable, except for the one-way legacy-plaintext -> sealed envelope
 -- transition and re-sealing under a different key id during key rotation.
 CREATE OR REPLACE FUNCTION protect_checkout_snapshot() RETURNS trigger LANGUAGE plpgsql AS $$

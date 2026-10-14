@@ -5,6 +5,7 @@ import { Button } from "@heroui/react";
 import { formatPrice } from "@/lib/catalog/model";
 import { CartLines } from "./cart-lines";
 import { useCart } from "./cart-provider";
+import { CartRecommendations } from "./cart-recommendations";
 
 export function CartPageView() {
   const { snapshot, loading, notice, reload, mode } = useCart();
@@ -39,6 +40,7 @@ export function CartPageView() {
             </aside>
           </div>
         )}
+      {cart && cart.lines.length > 0 ? <CartRecommendations productIds={cart.lines.map((line) => line.productId)} /> : null}
     </div>
   );
 }

@@ -694,7 +694,7 @@
 
     /* Mirrors the header: brand anchored left, link groups hugging the right. */
     .store-footer {
-      grid-template-columns: minmax(0, 1fr) auto auto;
+      grid-template-columns: minmax(0, 1fr) auto auto auto;
       column-gap: 4rem;
     }
   }
@@ -849,3 +849,12 @@
 .checkout-reference { font-family: var(--font-mono); font-size: 0.875rem; }
 @media (min-width: 36rem) { .checkout-address-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } .checkout-wide { grid-column: 1/-1; } }
 @media (min-width: 64rem) { .checkout-layout { grid-template-columns: minmax(0, 1.5fr) minmax(20rem,1fr); } .checkout-summary { position: sticky; top: 1rem; } }
+
+.contact-form textarea {
+  width: 100%; padding: 0.5rem 0.75rem; resize: vertical;
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  background: var(--surface); color: var(--foreground);
+}
+.contact-form textarea[aria-invalid="true"] { border-color: var(--danger); }
+.contact-form :is(input, select, textarea):focus-visible, .address-form :is(input, select):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.contact-trap { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }

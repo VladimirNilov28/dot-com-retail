@@ -196,7 +196,7 @@ query GuestCartView {
       subtotal
       productVariant {
         id sku price attributes isActive availability purchasableLimit
-        product { name slug images { url altText width height } }
+        product { id name slug images { url altText width height } }
       }
     }
   }
@@ -219,7 +219,7 @@ mutation GuestCartAdd($input: AddCartItemInput!) {
       subtotal
       productVariant {
         id sku price attributes isActive availability purchasableLimit
-        product { name slug images { url altText width height } }
+        product { id name slug images { url altText width height } }
       }
     }
   }
@@ -235,7 +235,7 @@ mutation GuestCartUpdate($id: ID!, $input: UpdateCartItemInput!) {
       subtotal
       productVariant {
         id sku price attributes isActive availability purchasableLimit
-        product { name slug images { url altText width height } }
+        product { id name slug images { url altText width height } }
       }
     }
   }
@@ -251,7 +251,7 @@ mutation GuestCartRemove($id: ID!) {
       subtotal
       productVariant {
         id sku price attributes isActive availability purchasableLimit
-        product { name slug images { url altText width height } }
+        product { id name slug images { url altText width height } }
       }
     }
   }
@@ -274,7 +274,7 @@ query MyCartView {
       subtotal
       productVariant {
         id sku price attributes isActive availability purchasableLimit
-        product { name slug images { url altText width height } }
+        product { id name slug images { url altText width height } }
       }
     }
   }
@@ -320,4 +320,42 @@ mutation VoteReviewHelpful($reviewId: ID!) {
 
 mutation UnvoteReviewHelpful($reviewId: ID!) {
   unvoteReviewHelpful(reviewId: $reviewId) { id helpfulCount viewerHasVoted }
+}
+
+query MyAddresses {
+  me {
+    addresses { id firstName lastName city country postalCode addressLine1 addressLine2 mobile }
+  }
+}
+
+mutation AddMyAddress($input: CreateAddressInput!) {
+  addMyAddress(input: $input) { id }
+}
+
+mutation UpdateMyAddress($id: ID!, $input: UpdateAddressInput!) {
+  updateMyAddress(addressId: $id, input: $input) { id }
+}
+
+mutation DeleteMyAddress($id: ID!) {
+  deleteMyAddress(addressId: $id)
+}
+
+query RecommendedProducts($productIds: [ID!]!, $limit: Int) {
+  recommendedProducts(productIds: $productIds, limit: $limit) {
+    id
+    name
+    slug
+    averageRating
+    ratingCount
+    images { url altText width height }
+    variants { id price isActive }
+  }
+}
+
+mutation SubmitContactMessage($input: ContactMessageInput!) {
+  submitContactMessage(input: $input) {
+    accepted
+    reference
+    fieldErrors { field message }
+  }
 }

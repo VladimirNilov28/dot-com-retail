@@ -33,6 +33,9 @@ public class CatalogSearchService {
     static final int MAX_PAGE_SIZE = 100;
     static final int DEFAULT_SUGGESTION_LIMIT = 10;
     static final int MAX_SUGGESTION_LIMIT = 25;
+    static final int DEFAULT_RECOMMENDATION_LIMIT = 4;
+    static final int MAX_RECOMMENDATION_LIMIT = 8;
+    static final int MAX_RECOMMENDATION_INPUTS = 20;
 
     private final CatalogSearchRepository catalogSearchRepository;
     private final ProductRepository productRepository;
@@ -75,6 +78,25 @@ public class CatalogSearchService {
         }
         effectiveLimit = Math.min(effectiveLimit, MAX_SUGGESTION_LIMIT);
         return catalogSearchRepository.suggest(query.trim(), effectiveLimit);
+    }
+
+    /** Deterministic related products (shared category, then brand); never personalised. */
+    public List<Product> recommend(List<Long> productIds, Integer limit) {
+        int effectiveLimit = limit == null ? DEFAULT_RECOMMENDATION_LIMIT : limit;
+        if (effectiveLimit <= 0) {
+            throw new IllegalArgumentException("Recommendation limit must be positive");
+        }
+        effectiveLimit = Math.min(effectiveLimit, MAX_RECOMMENDATION_LIMIT);
+        List<Long> seeds = productIds == null
+                ? List.of()
+                : productIds.stream()
+                        .distinct()
+                        .limit(MAX_RECOMMENDATION_INPUTS)
+                        .toList();
+        if (seeds.isEmpty()) {
+            return List.of();
+        }
+        return hydrate(catalogSearchRepository.relatedProductIds(seeds, effectiveLimit));
     }
 
     /**

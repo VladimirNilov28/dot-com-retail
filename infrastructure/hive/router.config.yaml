@@ -11,7 +11,7 @@ http:
   host: 0.0.0.0
   port: 4000
 
-# Forward only authentication and guest-cart transport headers. Spring
+# Forward only authentication, guest-cart transport and client-address headers. Spring
 # Resource Server remains the sole JWT validation authority — the router
 # does not inspect, verify, or re-issue tokens.
 headers:
@@ -24,6 +24,10 @@ headers:
       request:
         - propagate:
             named: [Cookie, Origin, X-Guest-Cart-Request]
+        # Client address set by the Next BFF; Spring honours it only because the
+        # router is a configured trusted proxy (docs/security/rate-limiting.md).
+        - propagate:
+            named: X-Forwarded-For
       response:
         - propagate:
             named: Set-Cookie
@@ -31,6 +35,9 @@ headers:
         - propagate:
             named: [Cache-Control, Vary]
             algorithm: append
+        - propagate:
+            named: Retry-After
+            algorithm: last
 
 cors:
   enabled: true

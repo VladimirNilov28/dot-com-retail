@@ -38,7 +38,8 @@ public class GuestCartHttpFilter extends OncePerRequestFilter {
             "categories",
             "searchProducts",
             "productSearchSuggestions",
-            "productReviews");
+            "productReviews",
+            "recommendedProducts");
     private static final Set<String> GUEST_FIELDS = Set.of(
             "guestCart",
             "startGuestCart",
@@ -51,7 +52,8 @@ public class GuestCartHttpFilter extends OncePerRequestFilter {
             "guestCheckoutPreview",
             "createGuestOrder",
             "guestOrder",
-            "cancelGuestOrder");
+            "cancelGuestOrder",
+            "submitContactMessage");
 
     private record OperationSelection(OperationDefinition.Operation operation, Set<String> roots) {}
 

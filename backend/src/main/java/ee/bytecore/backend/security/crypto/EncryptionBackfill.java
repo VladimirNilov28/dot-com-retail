@@ -42,7 +42,8 @@ public class EncryptionBackfill implements ApplicationRunner {
         int addresses = backfillAddresses();
         int orders = backfillOrders();
         int notifications = backfillColumns("order_notifications", List.of("recipient", "body"));
-        int contacts = backfillColumns("contact_messages", List.of("name", "email", "message"));
+        int contacts = backfillColumns("contact_messages", List.of("name", "email", "message"))
+                + backfillColumns("contact_notifications", List.of("recipient", "reply_to", "body"));
         if (addresses + orders + notifications + contacts > 0) {
             log.info("Encryption backfill sealed {} addresses, {} order snapshots, {} notifications, {} contact messages",
                     addresses, orders, notifications, contacts);

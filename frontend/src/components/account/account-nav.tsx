@@ -7,6 +7,7 @@ const links = [
   { href: "/account", label: "Overview" },
   { href: "/account/orders", label: "Orders" },
   { href: "/account/profile", label: "Personal info" },
+  { href: "/account/addresses", label: "Addresses" },
   { href: "/account/security", label: "Security" },
   { href: "/account/connections", label: "Connected accounts" },
   { href: "/account/sessions", label: "Sessions" },

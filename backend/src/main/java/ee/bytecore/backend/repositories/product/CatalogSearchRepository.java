@@ -236,6 +236,46 @@ public class CatalogSearchRepository {
                 .toList();
     }
 
+    /**
+     * Products related to {@code productIds}: sharing a category or brand,
+     * excluding the inputs, with at least one active in-stock variant. Ordered
+     * by shared category, shared brand, average rating (unrated last), then id.
+     */
+    @SuppressWarnings("unchecked")
+    public List<Long> relatedProductIds(List<Long> productIds, int limit) {
+        String sql =
+                """
+                WITH seed_categories AS (
+                  SELECT DISTINCT pc.category_id FROM product_categories pc WHERE pc.product_id IN (:ids)),
+                seed_brands AS (
+                  SELECT DISTINCT s.brand_id FROM products s WHERE s.id IN (:ids) AND s.brand_id IS NOT NULL),
+                candidates AS (
+                  SELECT p.id,
+                         EXISTS (SELECT 1 FROM product_categories pc
+                                 WHERE pc.product_id = p.id
+                                   AND pc.category_id IN (SELECT category_id FROM seed_categories)) AS same_category,
+                         p.brand_id IN (SELECT brand_id FROM seed_brands) AS same_brand
+                  FROM products p
+                  WHERE p.id NOT IN (:ids)
+                    AND EXISTS (SELECT 1 FROM product_variants v
+                                WHERE v.product_id = p.id AND v.is_active = TRUE
+                                  AND (SELECT COALESCE(SUM(i.quantity), 0) FROM inventory i
+                                       WHERE i.product_variant_id = v.id) > 0))
+                SELECT c.id FROM candidates c
+                WHERE c.same_category OR COALESCE(c.same_brand, FALSE)
+                ORDER BY c.same_category DESC,
+                         COALESCE(c.same_brand, FALSE) DESC,
+                         (SELECT AVG(r.stars) FROM product_ratings r WHERE r.product_id = c.id) DESC NULLS LAST,
+                         c.id ASC
+                LIMIT :limit
+                """;
+        Query nativeQuery = entityManager.createNativeQuery(sql);
+        nativeQuery.setParameter("ids", productIds);
+        nativeQuery.setParameter("limit", limit);
+        List<Object> rows = nativeQuery.getResultList();
+        return rows.stream().map(id -> ((Number) id).longValue()).toList();
+    }
+
     private void bindCriteria(Query query, CatalogSearchCriteria criteria) {
         query.setParameter("query", criteria.query());
         query.setParameter("categoryId", criteria.categoryId());

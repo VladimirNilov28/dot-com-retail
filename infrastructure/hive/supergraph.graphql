@@ -286,6 +286,17 @@ type Inventory @join__type(graph: RETAIL) {
   warehouse: Warehouse!
 }
 
+type ContactFieldError @join__type(graph: RETAIL) {
+  field: String!
+  message: String!
+}
+
+type ContactMessageResult @join__type(graph: RETAIL) {
+  accepted: Boolean!
+  fieldErrors: [ContactFieldError!]!
+  reference: String
+}
+
 type ModerationReview @join__type(graph: RETAIL) {
   authorName: String!
   body: String
@@ -365,6 +376,7 @@ type Mutation @join__type(graph: RETAIL) {
   """Moves the image to position 0, keeping the others' relative order."""
   setPrimaryProductImage(imageId: ID!): [ProductImage!]!
   startGuestCart: StartGuestCartResult!
+  submitContactMessage(input: ContactMessageInput!): ContactMessageResult!
   unvoteReviewHelpful(reviewId: ID!): ProductReview!
   updateCartItem(cartItemId: ID!, input: UpdateCartItemInput!): CartItem!
   updateCategory(categoryId: ID!, input: UpdateCategoryInput!): Category!
@@ -643,6 +655,7 @@ type Query @join__type(graph: RETAIL) {
   productReviews(page: Int = 0, productId: ID!, size: Int = 10, sort: ReviewSort = NEWEST): ProductReviewPage!
   productSearchSuggestions(limit: Int, query: String!): [ProductSuggestion!]!
   products: [Product!]!
+  recommendedProducts(limit: Int, productIds: [ID!]!): [Product!]!
   searchProducts(input: ProductSearchInput!): ProductSearchResult!
   staffOrders(filter: StaffOrderFilter, page: Int = 0, size: Int = 20): OrderPage!
   user(id: ID!): User!
@@ -737,6 +750,15 @@ enum CheckoutShippingMethod @join__type(graph: RETAIL) {
   EXPRESS @join__enumValue(graph: RETAIL)
   PICKUP @join__enumValue(graph: RETAIL)
   STANDARD @join__enumValue(graph: RETAIL)
+}
+
+enum ContactSubject @join__type(graph: RETAIL) {
+  ACCOUNT @join__enumValue(graph: RETAIL)
+  FEEDBACK @join__enumValue(graph: RETAIL)
+  ORDER @join__enumValue(graph: RETAIL)
+  OTHER @join__enumValue(graph: RETAIL)
+  PAYMENT @join__enumValue(graph: RETAIL)
+  PRODUCT @join__enumValue(graph: RETAIL)
 }
 
 enum ErrorDetail @join__type(graph: RETAIL) {
@@ -1141,6 +1163,14 @@ input CheckoutInput @join__type(graph: RETAIL) {
   shippingAddress: CheckoutAddressInput
   shippingAddressId: ID
   shippingMethod: CheckoutShippingMethod!
+}
+
+input ContactMessageInput @join__type(graph: RETAIL) {
+  email: String!
+  message: String!
+  name: String!
+  subject: ContactSubject!
+  website: String
 }
 
 input CreateAddressInput @join__type(graph: RETAIL) {

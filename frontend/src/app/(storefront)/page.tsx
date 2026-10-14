@@ -7,7 +7,7 @@ import { getCategories } from "@/lib/catalog/server";
 
 export const metadata: Metadata = {
   title: "Browse electronics",
-  description: "Explore electronics by category and browse real products, with clear prices and useful category shortcuts.",
+  description: "Shop electronics at ByteCore: laptops, desktops, monitors, components, audio and accessories by category, with real EUR prices, live stock and customer ratings.",
 };
 
 const categoryIcons: Readonly<Record<string, LucideIcon>> = {

@@ -12,6 +12,12 @@ export function StoreFooter() {
         <nav aria-label="Footer catalog" className="grid gap-2">
           <p className="font-semibold text-foreground">Discover</p>
           <Link href="/catalog/all-products" className="store-link">Catalog</Link>
+          <Link href="/search" className="store-link">Search</Link>
+        </nav>
+        <nav aria-label="Footer company" className="grid gap-2">
+          <p className="font-semibold text-foreground">ByteCore</p>
+          <Link href="/about" className="store-link">About</Link>
+          <Link href="/contact" className="store-link">Contact</Link>
         </nav>
         <nav aria-label="Footer account" className="grid gap-2">
           <p className="font-semibold text-foreground">Your shopping</p>

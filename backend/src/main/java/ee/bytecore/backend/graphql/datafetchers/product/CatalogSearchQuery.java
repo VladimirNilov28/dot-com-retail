@@ -5,8 +5,10 @@ import java.util.List;
 import org.springframework.security.access.prepost.PreAuthorize;
 
 import ee.bytecore.backend.graphql.mappers.CatalogSearchMapper;
+import ee.bytecore.backend.graphql.mappers.ProductMapper;
 import ee.bytecore.backend.services.CatalogSearchService;
 
+import com.netflix.dgs.codegen.generated.types.Product;
 import com.netflix.dgs.codegen.generated.types.ProductSearchInput;
 import com.netflix.dgs.codegen.generated.types.ProductSearchResult;
 import com.netflix.dgs.codegen.generated.types.ProductSuggestion;
@@ -39,5 +41,22 @@ public class CatalogSearchQuery {
         return catalogSearchService.suggest(query, limit).stream()
                 .map(CatalogSearchMapper::toGraphQlType)
                 .toList();
+    }
+
+    @DgsQuery
+    @PreAuthorize("isAnonymous() or hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).PRODUCT_READ)")
+    public List<Product> recommendedProducts(@InputArgument List<String> productIds, @InputArgument Integer limit) {
+        List<Long> ids = productIds.stream().map(CatalogSearchQuery::productId).toList();
+        return catalogSearchService.recommend(ids, limit).stream()
+                .map(ProductMapper::toGraphQlType)
+                .toList();
+    }
+
+    private static Long productId(String id) {
+        try {
+            return Long.valueOf(id);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Invalid product id: " + id);
+        }
     }
 }

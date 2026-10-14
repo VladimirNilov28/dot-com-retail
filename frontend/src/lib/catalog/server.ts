@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { connection } from "next/server";
-import { catalogCategories, catalogListing, homeDiscovery, homeCategoryProducts } from "@/lib/graphql/operations";
+import { catalogCategories, catalogListing, homeDiscovery, homeCategoryProducts, recommendedProducts } from "@/lib/graphql/operations";
 import { hiveConfig, requestHive } from "@/lib/graphql/server";
 import { failure, type SafeFailure } from "@/lib/graphql/errors";
 import type { Result } from "@/lib/graphql/transport";
@@ -81,6 +81,17 @@ const cachedHomeProducts = unstable_cache(async (endpoint: string, origin: strin
   return data;
 }, ["home-products-v2"], { revalidate: 60 });
 
+const cachedRecommendations = unstable_cache(async (endpoint: string, origin: string, productIds: string[], limit: number) => {
+  const data = success((await requestHive(recommendedProducts, { productIds, limit },
+    { endpoint, origin }, { kind: "public" })).result);
+  try { data.recommendedProducts.forEach(productPrice); }
+  catch (error) {
+    if (!(error instanceof TypeError)) throw error;
+    throw new CatalogFailure(failure("protocol", true));
+  }
+  return data;
+}, ["recommended-products-v1"], { revalidate: 60 });
+
 async function read<Data>(request: (endpoint: string, origin: string) => Promise<Data>): Promise<Result<Data>> {
   try {
     const config = configuration();
@@ -112,3 +123,5 @@ export const getListing = cache((input: ListingQuery): Promise<Result<CatalogLis
     endpoint, origin, input.page, input.sort, input.query ?? "", input.categoryId, input.minPrice, input.maxPrice,
     input.attributes && input.attributes.length ? JSON.stringify(input.attributes) : undefined,
   )));
+export const getRecommendations = cache((productId: string, limit: number) =>
+  read((endpoint, origin) => cachedRecommendations(endpoint, origin, [productId], limit)));

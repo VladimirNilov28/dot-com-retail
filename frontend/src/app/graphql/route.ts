@@ -6,6 +6,7 @@ import { authConfig } from "@/lib/auth/config";
 import { authCookie } from "@/lib/auth/model";
 import { authenticatedState } from "@/lib/auth/session";
 import { checkoutSession } from "@/lib/checkout/server-identity";
+import { clientAddress } from "@/lib/graphql/client-address";
 
 export async function POST(request: Request) {
   let config;
@@ -33,5 +34,5 @@ export async function POST(request: Request) {
       console.error("Checkout request identity could not be verified");
       return false;
     }
-  });
+  }, clientAddress(request.headers));
 }

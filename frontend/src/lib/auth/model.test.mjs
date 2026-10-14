@@ -7,6 +7,7 @@ describe("storefront authentication return contract", () => {
     "/", "/catalog", "/catalog/all-products", "/catalog/components", "/account",
     "/account/security", "/account/profile", "/account/connections", "/account/sessions",
     "/account/orders", "/account/orders?status=PAID&page=2", "/account/orders/11111111-1111-4111-8111-111111111111",
+    "/account/addresses",
     "/products/actual-product?variant=9007199254740993",
     "/search?q=cpu%20gpu", "/search?q=100%25", "/search?q=%2520",
     "/checkout", "/order-confirmation/11111111-1111-4111-8111-111111111111?guest=1",

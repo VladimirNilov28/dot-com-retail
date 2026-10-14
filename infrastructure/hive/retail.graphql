@@ -257,6 +257,17 @@ type Inventory {
   warehouse: Warehouse!
 }
 
+type ContactFieldError {
+  field: String!
+  message: String!
+}
+
+type ContactMessageResult {
+  accepted: Boolean!
+  fieldErrors: [ContactFieldError!]!
+  reference: String
+}
+
 type ModerationReview {
   authorName: String!
   body: String
@@ -337,6 +348,7 @@ type Mutation {
   "Moves the image to position 0, keeping the others' relative order."
   setPrimaryProductImage(imageId: ID!): [ProductImage!]!
   startGuestCart: StartGuestCartResult!
+  submitContactMessage(input: ContactMessageInput!): ContactMessageResult!
   unvoteReviewHelpful(reviewId: ID!): ProductReview!
   updateCartItem(cartItemId: ID!, input: UpdateCartItemInput!): CartItem!
   updateCategory(categoryId: ID!, input: UpdateCategoryInput!): Category!
@@ -612,6 +624,7 @@ type Query {
   productReviews(page: Int = 0, productId: ID!, size: Int = 10, sort: ReviewSort = NEWEST): ProductReviewPage!
   productSearchSuggestions(limit: Int, query: String!): [ProductSuggestion!]!
   products: [Product!]!
+  recommendedProducts(limit: Int, productIds: [ID!]!): [Product!]!
   searchProducts(input: ProductSearchInput!): ProductSearchResult!
   staffOrders(filter: StaffOrderFilter, page: Int = 0, size: Int = 20): OrderPage!
   user(id: ID!): User!
@@ -706,6 +719,15 @@ enum CheckoutShippingMethod {
   EXPRESS
   PICKUP
   STANDARD
+}
+
+enum ContactSubject {
+  ACCOUNT
+  FEEDBACK
+  ORDER
+  OTHER
+  PAYMENT
+  PRODUCT
 }
 
 enum ErrorDetail {
@@ -1113,6 +1135,14 @@ input CheckoutInput {
   shippingAddress: CheckoutAddressInput
   shippingAddressId: ID
   shippingMethod: CheckoutShippingMethod!
+}
+
+input ContactMessageInput {
+  email: String!
+  message: String!
+  name: String!
+  subject: ContactSubject!
+  website: String
 }
 
 input CreateAddressInput {
