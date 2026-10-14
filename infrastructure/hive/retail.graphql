@@ -112,7 +112,9 @@ type CheckoutOrder {
   refund: OrderRefund!
   requestId: UUID!
   status: OrderStatus!
+  statusHistory: [OrderStatusEvent!]!
   totals: CheckoutTotals!
+  tracking: OrderTracking
 }
 
 type CheckoutPaymentConfiguration {
@@ -216,6 +218,7 @@ type Mutation {
   addMyPaymentMethod(input: CreatePaymentMethodInput!): UserPaymentMethod!
   addUserPaymentMethod(input: CreatePaymentMethodInput!, userId: ID!): UserPaymentMethod!
   addWishlistItem(input: AddWishlistItemInput!): WishlistItem!
+  approveRefund(input: DecideRefundInput!): OrderRefundRequest!
   cancelGuestOrder(input: CancelOrderInput!): OrderCancellationPayload!
   cancelOrder(input: CancelOrderInput!): OrderCancellationPayload!
   cancelOrderAsStaff(input: CancelOrderInput!): OrderCancellationPayload!
@@ -246,12 +249,15 @@ type Mutation {
   No user ID is accepted, so callers cannot edit another user's rating.
   """
   rateProduct(productId: ID!, stars: Int!): Product!
+  rejectRefund(input: DecideRefundInput!): OrderRefundRequest!
   removeCartItem(cartItemId: ID!): Boolean!
   removeGuestCartItem(cartItemId: ID!): GuestCart!
   removeWishlistItem(wishlistItemId: ID!): Boolean!
   "imageIds must list each of the product's images exactly once."
   reorderProductImages(imageIds: [ID!]!, productId: ID!): [ProductImage!]!
+  requestRefund(input: RequestRefundInput!): OrderRefundRequest!
   setInventory(input: SetInventoryInput!): Inventory!
+  setOrderTracking(input: SetOrderTrackingInput!): Order!
   "Moves the image to position 0, keeping the others' relative order."
   setPrimaryProductImage(imageId: ID!): [ProductImage!]!
   startGuestCart: StartGuestCartResult!
@@ -268,6 +274,8 @@ type Mutation {
 }
 
 type Order {
+  " Next fulfillment states staff may set via updateOrderStatus (cancellation is separate)."
+  allowedStatusTransitions: [OrderStatus!]!
   cancellation: OrderCancellation
   cancellationEligibility: OrderCancellationEligibility!
   """
@@ -284,8 +292,12 @@ type Order {
   payment: OrderPayment!
   publicId: UUID!
   refund: OrderRefund!
+  refundEligibility: OrderRefundEligibility!
+  refundRequests: [OrderRefundRequest!]!
   status: OrderStatus!
+  statusHistory: [OrderStatusEvent!]!
   totalAmount: BigDecimal!
+  tracking: OrderTracking
   updatedAt: Instant!
   user: User
 }
@@ -316,6 +328,14 @@ type OrderItem {
   snapshot: CheckoutLine
 }
 
+" Newest first. size is 1..50 (default 20), page is zero-based."
+type OrderPage {
+  items: [Order!]!
+  page: Int!
+  size: Int!
+  totalCount: Int!
+}
+
 type OrderPayment {
   status: OrderPaymentStatus!
 }
@@ -325,6 +345,35 @@ type OrderRefund {
   currency: String
   failureReason: String
   status: OrderRefundStatus!
+}
+
+type OrderRefundEligibility {
+  allowed: Boolean!
+  reason: String
+}
+
+type OrderRefundRequest {
+  createdAt: Instant!
+  decidedAt: Instant
+  decisionNote: String
+  id: UUID!
+  reason: String!
+  status: OrderRefundRequestStatus!
+}
+
+type OrderStatusEvent {
+  actor: OrderStatusActor!
+  fromStatus: OrderStatus
+  note: String
+  occurredAt: Instant!
+  toStatus: OrderStatus!
+}
+
+type OrderTracking {
+  carrier: String!
+  shippedAt: Instant
+  trackingNumber: String!
+  trackingUrl: String
 }
 
 type PriceFacet {
@@ -429,13 +478,14 @@ type Query {
   guestPaymentSession(requestId: UUID!): CheckoutPaymentSession!
   me: User!
   myCart: Cart!
-  myOrders: [Order!]!
+  myOrders(filter: OrderFilter, page: Int = 0, size: Int = 20): OrderPage!
   myWishlist: Wishlist!
   order(id: ID, publicId: UUID): Order
   product(id: ID, slug: String): Product
   productSearchSuggestions(limit: Int, query: String!): [ProductSuggestion!]!
   products: [Product!]!
   searchProducts(input: ProductSearchInput!): ProductSearchResult!
+  staffOrders(filter: StaffOrderFilter, page: Int = 0, size: Int = 20): OrderPage!
   user(id: ID!): User!
   warehouse(id: ID!): Warehouse
   warehouses: [Warehouse!]!
@@ -791,6 +841,12 @@ enum OrderPaymentStatus {
   UNRESOLVED
 }
 
+enum OrderRefundRequestStatus {
+  APPROVED
+  REJECTED
+  REQUESTED
+}
+
 enum OrderRefundStatus {
   FAILED
   NONE
@@ -804,7 +860,17 @@ enum OrderStatus {
   COMPLETED
   PAID
   PENDING
+  " Fulfillment has begun; the order can no longer be cancelled (refund requests only)."
+  PROCESSING
   SHIPPING
+}
+
+enum OrderStatusActor {
+  CUSTOMER
+  GUEST
+  PAYMENT
+  STAFF
+  SYSTEM
 }
 
 " Shared with User.paymentMethods; keep it here so both domains reference one definition."
@@ -937,6 +1003,21 @@ input CreateWarehouseInput {
   name: String!
 }
 
+input DecideRefundInput {
+  " Required when rejecting."
+  note: String
+  requestId: UUID!
+}
+
+input OrderFilter {
+  """
+  Inclusive lower / exclusive upper bound on the order creation time.
+  """
+  from: Instant
+  status: OrderStatus
+  to: Instant
+}
+
 input PlaceOrderInput {
   acceptedQuoteVersion: String!
   checkout: CheckoutInput!
@@ -980,10 +1061,31 @@ input ProductSearchInput {
   sort: ProductSort = RELEVANCE
 }
 
+input RequestRefundInput {
+  publicId: UUID!
+  reason: String!
+}
+
 input SetInventoryInput {
   productVariantId: ID!
   quantity: Int!
   warehouseId: ID!
+}
+
+input SetOrderTrackingInput {
+  carrier: String!
+  publicId: UUID!
+  trackingNumber: String!
+  " Optional http(s) carrier tracking page."
+  trackingUrl: String
+}
+
+input StaffOrderFilter {
+  from: Instant
+  " Exact customer email/username, snapshot contact email, or order reference prefix."
+  query: String
+  status: OrderStatus
+  to: Instant
 }
 
 input UpdateAddressInput {
@@ -1008,6 +1110,8 @@ input UpdateCategoryInput {
 }
 
 input UpdateOrderStatusInput {
+  " Optional staff note recorded in the status history."
+  note: String
   status: OrderStatus!
 }
 

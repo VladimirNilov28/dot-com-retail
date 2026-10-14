@@ -207,6 +207,9 @@ clients:
       - cart:write
       - order:read
       - order:write
+      # Staff order operations from /admin/orders; consent intersects this with
+      # the user's role scopes, so only ORDER_MANAGER/ADMIN actually receive it.
+      - order:manage-status
     additional_scopes:
       - openid
       - offline_access

@@ -26,7 +26,8 @@ describe("storefront authentication return contract", () => {
     });
     test("accepts customer checkout scopes without requiring scopes withheld by role policy (#74)", () => {
       for (const scope of ["openid user:read offline_access cart:read cart:write order:read order:write",
-        "openid user:read offline_access order:read"]) {
+        "openid user:read offline_access order:read",
+        "openid user:read offline_access order:read order:manage-status"]) {
         expect(() => grantTokens({ ...grant, scope })).not.toThrow();
       }
     });
@@ -36,7 +37,7 @@ describe("storefront authentication return contract", () => {
       }
       for (const scope of [undefined, "", "openid offline_access user:read user:write",
         "openid offline_access user:read user:read",
-        "openid offline_access user:read order:manage-status",
+        "openid offline_access user:read payment:manage-status",
         "openid offline_access user:read user:manage-roles",
         "openid offline_access user:read order:read order:read"]) {
         expect(() => grantTokens({ ...grant, scope })).toThrow(AuthError);

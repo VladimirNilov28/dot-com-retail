@@ -103,7 +103,7 @@ function decodeChallenge(value: unknown): EmailChallenge {
 // Roles may legitimately receive only a subset of the customer cart/order scopes.
 function grantedScopesValid(scope: string): boolean {
   const granted = scope.split(" ");
-  const optional = new Set(["cart:read", "cart:write", "order:read", "order:write"]);
+  const optional = new Set(["cart:read", "cart:write", "order:read", "order:write", "order:manage-status"]);
   const required = ["offline_access", "openid", "user:read"];
   return new Set(granted).size === granted.length &&
     required.every((name) => granted.includes(name)) &&

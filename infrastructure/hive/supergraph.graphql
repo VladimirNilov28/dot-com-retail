@@ -145,7 +145,9 @@ type CheckoutOrder @join__type(graph: RETAIL) {
   refund: OrderRefund!
   requestId: UUID!
   status: OrderStatus!
+  statusHistory: [OrderStatusEvent!]!
   totals: CheckoutTotals!
+  tracking: OrderTracking
 }
 
 type CheckoutPaymentConfiguration @join__type(graph: RETAIL) {
@@ -249,6 +251,7 @@ type Mutation @join__type(graph: RETAIL) {
   addMyPaymentMethod(input: CreatePaymentMethodInput!): UserPaymentMethod!
   addUserPaymentMethod(input: CreatePaymentMethodInput!, userId: ID!): UserPaymentMethod!
   addWishlistItem(input: AddWishlistItemInput!): WishlistItem!
+  approveRefund(input: DecideRefundInput!): OrderRefundRequest!
   cancelGuestOrder(input: CancelOrderInput!): OrderCancellationPayload!
   cancelOrder(input: CancelOrderInput!): OrderCancellationPayload!
   cancelOrderAsStaff(input: CancelOrderInput!): OrderCancellationPayload!
@@ -279,12 +282,15 @@ type Mutation @join__type(graph: RETAIL) {
   No user ID is accepted, so callers cannot edit another user's rating.
   """
   rateProduct(productId: ID!, stars: Int!): Product!
+  rejectRefund(input: DecideRefundInput!): OrderRefundRequest!
   removeCartItem(cartItemId: ID!): Boolean!
   removeGuestCartItem(cartItemId: ID!): GuestCart!
   removeWishlistItem(wishlistItemId: ID!): Boolean!
   """imageIds must list each of the product's images exactly once."""
   reorderProductImages(imageIds: [ID!]!, productId: ID!): [ProductImage!]!
+  requestRefund(input: RequestRefundInput!): OrderRefundRequest!
   setInventory(input: SetInventoryInput!): Inventory!
+  setOrderTracking(input: SetOrderTrackingInput!): Order!
   """Moves the image to position 0, keeping the others' relative order."""
   setPrimaryProductImage(imageId: ID!): [ProductImage!]!
   startGuestCart: StartGuestCartResult!
@@ -301,6 +307,8 @@ type Mutation @join__type(graph: RETAIL) {
 }
 
 type Order @join__type(graph: RETAIL) {
+  " Next fulfillment states staff may set via updateOrderStatus (cancellation is separate)."
+  allowedStatusTransitions: [OrderStatus!]!
   cancellation: OrderCancellation
   cancellationEligibility: OrderCancellationEligibility!
   """
@@ -317,8 +325,12 @@ type Order @join__type(graph: RETAIL) {
   payment: OrderPayment!
   publicId: UUID!
   refund: OrderRefund!
+  refundEligibility: OrderRefundEligibility!
+  refundRequests: [OrderRefundRequest!]!
   status: OrderStatus!
+  statusHistory: [OrderStatusEvent!]!
   totalAmount: BigDecimal!
+  tracking: OrderTracking
   updatedAt: Instant!
   user: User
 }
@@ -349,6 +361,14 @@ type OrderItem @join__type(graph: RETAIL) {
   snapshot: CheckoutLine
 }
 
+" Newest first. size is 1..50 (default 20), page is zero-based."
+type OrderPage @join__type(graph: RETAIL) {
+  items: [Order!]!
+  page: Int!
+  size: Int!
+  totalCount: Int!
+}
+
 type OrderPayment @join__type(graph: RETAIL) {
   status: OrderPaymentStatus!
 }
@@ -358,6 +378,35 @@ type OrderRefund @join__type(graph: RETAIL) {
   currency: String
   failureReason: String
   status: OrderRefundStatus!
+}
+
+type OrderRefundEligibility @join__type(graph: RETAIL) {
+  allowed: Boolean!
+  reason: String
+}
+
+type OrderRefundRequest @join__type(graph: RETAIL) {
+  createdAt: Instant!
+  decidedAt: Instant
+  decisionNote: String
+  id: UUID!
+  reason: String!
+  status: OrderRefundRequestStatus!
+}
+
+type OrderStatusEvent @join__type(graph: RETAIL) {
+  actor: OrderStatusActor!
+  fromStatus: OrderStatus
+  note: String
+  occurredAt: Instant!
+  toStatus: OrderStatus!
+}
+
+type OrderTracking @join__type(graph: RETAIL) {
+  carrier: String!
+  shippedAt: Instant
+  trackingNumber: String!
+  trackingUrl: String
 }
 
 type PriceFacet @join__type(graph: RETAIL) {
@@ -470,13 +519,14 @@ type Query @join__type(graph: RETAIL) {
   guestPaymentSession(requestId: UUID!): CheckoutPaymentSession!
   me: User!
   myCart: Cart!
-  myOrders: [Order!]!
+  myOrders(filter: OrderFilter, page: Int = 0, size: Int = 20): OrderPage!
   myWishlist: Wishlist!
   order(id: ID, publicId: UUID): Order
   product(id: ID, slug: String): Product
   productSearchSuggestions(limit: Int, query: String!): [ProductSuggestion!]!
   products: [Product!]!
   searchProducts(input: ProductSearchInput!): ProductSearchResult!
+  staffOrders(filter: StaffOrderFilter, page: Int = 0, size: Int = 20): OrderPage!
   user(id: ID!): User!
   warehouse(id: ID!): Warehouse
   warehouses: [Warehouse!]!
@@ -832,6 +882,12 @@ enum OrderPaymentStatus @join__type(graph: RETAIL) {
   UNRESOLVED @join__enumValue(graph: RETAIL)
 }
 
+enum OrderRefundRequestStatus @join__type(graph: RETAIL) {
+  APPROVED @join__enumValue(graph: RETAIL)
+  REJECTED @join__enumValue(graph: RETAIL)
+  REQUESTED @join__enumValue(graph: RETAIL)
+}
+
 enum OrderRefundStatus @join__type(graph: RETAIL) {
   FAILED @join__enumValue(graph: RETAIL)
   NONE @join__enumValue(graph: RETAIL)
@@ -845,7 +901,17 @@ enum OrderStatus @join__type(graph: RETAIL) {
   COMPLETED @join__enumValue(graph: RETAIL)
   PAID @join__enumValue(graph: RETAIL)
   PENDING @join__enumValue(graph: RETAIL)
+  " Fulfillment has begun; the order can no longer be cancelled (refund requests only)."
+  PROCESSING @join__enumValue(graph: RETAIL)
   SHIPPING @join__enumValue(graph: RETAIL)
+}
+
+enum OrderStatusActor @join__type(graph: RETAIL) {
+  CUSTOMER @join__enumValue(graph: RETAIL)
+  GUEST @join__enumValue(graph: RETAIL)
+  PAYMENT @join__enumValue(graph: RETAIL)
+  STAFF @join__enumValue(graph: RETAIL)
+  SYSTEM @join__enumValue(graph: RETAIL)
 }
 
 " Shared with User.paymentMethods; keep it here so both domains reference one definition."
@@ -978,6 +1044,21 @@ input CreateWarehouseInput @join__type(graph: RETAIL) {
   name: String!
 }
 
+input DecideRefundInput @join__type(graph: RETAIL) {
+  " Required when rejecting."
+  note: String
+  requestId: UUID!
+}
+
+input OrderFilter @join__type(graph: RETAIL) {
+  """
+  Inclusive lower / exclusive upper bound on the order creation time.
+  """
+  from: Instant
+  status: OrderStatus
+  to: Instant
+}
+
 input PlaceOrderInput @join__type(graph: RETAIL) {
   acceptedQuoteVersion: String!
   checkout: CheckoutInput!
@@ -1021,10 +1102,31 @@ input ProductSearchInput @join__type(graph: RETAIL) {
   sort: ProductSort = RELEVANCE
 }
 
+input RequestRefundInput @join__type(graph: RETAIL) {
+  publicId: UUID!
+  reason: String!
+}
+
 input SetInventoryInput @join__type(graph: RETAIL) {
   productVariantId: ID!
   quantity: Int!
   warehouseId: ID!
+}
+
+input SetOrderTrackingInput @join__type(graph: RETAIL) {
+  carrier: String!
+  publicId: UUID!
+  trackingNumber: String!
+  " Optional http(s) carrier tracking page."
+  trackingUrl: String
+}
+
+input StaffOrderFilter @join__type(graph: RETAIL) {
+  from: Instant
+  " Exact customer email/username, snapshot contact email, or order reference prefix."
+  query: String
+  status: OrderStatus
+  to: Instant
 }
 
 input UpdateAddressInput @join__type(graph: RETAIL) {
@@ -1049,6 +1151,8 @@ input UpdateCategoryInput @join__type(graph: RETAIL) {
 }
 
 input UpdateOrderStatusInput @join__type(graph: RETAIL) {
+  " Optional staff note recorded in the status history."
+  note: String
   status: OrderStatus!
 }
 
