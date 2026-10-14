@@ -252,6 +252,18 @@ identities plus `reason` and an optional refund provider reference.
 `payment.succeeded` adds optional `providerTransactionId` without requiring it
 in old payloads. `payment.unresolved` has `eventId`, original `requestEventId`,
 `orderId`, `paymentId`, `reason`, and `occurredAt`.
+`payment.declined` reports a definite, retryable card decline for one attempt:
+`eventId`, `requestEventId`, `orderId`, `paymentId`, `attemptId` (failed charge
+id, or a digest when Stripe omits it), allow-listed `reason`
+(`insufficient_funds`, `expired_card`, `incorrect_cvc`, `incorrect_number`,
+`invalid_expiry`, `card_not_supported`, `authentication_failed`, `card_declined`)
+and `occurredAt`. The payment stays REQUESTED so the same PaymentIntent can be
+retried; migration `0005_payment_declines` records `(payment_id, attempt_id)` and
+the event is written to the outbox only for a new attempt, so webhook replays and
+reconciliation polls do not republish. Transient decline codes
+(`processing_error`, `try_again_later`, …) and unknown errors stay
+`payment.unresolved`. See the state table in
+[Checkout API](../docs/api/checkout.md#payment-outcome-states-declines-and-retry).
 
 ### Migration/rollout and limitations
 

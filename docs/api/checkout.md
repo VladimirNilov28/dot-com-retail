@@ -262,7 +262,8 @@ Payment-session preparation polls at most 12 times. Reload and provider return
 do not place another order or initiate another PaymentIntent.
 
 Spring `V18__order_notifications.sql` adds a transactional SMTP notification
-outbox for placement, paid, cancellation and retry-required status. A unique
+outbox for placement, paid, cancellation, retry-required (unknown outcome) and
+payment-declined (`PAYMENT_FAILED`, keyed per attempt) status. A unique
 order/kind identity deduplicates logical events; delivery retries independently
 with bounded backoff and becomes DEAD after eight failures. SMTP outages do not
 roll back commerce. SMTP's ambiguous acknowledgement window can still produce
@@ -306,6 +307,81 @@ reload/re-login replay, foreign status/payment/replay denial, stale payment-tab
 invalidation and preissued protected guest-proof recovery. Newly created unpaid
 recovery fixtures are cancelled through the normal authorized API; paid orders
 and existing history remain intact.
+
+## Payment outcome states, declines and retry
+
+A **definite card decline** is distinct from an **unknown gateway outcome**.
+Only verified provider state (signed webhook or the 30-second reconciliation
+poll of `GET /v1/payment_intents/<id>`) is mapped; browser return parameters and
+SDK responses never settle an order.
+
+| Provider state (Stripe PaymentIntent) | Payment Service | Kafka | `Order.status` | `payment.status` | Retryable / notes |
+| --- | --- | --- | --- | --- | --- |
+| Created, awaiting card (`requires_payment_method`, no error) | REQUESTED | — | PENDING | PENDING | Customer enters a card |
+| `processing` | REQUESTED | — | PENDING | PENDING | Waits for webhook/reconciliation |
+| `succeeded` | SUCCEEDED | `payment.succeeded` | PAID | SUCCEEDED | Terminal; one PAID email |
+| `requires_payment_method` + definite `last_payment_error` | REQUESTED (attempt recorded in `payment_declines`) | `payment.declined` (per attempt) | PENDING | DECLINED + `declineReason` | **Yes**, same order and same PaymentIntent; one PAYMENT_FAILED email per attempt |
+| `requires_payment_method` + transient/unknown error, API timeout, network error | REQUESTED | `payment.unresolved` (once per payment) | PENDING | UNRESOLVED | Outcome unknown; reconciled every 30 s, customer told it is being confirmed |
+| `canceled` | FAILED (`provider_payment_canceled`) | `payment.failed` | CANCELLED (stock released) | FAILED | Terminal, not retryable |
+| Full refund requested / confirmed / uncertain / rejected | refund ledger | `refund.*` | stays CANCELLED | SUCCEEDED | `refund.status` PENDING / SUCCEEDED / UNRESOLVED (same-key recovery) / FAILED; see [Order cancellation](order-cancellation.md) |
+
+`declineReason` is an allow-listed code, never the provider message or card
+data: `insufficient_funds`, `expired_card`, `incorrect_cvc` (also `invalid_cvc`),
+`incorrect_number` (also `invalid_number`), `invalid_expiry`,
+`card_not_supported`, `authentication_failed` (3-D Secure failure /
+`authentication_required`) and `card_declined` (every other `decline_code`,
+including fraud-related ones, is collapsed to this generic code). Stripe
+`card_declined` with decline codes `processing_error`, `try_again_later`,
+`issuer_not_available`, `reenter_transaction` or `approve_with_id`, and any
+unrecognised error code, are **not** declines: they are reported as UNRESOLVED.
+
+**Attempt identity and deduplication.** Each attempt is keyed by
+`(paymentId, attemptId)`. `attemptId` is the failed charge id from
+`last_payment_error.charge`; when Stripe provides none, a SHA-256 digest of
+PaymentIntent id, PaymentMethod id, error code and decline code is used. The
+Payment Service inserts the decline and its outbox row in one transaction and
+publishes nothing for a replayed webhook or reconciliation poll of the same
+attempt. Spring stores each attempt once in `order_payment_declines`
+(`V28__payment_decline_state.sql`, `event_id` unique) and keys the
+`PAYMENT_FAILED` notification on the attempt id, so duplicates neither
+re-notify nor change state. A decline arriving after SUCCEEDED/FAILED is ignored.
+Known limit: two attempts without charge ids using the same PaymentMethod and the
+same error share one key, so only the first sends a notification.
+
+**Retry.** A decline is not terminal: the PaymentIntent stays in
+`requires_payment_method`, so `paymentSession` returns the same client secret and
+the customer retries on the same order (confirmation page form; the account
+order page links back to it). No second order or PaymentIntent is created and the
+Stripe idempotency key per order is unchanged. A later success settles the order
+to PAID exactly once and clears nothing from the decline history.
+
+**Inventory policy.** A decline (or UNRESOLVED) never touches inventory: the
+reservation taken at placement is kept for the retry window, so a retrying
+customer cannot lose the item to a concurrent buyer, and a later success does not
+decrement stock again. Stock is released exactly once by the existing
+cancellation path (customer/staff cancel, or a `canceled` PaymentIntent) guarded
+by the release marker. There is currently **no automatic reservation-expiry job**
+for abandoned declined orders; they hold stock until cancelled. This is a known
+gap.
+
+### Reviewer scenario mapping
+
+| Scenario | How to reproduce (Stripe test mode) | Expected result |
+| --- | --- | --- |
+| Successful payment | `4242 4242 4242 4242` / `pm_card_visa` | PAID / SUCCEEDED, PLACED + PAID emails |
+| Insufficient funds | `4000 0000 0000 9995` / `pm_card_chargeDeclinedInsufficientFunds` | PENDING / DECLINED `insufficient_funds`, "Payment declined", retry form shown |
+| Invalid card number | e.g. `4242 4242 4242 4241` (fails Luhn) | Stripe Elements rejects it client side before submission, so no provider attempt or order state change occurs. If an issuer still returns `incorrect_number`/`invalid_number` server side, it maps to DECLINED `incorrect_number` (unit-tested) |
+| Expired card | `4000 0000 0000 0069` / `pm_card_chargeDeclinedExpiredCard` | DECLINED `expired_card` |
+| Incorrect CVC | `4000 0000 0000 0127` / `pm_card_chargeDeclinedIncorrectCvc` | DECLINED `incorrect_cvc` |
+| Gateway timeout / processing error | `4000 0000 0000 0119` (`processing_error`), network/API timeout | UNRESOLVED, "Payment being confirmed"; reconciliation resolves it later |
+| Retry after decline | Decline, then pay with `4242…` on the same confirmation page | Same order → PAID once; emails PLACED, PAYMENT_FAILED, PAID; stock decremented once |
+| Concurrent limited stock | Two checkouts for the last unit | Placement reserves stock under a pessimistic inventory row lock; the second placement fails with `INSUFFICIENT_STOCK`. A decline of the first order keeps the unit reserved (no oversell, no double restock) |
+| Cancellation & refund | Cancel unpaid → stock released, no refund; cancel paid → full refund flow | See [Order cancellation](order-cancellation.md) |
+
+Automated coverage: `payment-service/internal/stripehttp/decline_test.go`
+(mapping), `settle_integration_test.go` (replay/dedupe/late success, real
+Postgres), and `StripeCheckoutIntegrationTest` (decline → retry → PAID, one
+PAYMENT_FAILED + one PAID, inventory unchanged by decline).
 
 ## Historical snapshots and migrations
 
