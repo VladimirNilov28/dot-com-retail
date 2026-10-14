@@ -74,7 +74,17 @@ Router → Spring:
 2. Hive propagates `X-Forwarded-For` to the `retail` subgraph and propagates
    `Retry-After` back (`infrastructure/hive/router.config.yaml`).
 3. Spring trusts the header because Hive's address is in
-   `RATE_LIMIT_TRUSTED_PROXIES` (Compose: `127.0.0.1/32,::1/128,172.28.88.0/24`).
+   `RATE_LIMIT_TRUSTED_PROXIES`:
+   * dev (`compose.yml`): `127.0.0.1/32,::1/128,172.28.88.0/24` (pinned dev subnet);
+   * review (`compose.review.yml`): `127.0.0.1/32,::1/128,${REVIEW_HIVE_IP}/32`
+     — only the Hive Router's fixed address (`172.28.90.40` on the review
+     subnet `172.28.90.0/24`), so no other container can name a client.
+
+In the review stack the Caddy edge is in front of Next: it trusts no upstream
+proxy, discards any client-supplied `X-Forwarded-For`/`Forwarded`/`X-Real-IP`
+and sets `X-Forwarded-For` to the TCP peer, so with `BFF_TRUSTED_PROXY_HOPS=0`
+the BFF forwards the real client address. Spring, Hive, the BFF and Postgres
+publish no host ports in the review stack; only Caddy does.
 
 **Deployment requirements / limitations**
 

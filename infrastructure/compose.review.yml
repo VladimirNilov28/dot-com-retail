@@ -93,6 +93,10 @@ services:
   hive-router:
     container_name: !reset null
     ports: !reset []
+    # Fixed address so Spring can trust exactly this peer for X-Forwarded-For.
+    networks:
+      default:
+        ipv4_address: ${REVIEW_HIVE_IP:-172.28.90.40}
 
   backend:
     container_name: !reset null
@@ -102,6 +106,9 @@ services:
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: https://${REVIEW_HOST:-bytecore.localhost}:${REVIEW_HYDRA_PORT:-8444}
       CART_GUEST_SECURE: "true"
       CART_GUEST_ALLOWEDORIGINS_0: https://${REVIEW_HOST:-bytecore.localhost}:${REVIEW_STOREFRONT_PORT:-8443}
+      # Only the Hive Router may name the client in X-Forwarded-For; every other
+      # peer (including other review containers) is keyed by its own address.
+      RATE_LIMIT_TRUSTED_PROXIES: 127.0.0.1/32,::1/128,${REVIEW_HIVE_IP:-172.28.90.40}/32
     volumes:
       - *review-ca
 
@@ -203,5 +210,9 @@ services:
 
 networks:
   default:
-    # Let Docker pick a free subnet instead of the dev stack's pinned one.
-    ipam: !reset {}
+    # Own subnet (distinct from the dev stack's 172.28.88.0/24) so the Hive
+    # Router gets the fixed address trusted by Spring's rate limiter. Override
+    # REVIEW_SUBNET/REVIEW_HIVE_IP together if it collides with a host network.
+    ipam: !override
+      config:
+        - subnet: ${REVIEW_SUBNET:-172.28.90.0/24}
