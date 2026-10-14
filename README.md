@@ -90,6 +90,21 @@ from the media volume (see [`docs/api/product-media.md`](docs/api/product-media.
 Google and Stripe require your own credentials. Without them, sign-in with Google and
 card payment are disabled; everything else works.
 
+## Production-mode stack
+
+`make prod` (= `bash scripts/prod.sh up`) builds and starts the production stack. It is
+isolated from dev and review, with its own project, volumes, `.env.prod` and secrets:
+
+- production builds, migrations and readiness checks;
+- an encrypted Postgres and a TLS edge;
+- no dev bypasses and no demo data;
+- Stripe in test mode only.
+
+`make prod-down` stops it and keeps all data; `make prod-status` and `make prod-logs`
+inspect it. Configuration, TLS modes, external setup (DNS, Google, Stripe webhook,
+SMTP), the admin bootstrap, and backup/restore and upgrade/rollback are covered in
+[`docs/production-setup.md`](docs/production-setup.md).
+
 ## Demo walkthrough
 
 1. Browse `/catalog`, search with suggestions, filter by facets, and sort by rating or
