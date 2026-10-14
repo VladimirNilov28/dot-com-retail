@@ -31,6 +31,7 @@ schema changes must be new `V{n}__...sql` files instead.
 | `V15__product_ratings.sql` | `product_ratings` | `V0`, `V1` (users), `V2` (products) |
 | `V16__native_registration_linkage.sql` | nullable unique canonical Kratos UUID, durable username/email registration reservations | `V1` (users) |
 | `V17__product_media_brand_dimensions.sql` | `brands`, nullable `products.brand_id`, nullable `product_variants.length_mm/width_mm/height_mm`, `product_images` (storage key, type, size, dimensions, alt text, position) | `V3` (products) |
+| `V22__product_reviews.sql` | review text/moderation columns and surrogate `id` on `product_ratings`, `review_votes` | `V1` (users), `V15` (product_ratings) |
 
 Every foreign key either points to a table created in an earlier migration
 file, or to a table created earlier within the same file. There are no
@@ -123,6 +124,27 @@ another vote. Normal account deletion removes ratings before anonymization.
 Product average/count are computed directly from these rows rather than stored
 on `products`, eliminating lost/stale counter updates under concurrent writes.
 No review text, helpful votes, eligibility/purchase flag or seed ratings are added.
+
+### Reviews and helpful votes (V22)
+
+V22 extends `product_ratings` instead of adding a parallel review table, so a
+customer's star rating and written review are one row and cannot diverge:
+
+- `id` — identity surrogate (unique) used by votes and moderation; the
+  `(product_id, user_id)` primary key still enforces one review per owner/product.
+- `title` (1-120) and `body` (10-4000) — trimmed plain text, database-checked.
+  They are NULL **together**: legacy V15 star-only rows remain valid ratings with
+  no written review and are not listed as reviews.
+- `status` `VISIBLE`/`HIDDEN` plus `moderated_by` (nullable FK, `SET NULL`),
+  `moderated_at`, `moderation_reason` (3-500, required while hidden). Post-moderation:
+  new reviews are visible immediately. Hidden rows are excluded from product
+  average/count, `RATING_DESC` sorting, public lists and the rating distribution.
+  Editing a hidden review keeps it hidden.
+- `review_votes(review_id, user_id, created_at)` with primary key
+  `(review_id, user_id)`: one helpful vote per user, inserted with
+  `ON CONFLICT DO NOTHING` so duplicate/concurrent votes are idempotent. The
+  helpful count is computed from this table (no stored counter). Votes cascade
+  when a review or user is deleted; account deletion also removes the user's votes.
 See [P1 rating API](../api/graphql-schema.md#p1-product-ratings-78).
 
 ### categories / product_categories
