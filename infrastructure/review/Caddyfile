@@ -35,7 +35,13 @@ https://{$REVIEW_HOST}:{$REVIEW_STOREFRONT_PORT} {
 		respond 405
 	}
 	handle {
-		reverse_proxy frontend:3000
+		# Caddy trusts no upstream proxies (default), so a client-supplied
+		# X-Forwarded-For is discarded and replaced by the TCP peer address;
+		# the BFF (BFF_TRUSTED_PROXY_HOPS=0) uses that single entry.
+		reverse_proxy frontend:3000 {
+			header_up -Forwarded
+			header_up -X-Real-IP
+		}
 	}
 }
 

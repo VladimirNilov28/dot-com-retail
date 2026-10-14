@@ -75,6 +75,7 @@ Set these in the shell or in `.env.review`. A shell value takes precedence.
 | `REVIEW_HOST` | `bytecore.localhost` | Public hostname (must resolve to loopback; regenerate certs after changing) |
 | `REVIEW_STOREFRONT_PORT` / `REVIEW_HYDRA_PORT` / `REVIEW_KRATOS_PORT` / `REVIEW_BRIDGE_PORT` / `REVIEW_MAILPIT_PORT` | 8443 / 8444 / 8433 / 8446 / 8425 | Published ports (the same inside the network) |
 | `REVIEW_BIND` | `127.0.0.1` | Host interface for published ports |
+| `REVIEW_SUBNET` / `REVIEW_HIVE_IP` | `172.28.90.0/24` / `172.28.90.40` | Internal network and the Hive Router's fixed address, the only peer Spring trusts for `X-Forwarded-For` (change together on collision) |
 | `REVIEW_WAIT_TIMEOUT` | `900` | Seconds `up --wait` may take |
 | `REVIEW_SEED` | `1` | `0` skips the demo dataset |
 | `REVIEW_CERT_DIR` | `infrastructure/review/certs` | Certificate output directory |
