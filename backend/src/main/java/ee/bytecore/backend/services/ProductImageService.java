@@ -5,6 +5,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.Semaphore;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,13 +15,18 @@ import ee.bytecore.backend.entities.product.ProductImage;
 import ee.bytecore.backend.repositories.product.ProductImageRepository;
 import ee.bytecore.backend.repositories.product.ProductRepository;
 import ee.bytecore.backend.services.media.ImageInspector;
+import ee.bytecore.backend.services.media.ImageResizer;
+import ee.bytecore.backend.services.media.ImageSize;
+import ee.bytecore.backend.services.media.InvalidImageException;
 import ee.bytecore.backend.services.media.MediaStorage;
 
 import jakarta.persistence.EntityNotFoundException;
 
 /**
  * Images attach to a Product (not a variant), ordered by {@code position}; position 0 is
- * the primary image. Bytes live in {@link MediaStorage}; rows only reference them.
+ * the primary image. Bytes live in {@link MediaStorage}; rows only reference them. Every upload
+ * is kept as the original plus re-encoded {@link ImageSize} variants; variants missing for older
+ * uploads are generated lazily on first delivery.
  */
 @Service
 public class ProductImageService {
@@ -32,6 +38,14 @@ public class ProductImageService {
     private final ProductRepository products;
     private final MediaStorage storage;
 
+    /** Variant files are generated at most once per key+size at a time (striped by hash). */
+    private final Object[] variantLocks = new Object[64];
+
+    /** Decoding is memory heavy; bound concurrent lazy generation across all keys. */
+    private final Semaphore rendering = new Semaphore(2);
+
+    public record Delivered(byte[] bytes, String contentType) {}
+
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private ee.bytecore.backend.services.audit.AuditService audit;
 
@@ -39,6 +53,7 @@ public class ProductImageService {
         this.images = images;
         this.products = products;
         this.storage = storage;
+        for (int i = 0; i < variantLocks.length; i++) variantLocks[i] = new Object();
     }
 
     public List<ProductImage> list(Long productId) {
@@ -59,9 +74,14 @@ public class ProductImageService {
             throw new IllegalArgumentException("A product can have at most " + MAX_IMAGES_PER_PRODUCT + " images");
         }
         String alt = altText == null || altText.isBlank() ? product.getName() : normalizeAlt(altText);
+        java.util.Map<ImageSize, byte[]> variants = new java.util.EnumMap<>(ImageSize.class);
+        for (ImageSize size : ImageSize.values()) {
+            variants.put(size, render(bytes, inspected.contentType(), size));
+        }
         String key = UUID.randomUUID() + "." + inspected.extension();
-        storage.store(key, bytes);
         try {
+            storage.store(key, bytes);
+            variants.forEach((size, variant) -> storage.storeVariant(key, size, variant));
             ProductImage saved = images.saveAndFlush(ProductImage.create(
                     productId,
                     key,
@@ -87,6 +107,48 @@ public class ProductImageService {
         } catch (RuntimeException e) {
             storage.delete(key);
             throw e;
+        }
+    }
+
+    /**
+     * Bytes for a registered key at the requested size. A missing variant (uploads that predate
+     * variants) is generated from the original, stored atomically and reused afterwards. If the
+     * original cannot be decoded, the original bytes are served unchanged rather than failing.
+     */
+    public Optional<Delivered> deliver(String key, ImageSize size) {
+        if (key == null || size == null || !MediaStorage.KEY.matcher(key).matches()) return Optional.empty();
+        Optional<ProductImage> image = images.findByStorageKey(key);
+        if (image.isEmpty()) return Optional.empty();
+        String contentType = image.get().getContentType();
+        Optional<byte[]> variant = storage.readVariant(key, size);
+        if (variant.isPresent()) return Optional.of(new Delivered(variant.get(), contentType));
+        synchronized (variantLocks[Math.floorMod((key + size).hashCode(), variantLocks.length)]) {
+            variant = storage.readVariant(key, size);
+            if (variant.isPresent()) return Optional.of(new Delivered(variant.get(), contentType));
+            Optional<byte[]> original = storage.read(key);
+            if (original.isEmpty()) return Optional.empty();
+            byte[] rendered;
+            try {
+                rendered = render(original.get(), contentType, size);
+            } catch (InvalidImageException e) {
+                return Optional.of(new Delivered(original.get(), contentType));
+            }
+            storage.storeVariant(key, size, rendered);
+            return Optional.of(new Delivered(rendered, contentType));
+        }
+    }
+
+    private byte[] render(byte[] bytes, String contentType, ImageSize size) {
+        try {
+            rendering.acquire();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new InvalidImageException(503, "The image could not be processed right now.");
+        }
+        try {
+            return ImageResizer.render(bytes, contentType, size).bytes();
+        } finally {
+            rendering.release();
         }
     }
 

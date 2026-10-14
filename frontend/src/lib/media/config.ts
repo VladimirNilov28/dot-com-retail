@@ -1,6 +1,8 @@
 import "server-only";
 
 export const mediaKey = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png)$/;
+/** Must match the backend's `ImageSize` enum and `@/lib/media/variants`. */
+export const mediaSizes: ReadonlySet<string> = new Set(["thumb", "medium", "full"]);
 export const allowedImageTypes = new Set(["image/jpeg", "image/png"]);
 
 /** Origin of the Spring backend that owns product media (never exposed to the browser). */

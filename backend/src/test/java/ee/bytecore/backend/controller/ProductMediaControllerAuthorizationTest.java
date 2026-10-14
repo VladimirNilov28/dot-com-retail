@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -27,8 +28,8 @@ import org.springframework.test.web.servlet.request.MockMultipartHttpServletRequ
 import ee.bytecore.backend.config.SecurityConfig;
 import ee.bytecore.backend.entities.product.ProductImage;
 import ee.bytecore.backend.services.ProductImageService;
+import ee.bytecore.backend.services.media.ImageSize;
 import ee.bytecore.backend.services.media.InvalidImageException;
-import ee.bytecore.backend.services.media.MediaStorage;
 
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -48,9 +49,6 @@ class ProductMediaControllerAuthorizationTest {
 
     @MockitoBean
     ProductImageService images;
-
-    @MockitoBean
-    MediaStorage storage;
 
     private MockMultipartHttpServletRequestBuilder upload() {
         return multipart("/admin/media/products/5/images")
@@ -118,19 +116,44 @@ class ProductMediaControllerAuthorizationTest {
 
     @Test
     void registeredImagesArePublicWithHardenedHeaders() throws Exception {
-        ProductImage image = ProductImage.create(5L, KEY, "image/png", 3, 300, 300, "Lamp", 0);
-        when(images.findByKey(KEY)).thenReturn(Optional.of(image));
-        when(storage.read(KEY)).thenReturn(Optional.of(new byte[] {1}));
+        when(images.deliver(KEY, ImageSize.FULL))
+                .thenReturn(Optional.of(new ProductImageService.Delivered(new byte[] {1}, "image/png")));
         mockMvc.perform(get("/media/products/" + KEY))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Type", "image/png"))
+                .andExpect(header().string("Cache-Control", "max-age=31536000, public, immutable"))
                 .andExpect(header().string("X-Content-Type-Options", "nosniff"));
     }
 
     @Test
+    void sizeParameterSelectsTheVariant() throws Exception {
+        when(images.deliver(KEY, ImageSize.THUMB))
+                .thenReturn(Optional.of(new ProductImageService.Delivered(new byte[] {7}, "image/png")));
+        when(images.deliver(KEY, ImageSize.MEDIUM))
+                .thenReturn(Optional.of(new ProductImageService.Delivered(new byte[] {8}, "image/png")));
+        mockMvc.perform(get("/media/products/" + KEY).param("size", "thumb"))
+                .andExpect(status().isOk())
+                .andExpect(content().bytes(new byte[] {7}));
+        mockMvc.perform(get("/media/products/" + KEY).param("size", "medium"))
+                .andExpect(status().isOk())
+                .andExpect(content().bytes(new byte[] {8}));
+    }
+
+    @Test
+    void unknownSizeIsRejectedWith400BeforeAnyLookup() throws Exception {
+        for (String size : new String[] {"large", "THUMB", "", "../thumb", "320"}) {
+            mockMvc.perform(get("/media/products/" + KEY).param("size", size))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.error").value("size must be one of thumb, medium, full"));
+        }
+        verifyNoInteractions(images);
+    }
+
+    @Test
     void unregisteredOrMalformedKeysAre404() throws Exception {
-        when(images.findByKey(KEY)).thenReturn(Optional.empty());
+        when(images.deliver(any(), any())).thenReturn(Optional.empty());
         mockMvc.perform(get("/media/products/" + KEY)).andExpect(status().isNotFound());
+        mockMvc.perform(get("/media/products/" + KEY).param("size", "thumb")).andExpect(status().isNotFound());
         mockMvc.perform(get("/media/products/..%2Fsecret")).andExpect(status().is4xxClientError());
         mockMvc.perform(get("/media/products/not-a-key.png")).andExpect(status().isNotFound());
     }

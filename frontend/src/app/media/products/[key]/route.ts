@@ -1,12 +1,14 @@
 import "server-only";
-import { allowedImageTypes, mediaBackendUrl, mediaKey } from "@/lib/media/config";
+import { allowedImageTypes, mediaBackendUrl, mediaKey, mediaSizes } from "@/lib/media/config";
 
-export async function GET(_request: Request, context: { params: Promise<{ key: string }> }) {
+export async function GET(request: Request, context: { params: Promise<{ key: string }> }) {
   const { key } = await context.params;
+  const size = new URL(request.url).searchParams.get("size");
+  if (size !== null && !mediaSizes.has(size)) return new Response(null, { status: 400, headers: { "Cache-Control": "no-store" } });
   if (!mediaKey.test(key)) return new Response(null, { status: 404 });
   let upstream: Response;
   try {
-    upstream = await fetch(`${mediaBackendUrl()}/media/products/${key}`, {
+    upstream = await fetch(`${mediaBackendUrl()}/media/products/${key}${size === null ? "" : `?size=${size}`}`, {
       signal: AbortSignal.timeout(5000), cache: "no-store", redirect: "error",
     });
   } catch {

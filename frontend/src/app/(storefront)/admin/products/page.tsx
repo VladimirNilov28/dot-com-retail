@@ -5,6 +5,7 @@ import { AdminDenied } from "@/components/admin-denied";
 import { AdminEmpty, AdminPageHeader } from "@/components/admin-page-header";
 import { AdminLoadError, AdminStatus } from "@/components/admin-status";
 import { adminAccess, adminGraphql } from "@/lib/admin/gate";
+import { variantUrl } from "@/lib/media/variants";
 
 export const metadata: Metadata = {
   title: "Admin · Products",
@@ -93,7 +94,7 @@ export default async function AdminProducts({ searchParams }: { searchParams: Pr
                     <th scope="row">
                       <div className="admin-cell-main">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        {image ? <img className="admin-thumb" src={image.url} alt="" loading="lazy" width={44} height={44} /> :
+                        {image ? <img className="admin-thumb" src={variantUrl(image.url, "thumb")} alt="" loading="lazy" width={44} height={44} /> :
                           <span className="admin-thumb" aria-hidden="true"><ImageOff size={16} /></span>}
                         <div>
                           <Link prefetch={false} className="admin-row-link" href={`/admin/products/${item.slug}`}>{item.name}</Link>

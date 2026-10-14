@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ImageUnavailable } from "./image-unavailable";
 import type { ProductImageData } from "./product-image";
+import { variantSrcSet, variantUrl } from "@/lib/media/variants";
 
 /** Main image plus an accessible thumbnail selector; the first image is the primary one. */
 export function ProductGallery({ images }: { images: readonly ProductImageData[] }) {
@@ -17,7 +18,8 @@ export function ProductGallery({ images }: { images: readonly ProductImageData[]
       {failed.has(current.url) ? <ImageUnavailable /> : (
         <div className="product-gallery-main">
           {/* eslint-disable-next-line @next/next/no-img-element -- served by the same-origin media proxy */}
-          <img ref={(node) => { if (node?.complete && node.naturalWidth === 0) queueMicrotask(() => broken(current.url)); }} src={current.url} alt={current.altText} width={current.width} height={current.height}
+          <img ref={(node) => { if (node?.complete && node.naturalWidth === 0) queueMicrotask(() => broken(current.url)); }} src={variantUrl(current.url, "medium")} srcSet={variantSrcSet(current, ["thumb", "medium", "full"])}
+            sizes="(min-width: 80rem) 36rem, (min-width: 48rem) 50vw, 100vw" alt={current.altText} width={current.width} height={current.height}
             decoding="async" onError={() => broken(current.url)} />
         </div>
       )}
@@ -30,7 +32,7 @@ export function ProductGallery({ images }: { images: readonly ProductImageData[]
                 className="product-gallery-thumb">
                 {failed.has(image.url) ? <span className="text-xs text-muted">Unavailable</span> : (
                   // eslint-disable-next-line @next/next/no-img-element -- served by the same-origin media proxy
-                  <img ref={(node) => { if (node?.complete && node.naturalWidth === 0) queueMicrotask(() => broken(image.url)); }} src={image.url} alt="" width={image.width} height={image.height} loading="lazy"
+                  <img ref={(node) => { if (node?.complete && node.naturalWidth === 0) queueMicrotask(() => broken(image.url)); }} src={variantUrl(image.url, "thumb")} alt="" width={image.width} height={image.height} loading="lazy"
                     decoding="async" onError={() => broken(image.url)} />
                 )}
               </button>

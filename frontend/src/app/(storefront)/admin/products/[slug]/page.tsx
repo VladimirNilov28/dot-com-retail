@@ -11,6 +11,7 @@ import {
   updateAlt, updateProductDetails, updateVariant, uploadImage,
 } from "@/lib/admin/actions";
 import { categoryTree, type CategoryNode } from "@/lib/admin/forms";
+import { variantUrl } from "@/lib/media/variants";
 
 export const metadata: Metadata = {
   title: "Admin · Edit product",
@@ -168,7 +169,7 @@ export default async function AdminProduct({ params, searchParams }: {
             {product.images.map((image, index) => (
               <li key={image.id} className="admin-image">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={image.url} alt={image.altText} width={image.width} height={image.height} loading="lazy" />
+                <img src={variantUrl(image.url, "thumb")} alt={image.altText} width={image.width} height={image.height} loading="lazy" />
                 <div className="admin-image-body">
                   <p className="admin-image-flag">
                     {image.isPrimary ? <span className="account-badge" data-tone="ok">Primary</span> : <span>Position {index + 1}</span>}
