@@ -344,6 +344,12 @@ Spring/DGS GraphiQL is **disabled** (`dgs.graphql.graphiql.enabled: false` in
 `application-dev.yaml`). Use Hive Router's built-in GraphQL IDE instead —
 see "GraphQL API access" below.
 
+### GraphQL IDE
+
+Spring/DGS GraphiQL is **disabled** (`dgs.graphql.graphiql.enabled: false` in
+`application-dev.yaml`). Use Hive Router's built-in GraphQL IDE instead —
+see "GraphQL API access" below.
+
 ### Testcontainers issues
 
 If integration tests fail with connection errors, ensure Docker is running and your user has permission to access the Docker socket. On Linux:
