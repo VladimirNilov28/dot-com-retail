@@ -295,6 +295,26 @@ load_stripe() {
   export STRIPE_WEBHOOK_SECRET PROD_STRIPE_LISTENER=true
 }
 
+# A .env.prod written by the earlier template still has PROD_HOST=CHANGE_ME: its
+# operator section was never configured, so switch that section to the local
+# defaults from the template. Generated secrets are left untouched.
+adopt_local_defaults() {
+  grep -qx 'PROD_HOST=CHANGE_ME' "$ENV_FILE" || return 0
+  local key value tmp
+  tmp="$(mktemp "$ENV_FILE.XXXXXX")"
+  cp -p "$ENV_FILE" "$tmp"
+  for key in PROD_HOST PROD_KRATOS_PORT PROD_HYDRA_PORT PROD_BRIDGE_PORT PROD_BIND \
+    PROD_TLS_MODE PROD_ACME_EMAIL SMTP_HOST SMTP_PORT SMTP_STARTTLS SMTP_IMPLICIT_TLS \
+    SMTP_FROM SUPPORT_MAIL_TO; do
+    value="$(sed -n "s/^$key=//p" "$TEMPLATE" | head -n1)"
+    awk -v k="$key" -v v="$value" 'BEGIN { FS = OFS = "=" }
+      $1 == k { print k "=" v; done = 1; next } { print }
+      END { if (!done) print k "=" v }' "$tmp" >"$tmp.new" && mv "$tmp.new" "$tmp"
+  done
+  chmod 600 "$tmp" && mv "$tmp" "$ENV_FILE"
+  info "Updated unconfigured $ENV_FILE to local defaults (https://bytecore.localhost, Mailpit); secrets kept"
+}
+
 case "$COMMAND" in
   up | check)
     [ -f "$TEMPLATE" ] || fail "$TEMPLATE is missing"
@@ -303,6 +323,7 @@ case "$COMMAND" in
       info "Created $ENV_FILE with local defaults (https://bytecore.localhost, Mailpit, no real keys)"
     else
       chmod 600 "$ENV_FILE"
+      adopt_local_defaults
     fi
     load_stripe
     derive
