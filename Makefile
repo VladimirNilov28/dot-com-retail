@@ -10,7 +10,7 @@ RESET  = \033[0m
 
 .PHONY: dev front-dev dev-clean debug debug-clean test test-unit test-graphql test-integration test-e2e \
 	coverage format format-check build status logs down clean help restart config doctor firewall-check \
-	seed-test-data check-env review review-down
+	seed-test-data check-env review review-down prod prod-down prod-status prod-logs
 
 help:
 	@echo "$(CYAN)Available commands:$(RESET)"
@@ -39,6 +39,10 @@ help:
 	@echo "  $(GREEN)make seed-test-data$(RESET)  🌱 wipe and repopulate the dev database with test data"
 	@echo "  $(GREEN)make review$(RESET)          🔒 one-command HTTPS reviewer stack in Docker (docs/review-setup.md)"
 	@echo "  $(GREEN)make review-down$(RESET)     🛑 stop the reviewer stack (keeps volumes; scripts/review-down.sh --volumes deletes them)"
+	@echo "  $(GREEN)make prod$(RESET)            🏭 production-mode Docker stack: validate .env.prod, build, migrate, wait, smoke-check (docs/production-setup.md)"
+	@echo "  $(GREEN)make prod-down$(RESET)       🛑 stop the production-mode stack (never deletes volumes)"
+	@echo "  $(GREEN)make prod-status$(RESET)     📊 production-mode container states"
+	@echo "  $(GREEN)make prod-logs$(RESET)       📜 follow production-mode logs (SERVICE=name for one service)"
 
 check-env:
 	@test -f .env || { echo "$(YELLOW)✗ .env not found — run: cp .env.example .env$(RESET)"; exit 1; }
@@ -141,3 +145,15 @@ review:
 
 review-down:
 	@./scripts/review-down.sh
+
+prod:
+	@./scripts/prod.sh up
+
+prod-down:
+	@./scripts/prod.sh down
+
+prod-status:
+	@./scripts/prod.sh status
+
+prod-logs:
+	@./scripts/prod.sh logs --tail 200 -f $(SERVICE)
