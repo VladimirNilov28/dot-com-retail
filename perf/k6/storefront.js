@@ -3,6 +3,10 @@
 import http from "k6/http";
 import { check, sleep, group } from "k6";
 import { SharedArray } from "k6/data";
+import { Counter } from "k6/metrics";
+
+// Throttled responses (expected rate-limiter behaviour) counted apart from application errors.
+const rateLimited = new Counter("rate_limited_429");
 
 const BASE = (__ENV.BASE_URL || "http://127.0.0.1:3000").replace(/\/$/, "");
 const SCENARIO = __ENV.SCENARIO || "browse";
@@ -19,11 +23,20 @@ const SOURCES = (() => {
 
 const SEARCH_TERMS = new SharedArray("terms", () => ["phone", "laptop", "usb", "cable", "monitor", "keyboard", "mouse", "audio"]);
 
+// Each VU simulates a distinct shopper. Next is the edge in the dev stack, so a per-VU
+// X-Forwarded-For (RFC 2544 benchmark range) selects per-client rate-limit buckets.
+// SINGLE_CLIENT=1 sends everything from one address to exercise the limiter instead.
+function clientHeaders() {
+  if (__ENV.SINGLE_CLIENT === "1") return {};
+  return { "X-Forwarded-For": `198.18.${Math.floor(__VU / 250) % 256}.${(__VU % 250) + 1}` };
+}
+
 function gql(name, variables, headers = {}) {
   const res = http.post(`${BASE}/graphql`, JSON.stringify({ operationName: name, query: SOURCES[name], variables }), {
-    headers: { "Content-Type": "application/json", Origin: BASE, ...headers },
+    headers: { "Content-Type": "application/json", Origin: BASE, ...clientHeaders(), ...headers },
     tags: { name: `gql:${name}` },
   });
+  if (res.status === 429) rateLimited.add(1, { name });
   let body = null;
   try { body = res.json(); } catch (_) { /* non-JSON is a failure below */ }
   check(res, { [`${name} 200`]: (r) => r.status === 200, [`${name} no errors`]: () => body && !body.errors });
@@ -31,7 +44,7 @@ function gql(name, variables, headers = {}) {
 }
 
 function page(path, label) {
-  const res = http.get(`${BASE}${path}`, { tags: { name: `page:${label}` }, redirects: 0 });
+  const res = http.get(`${BASE}${path}`, { headers: clientHeaders(), tags: { name: `page:${label}` }, redirects: 0 });
   check(res, { [`${label} 200`]: (r) => r.status === 200 });
   return res;
 }
@@ -78,13 +91,17 @@ export function cart() {
   if (!variantIds.length) return;
   const h = { "X-Guest-Cart-Request": "1" };
   group("guest-cart", () => {
+    // Think time keeps one shopper near the cart-write policy (1 write/s sustained, burst 30).
     gql("GuestCartStart", {}, h);
+    sleep(1);
     const added = gql("GuestCartAdd", { input: { productVariantId: pick(variantIds), quantity: 1 } }, h);
-    sleep(0.5);
+    sleep(1);
     gql("GuestCartView", {}, h);
     const item = added && added.data && added.data.addGuestCartItem && added.data.addGuestCartItem.items[0];
     if (item) {
+      sleep(1);
       gql("GuestCartUpdate", { id: item.id, input: { quantity: 2 } }, h);
+      sleep(1);
       gql("GuestCartRemove", { id: item.id }, h);
     }
   });
