@@ -14,6 +14,8 @@ import java.util.UUID;
 
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.SimpleTransactionStatus;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import ee.bytecore.backend.entities.user.User;
 import ee.bytecore.backend.entities.user.UserRegistrationReservation;
@@ -341,6 +343,78 @@ class UserServiceTest {
 
         assertThat(change.user().getRole()).isEqualTo(UserRole.ADMIN);
         verify(userRepository, never()).findActiveAdminsForUpdate();
+    }
+
+    @Test
+    void shouldRevokeUserGrantsOnlyAfterRoleChangeCommitsTest() {
+        when(userRepository.findLockedById(1L)).thenReturn(Optional.of(user));
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            userService.updateRole(2L, 1L, UserRole.CATALOG_MANAGER);
+
+            verify(hydraClient, never()).revokeUser(any());
+            TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+            verify(hydraClient).revokeUser(1L);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    void shouldNotRevokeUserGrantsWhenRoleChangeIsRejectedTest() {
+        user.setRole(UserRole.ADMIN);
+        when(userRepository.findActiveAdminsForUpdate()).thenReturn(java.util.List.of(user));
+        when(userRepository.findLockedById(1L)).thenReturn(Optional.of(user));
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            assertThatThrownBy(() -> userService.updateRole(99L, 1L, UserRole.USER))
+                    .isInstanceOf(IllegalArgumentException.class);
+
+            assertThat(TransactionSynchronizationManager.getSynchronizations()).isEmpty();
+            verify(hydraClient, never()).revokeUser(any());
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    void shouldSurfaceRevocationFailureAfterRoleChangeCommitsTest() {
+        when(userRepository.findLockedById(1L)).thenReturn(Optional.of(user));
+        org.mockito.Mockito.doThrow(new IdentitySyncException("down"))
+                .when(hydraClient)
+                .revokeUser(1L);
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            userService.updateRole(2L, 1L, UserRole.SUPPORT);
+
+            assertThatThrownBy(() -> TransactionSynchronizationManager.getSynchronizations()
+                            .forEach(TransactionSynchronization::afterCommit))
+                    .isInstanceOf(IdentitySyncException.class)
+                    .hasMessageContaining("Repeat the change");
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    void shouldRevokeGrantsWhenProvisioningChangesRoleTest() {
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.of(user));
+        when(userRepository.findLockedById(1L)).thenReturn(Optional.of(user));
+
+        userService.provision("admin", "admin@bytecore.ee", LocalDate.of(2000, 1, 1), UserRole.ADMIN);
+
+        verify(hydraClient).revokeUser(1L);
+    }
+
+    @Test
+    void shouldNotRevokeGrantsWhenProvisioningKeepsRoleTest() {
+        user.setRole(UserRole.ADMIN);
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.of(user));
+        when(userRepository.findLockedById(1L)).thenReturn(Optional.of(user));
+
+        userService.provision("admin", "admin@bytecore.ee", LocalDate.of(2000, 1, 1), UserRole.ADMIN);
+
+        verify(hydraClient, never()).revokeUser(any());
     }
 
     @Test

@@ -5,11 +5,16 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.springframework.security.oauth2.jwt.JwtException;
+import org.springframework.security.oauth2.jwt.JwtValidationException;
+
+import ee.bytecore.backend.security.HydraTokenIntrospector;
 
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.JWSHeader;
@@ -33,6 +38,9 @@ class JwtDecoderConfigurationTest {
     private String baseUrl;
     private final AtomicInteger keyRequests = new AtomicInteger();
     private final AtomicInteger discoveryRequests = new AtomicInteger();
+    private final AtomicInteger introspectionRequests = new AtomicInteger();
+    private final AtomicReference<String> introspectionBody = new AtomicReference<>("{\"active\":true,\"sub\":\"42\"}");
+    private final AtomicInteger introspectionStatus = new AtomicInteger(200);
 
     @BeforeEach
     void setUp() throws Exception {
@@ -58,6 +66,16 @@ class JwtDecoderConfigurationTest {
                 output.write(body);
             }
         });
+        server.createContext("/admin/oauth2/introspect", exchange -> {
+            introspectionRequests.incrementAndGet();
+            String form = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            byte[] body = (form.startsWith("token=") ? introspectionBody.get() : "{}").getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(introspectionStatus.get(), body.length);
+            try (var output = exchange.getResponseBody()) {
+                output.write(body);
+            }
+        });
         server.start();
     }
 
@@ -69,7 +87,7 @@ class JwtDecoderConfigurationTest {
     @Test
     void shouldFetchInternalKeysLazilyAndValidatePublicIssuerTest() throws Exception {
         String publicIssuer = "http://127.0.0.1:1";
-        var decoder = new SecurityConfig().jwtDecoder(publicIssuer, baseUrl + "/jwks");
+        var decoder = SecurityConfig.buildJwtDecoder(publicIssuer, baseUrl + "/jwks", null);
 
         assertThat(keyRequests.get()).isZero();
         assertThat(decoder.decode(token(publicIssuer, Instant.now().plusSeconds(60)))
@@ -81,7 +99,7 @@ class JwtDecoderConfigurationTest {
 
     @Test
     void shouldRejectWrongIssuerWithInternalKeysTest() throws Exception {
-        var decoder = new SecurityConfig().jwtDecoder("http://127.0.0.1:4444", baseUrl + "/jwks");
+        var decoder = SecurityConfig.buildJwtDecoder("http://127.0.0.1:4444", baseUrl + "/jwks", null);
         String token = token("http://hydra:4444", Instant.now().plusSeconds(60));
 
         assertThatThrownBy(() -> decoder.decode(token)).isInstanceOf(JwtException.class);
@@ -89,7 +107,7 @@ class JwtDecoderConfigurationTest {
 
     @Test
     void shouldRejectExpiredTokenWithInternalKeysTest() throws Exception {
-        var decoder = new SecurityConfig().jwtDecoder(baseUrl, baseUrl + "/jwks");
+        var decoder = SecurityConfig.buildJwtDecoder(baseUrl, baseUrl + "/jwks", null);
         String token = token(baseUrl, Instant.now().minusSeconds(120));
 
         assertThatThrownBy(() -> decoder.decode(token)).isInstanceOf(JwtException.class);
@@ -97,13 +115,53 @@ class JwtDecoderConfigurationTest {
 
     @Test
     void shouldPreserveLazyIssuerDiscoveryWithoutExplicitKeysTest() throws Exception {
-        var decoder = new SecurityConfig().jwtDecoder(baseUrl, "");
+        var decoder = SecurityConfig.buildJwtDecoder(baseUrl, "", null);
 
         assertThat(discoveryRequests.get()).isZero();
         assertThat(decoder.decode(token(baseUrl, Instant.now().plusSeconds(60))).getSubject())
                 .isEqualTo("42");
         assertThat(discoveryRequests.get()).isPositive();
         assertThat(keyRequests.get()).isPositive();
+    }
+
+    @Test
+    void shouldAcceptTokenThatHydraReportsActiveTest() throws Exception {
+        var decoder = SecurityConfig.buildJwtDecoder(baseUrl, baseUrl + "/jwks", introspector());
+
+        assertThat(decoder.decode(token(baseUrl, Instant.now().plusSeconds(60))).getSubject())
+                .isEqualTo("42");
+        assertThat(introspectionRequests.get()).isEqualTo(1);
+    }
+
+    @Test
+    void shouldRejectRevokedTokenThatHydraReportsInactiveTest() throws Exception {
+        introspectionBody.set("{\"active\":false}");
+        var decoder = SecurityConfig.buildJwtDecoder(baseUrl, baseUrl + "/jwks", introspector());
+        String token = token(baseUrl, Instant.now().plusSeconds(60));
+
+        assertThatThrownBy(() -> decoder.decode(token)).isInstanceOf(JwtValidationException.class);
+    }
+
+    @Test
+    void shouldFailClosedWhenIntrospectionErrorsTest() throws Exception {
+        introspectionStatus.set(500);
+        var decoder = SecurityConfig.buildJwtDecoder(baseUrl, baseUrl + "/jwks", introspector());
+        String token = token(baseUrl, Instant.now().plusSeconds(60));
+
+        assertThatThrownBy(() -> decoder.decode(token)).isInstanceOf(JwtValidationException.class);
+    }
+
+    @Test
+    void shouldNotIntrospectTokensFailingLocalValidationTest() throws Exception {
+        var decoder = SecurityConfig.buildJwtDecoder(baseUrl, baseUrl + "/jwks", introspector());
+        String token = token(baseUrl, Instant.now().minusSeconds(120));
+
+        assertThatThrownBy(() -> decoder.decode(token)).isInstanceOf(JwtException.class);
+        assertThat(introspectionRequests.get()).isZero();
+    }
+
+    private HydraTokenIntrospector introspector() {
+        return new HydraTokenIntrospector(baseUrl, Duration.ofSeconds(2), Duration.ofSeconds(10), 100);
     }
 
     private String token(String issuer, Instant expiresAt) throws Exception {

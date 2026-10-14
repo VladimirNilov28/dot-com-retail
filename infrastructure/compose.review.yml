@@ -104,6 +104,8 @@ services:
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/retail?sslmode=verify-full&sslrootcert=/review-certs/ca.crt
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: https://${REVIEW_HOST:-bytecore.localhost}:${REVIEW_HYDRA_PORT:-8444}
+      # Revocation check against the internal Hydra admin API (HYDRA_ADMIN_URL from compose.yml).
+      TOKEN_INTROSPECTION_ENABLED: "true"
       CART_GUEST_SECURE: "true"
       CART_GUEST_ALLOWEDORIGINS_0: https://${REVIEW_HOST:-bytecore.localhost}:${REVIEW_STOREFRONT_PORT:-8443}
       # Only the Hive Router may name the client in X-Forwarded-For; every other

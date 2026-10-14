@@ -15,6 +15,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import ee.bytecore.backend.entities.user.User;
@@ -257,6 +259,7 @@ public class UserService {
             if (user.getRole() != role) {
                 user.setRole(role);
                 userRepository.save(user);
+                revokeGrantsAfterCommit(user.getId());
             }
             return user;
         }
@@ -397,8 +400,8 @@ public class UserService {
 
     /**
      * Changes a user's role on behalf of {@code actorId}. An administrator cannot demote
-     * themselves and the last active ADMIN can never be demoted. The new role only reaches
-     * the user's tokens on their next token issuance.
+     * themselves and the last active ADMIN can never be demoted. After commit the user's
+     * existing grants are revoked, so the new role reaches their tokens on next sign-in.
      */
     @Transactional
     public RoleChange updateRole(Long actorId, Long id, UserRole role) {
@@ -417,7 +420,33 @@ public class UserService {
                 throw new IllegalArgumentException("Cannot remove the ADMIN role from the last active administrator");
         }
         user.setRole(role);
+        revokeGrantsAfterCommit(id);
         return new RoleChange(user, previous);
+    }
+
+    /**
+     * Role-bearing access/refresh tokens must not outlive a role assignment: once the
+     * change commits, every Hydra grant and login session of the user is revoked
+     * (same as account deletion), so the resource server's introspection rejects old
+     * tokens and the next sign-in mints the current role. A failure surfaces to the
+     * caller after the commit; repeating the assignment retries the revocation.
+     */
+    private void revokeGrantsAfterCommit(Long userId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            hydraClient.revokeUser(userId);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    hydraClient.revokeUser(userId);
+                } catch (RuntimeException e) {
+                    throw new IdentitySyncException(
+                            "Role updated, but existing sessions could not be revoked. Repeat the change to retry.", e);
+                }
+            }
+        });
     }
 
     @Transactional(readOnly = true)

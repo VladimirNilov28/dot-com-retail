@@ -41,10 +41,10 @@ ttl:
   access_token: 30m
   refresh_token: 168h
 
-# JWT access tokens so the Spring resource server (which validates JWTs
-# locally via the issuer's JWKS) can decode `sub` without an introspection
-# call. Ory generally recommends opaque tokens + introspection instead
-# (see docs), but this repo's resource server is already configured for
-# JWT decoding, so this keeps the token consumable end-to-end for now.
+# JWT access tokens: the Spring resource server validates them locally via
+# the issuer's JWKS (signature/issuer/expiry/role/scope/AAL2) and then checks
+# revocation through the admin introspection endpoint, which reports a JWT as
+# inactive once its refresh chain or the subject's consent is revoked
+# (docs/auth/browser-contract.md "Token revocation").
 strategies:
   access_token: jwt
