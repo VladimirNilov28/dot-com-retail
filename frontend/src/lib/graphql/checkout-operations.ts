@@ -73,7 +73,7 @@ function totals(value: unknown) {
 export function decodeOrder(value: unknown): CheckoutOrder {
   const o = object(value), p = object(o.payment), r = object(o.refund), c = object(o.cancellationEligibility);
   const status = text(o.status);
-  if (status !== "PENDING" && status !== "PAID" && status !== "SHIPPING" && status !== "COMPLETED" && status !== "CANCELLED") throw new TypeError("Invalid order state");
+  if (status !== "PENDING" && status !== "PAID" && status !== "PROCESSING" && status !== "SHIPPING" && status !== "COMPLETED" && status !== "CANCELLED") throw new TypeError("Invalid order state");
   return {
     publicId: uuid(o.publicId), requestId: uuid(o.requestId), status, createdAt: text(o.createdAt),
     cancellationReason: nullableText(o.cancellationReason), paymentInteraction: text(o.paymentInteraction),

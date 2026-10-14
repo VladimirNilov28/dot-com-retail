@@ -1,6 +1,7 @@
 package ee.bytecore.backend.graphql.datafetchers;
 
 import static ee.bytecore.backend.graphql.datafetchers.support.JwtTestSupport.asAuthenticatedJwt;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -116,6 +117,9 @@ class OrderMutationAuthorizationTest {
         User staff = User.create("staff", "staff@example.com", LocalDate.of(1990, 1, 1));
         staff.setId(2L);
         when(userRepository.findActiveByIdForUpdate(2L)).thenReturn(Optional.of(staff));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(orderRepository.search(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(java.util.List.of()));
     }
 
     @Test
@@ -145,9 +149,9 @@ class OrderMutationAuthorizationTest {
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .accept(MediaType.APPLICATION_JSON)
                                 .content(
-                                        "{\"query\":\"mutation { updateOrderStatus(orderId: \\\"1\\\", input: { status: SHIPPING }) { status } }\"}"))
+                                        "{\"query\":\"mutation { updateOrderStatus(orderId: \\\"1\\\", input: { status: PROCESSING }) { status } }\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.updateOrderStatus.status").value("SHIPPING"));
+                .andExpect(jsonPath("$.data.updateOrderStatus.status").value("PROCESSING"));
     }
 
     @Test
@@ -191,9 +195,9 @@ class OrderMutationAuthorizationTest {
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .accept(MediaType.APPLICATION_JSON)
                                 .content(
-                                        "{\"query\":\"mutation { updateOrderStatus(orderId: \\\"1\\\", input: { status: SHIPPING }) { status } }\"}"))
+                                        "{\"query\":\"mutation { updateOrderStatus(orderId: \\\"1\\\", input: { status: PROCESSING }) { status } }\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.updateOrderStatus.status").value("SHIPPING"));
+                .andExpect(jsonPath("$.data.updateOrderStatus.status").value("PROCESSING"));
     }
 
     @Test
@@ -218,7 +222,7 @@ class OrderMutationAuthorizationTest {
                         .with(asAuthenticatedJwt(jwtAuthenticationConverter, "1", "USER"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .accept(MediaType.APPLICATION_JSON)
-                        .content("{\"query\":\"{ myOrders { id } }\"}"))
+                        .content("{\"query\":\"{ myOrders { totalCount items { id } } }\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.errors").isNotEmpty());
     }
@@ -229,8 +233,61 @@ class OrderMutationAuthorizationTest {
                         .with(asAuthenticatedJwt(jwtAuthenticationConverter, "1", "USER", "order:read"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .accept(MediaType.APPLICATION_JSON)
-                        .content("{\"query\":\"{ myOrders { id } }\"}"))
+                        .content("{\"query\":\"{ myOrders { totalCount items { id } } }\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.myOrders").isArray());
+                .andExpect(jsonPath("$.data.myOrders.items").isArray());
+    }
+
+    private org.springframework.test.web.servlet.ResultActions graphql(String query, String role, String... scopes)
+            throws Exception {
+        return mockMvc.perform(post("/graphql")
+                .with(asAuthenticatedJwt(jwtAuthenticationConverter, "2", role, scopes))
+                .contentType(MediaType.APPLICATION_JSON)
+                .accept(MediaType.APPLICATION_JSON)
+                .content(new com.fasterxml.jackson.databind.ObjectMapper()
+                        .writeValueAsString(java.util.Map.of("query", query))));
+    }
+
+    private static final String STAFF_ORDERS = "{ staffOrders(page: 0, size: 10) { totalCount items { id } } }";
+    private static final String APPROVE =
+            "mutation { approveRefund(input: { requestId: \"00000000-0000-0000-0000-000000000001\" }) { id } }";
+    private static final String TRACKING =
+            "mutation { setOrderTracking(input: { publicId: \"00000000-0000-0000-0000-000000000001\", carrier: \"DHL\", trackingNumber: \"JD0123\" }) { id } }";
+
+    @Test
+    void shouldRejectStaffOrderOperationsForCustomersEvenWithScopesTest() throws Exception {
+        for (String query : java.util.List.of(STAFF_ORDERS, APPROVE, TRACKING)) {
+            graphql(query, "USER", "order:read", "order:write", "order:manage-status")
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.errors[0].extensions.errorType").value("PERMISSION_DENIED"));
+        }
+    }
+
+    @Test
+    void shouldRejectStaffOrdersForOrderManagerWithoutReadScopeTest() throws Exception {
+        graphql(STAFF_ORDERS, "ORDER_MANAGER", "order:manage-status")
+                .andExpect(jsonPath("$.errors[0].extensions.errorType").value("PERMISSION_DENIED"));
+    }
+
+    @Test
+    void shouldAllowStaffOrdersForOrderManagerTest() throws Exception {
+        graphql(STAFF_ORDERS, "ORDER_MANAGER", "order:read")
+                .andExpect(jsonPath("$.errors").doesNotExist())
+                .andExpect(jsonPath("$.data.staffOrders.totalCount").value(0));
+    }
+
+    @Test
+    void shouldRejectMyOrdersPageAboveBoundTest() throws Exception {
+        graphql("{ myOrders(size: 51) { totalCount } }", "USER", "order:read")
+                .andExpect(jsonPath("$.errors").isNotEmpty());
+    }
+
+    @Test
+    void shouldRequireWriteScopeForRefundRequestTest() throws Exception {
+        graphql(
+                        "mutation { requestRefund(input: { publicId: \"00000000-0000-0000-0000-000000000001\", reason: \"Broken\" }) { id } }",
+                        "USER",
+                        "order:read")
+                .andExpect(jsonPath("$.errors[0].extensions.errorType").value("PERMISSION_DENIED"));
     }
 }

@@ -6,10 +6,11 @@ Checkout snapshots, purchased quantities and original allocations stay immutable
 
 ## Eligibility and authorization
 
-Cancellation is allowed in **PENDING and PAID**. **SHIPPING means fulfillment
-processing has begun**, not merely that a parcel has left a warehouse. Operators
-must enter SHIPPING before processing begins. SHIPPING and COMPLETED cannot
-be cancelled. No new fulfillment state/system is introduced.
+Cancellation is allowed in **PENDING and PAID** only (server enforced). The
+lifecycle is `PENDING → PAID → PROCESSING → SHIPPING → COMPLETED` (V19 added
+**PROCESSING**, meaning fulfillment has begun). PROCESSING, SHIPPING and
+COMPLETED cannot be cancelled (`PROCESSING_BEGUN`/`COMPLETED`); after that point
+money is returned only through a staff-approved refund request (below).
 
 `cancellationEligibility { allowed reason }` is available on `Order`,
 `CheckoutOrder` and the cancellation response. Reasons are `PROCESSING_BEGUN`,
@@ -34,10 +35,34 @@ The source cart cookie, JWT, order ID/public UUID, checkout UUID and contact ema
 do not replace the unexpired order grant. Guest orders are not linked by email.
 Expired/lost grants have no email recovery in this milestone.
 
-**Intentional staff API restriction:** `updateOrderStatus` accepts only SHIPPING
-and COMPLETED, with a confirmed successful payment. PAID/PENDING cannot be
-assigned, and CANCELLED callers must use `cancelOrderAsStaff`. Payment/refund
-status is never client-assignable. Existing roles/scopes still apply.
+**Intentional staff API restriction:** `updateOrderStatus` accepts only
+PROCESSING, SHIPPING and COMPLETED, one step at a time, with a confirmed
+successful payment (`Order.allowedStatusTransitions` lists the next step).
+Delivery (non-PICKUP) orders need `setOrderTracking` before SHIPPING
+(`TRACKING_REQUIRED`). PAID/PENDING cannot be assigned, and CANCELLED callers must
+use `cancelOrderAsStaff`. Payment/refund status is never client-assignable.
+Every transition is appended to `order_status_events` (`Order.statusHistory`,
+also on guest `CheckoutOrder` via the existing grant); staff changes, tracking,
+staff cancellation and refund decisions are written to `admin_audit_log`.
+
+## Refund requests after payment (V19)
+
+| Operation | Authorization |
+| --- | --- |
+| `requestRefund(input: {publicId, reason})` | `order:write`, active owner (signed-in customers only; guests contact support) |
+| `approveRefund` / `rejectRefund(input: {requestId, note})` | ORDER_MANAGER or ADMIN **and** `order:manage-status`; reject requires a note |
+
+Eligible: PAID/PROCESSING/SHIPPING/COMPLETED with payment SUCCEEDED and no refund
+yet (`Order.refundEligibility`). One open request per order; repeating
+`requestRefund` while open returns the same request. A rejected request may be
+followed by a new one. Approval reuses the cancellation refund path exactly
+(one `order_refunds` row + `refund.requested` outbox → Kafka → Go Stripe/simulated
+refund → `RefundResultListener`) for the full charged amount, **without
+restocking** and without changing the order status. Cancelling a PAID order with
+an open request refunds via cancellation and closes the request as APPROVED.
+Emails: PROCESSING, SHIPPED (carrier/tracking), COMPLETED, REFUND_REQUESTED,
+REFUND_REJECTED (per request), REFUNDED, REFUND_FAILED — enqueued in the same
+transaction, deduplicated by `(order_id, kind, ref)`.
 
 ## Separate fulfillment and money
 

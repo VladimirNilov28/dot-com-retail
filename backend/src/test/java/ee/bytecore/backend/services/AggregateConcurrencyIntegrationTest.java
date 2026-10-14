@@ -240,8 +240,8 @@ class AggregateConcurrencyIntegrationTest {
     }
 
     @Test
-    void cancellationCannotBeOverwrittenByStaffShipping() throws Exception {
-        assertCancellationWins(OrderStatus.PAID, OrderStatus.SHIPPING);
+    void cancellationCannotBeOverwrittenByStaffProcessing() throws Exception {
+        assertCancellationWins(OrderStatus.PAID, OrderStatus.PROCESSING);
     }
 
     private void assertCancellationWins(OrderStatus initial, OrderStatus competing) throws Exception {
@@ -283,7 +283,8 @@ class AggregateConcurrencyIntegrationTest {
             race.start(() ->
                     orderService.cancelOrder(UUID.randomUUID(), order.getPublicId(), f.user.getId(), null, false));
             race.reached(1);
-            race.start(() -> orderService.updateFulfillmentStatus(order.getId(), OrderStatus.SHIPPING, f.user.getId()));
+            race.start(
+                    () -> orderService.updateFulfillmentStatus(order.getId(), OrderStatus.PROCESSING, f.user.getId()));
             race.reached(2);
             assertThat(race.finish().get(1)).isInstanceOf(IllegalArgumentException.class);
         }
@@ -301,14 +302,15 @@ class AggregateConcurrencyIntegrationTest {
         Fixture f = fixture();
         Order order = paidCheckout(f);
         try (var race = new Interleaving("orders", order.getId())) {
-            race.start(() -> orderService.updateFulfillmentStatus(order.getId(), OrderStatus.SHIPPING, f.user.getId()));
+            race.start(
+                    () -> orderService.updateFulfillmentStatus(order.getId(), OrderStatus.PROCESSING, f.user.getId()));
             race.reached(1);
             race.start(() ->
                     orderService.cancelOrder(UUID.randomUUID(), order.getPublicId(), f.user.getId(), null, false));
             race.reached(2);
             assertThat(race.finish().get(1)).isInstanceOf(ee.bytecore.backend.exceptions.CheckoutException.class);
         }
-        assertThat(orders.findById(order.getId()).orElseThrow().getStatus()).isEqualTo(OrderStatus.SHIPPING);
+        assertThat(orders.findById(order.getId()).orElseThrow().getStatus()).isEqualTo(OrderStatus.PROCESSING);
         assertThat(inventories.findById(f.inventory.getId()).orElseThrow().getQuantity())
                 .isEqualTo(9);
         assertThat(new JdbcTemplate(dataSource)

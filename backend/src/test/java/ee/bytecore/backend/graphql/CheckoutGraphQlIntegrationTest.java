@@ -305,11 +305,11 @@ class CheckoutGraphQlIntegrationTest {
                         .asString())
                 .isEqualTo(order.at("/publicId").asString());
         assertThat(success(post(
-                                "{myOrders{checkout{requestId totals{total} lines{sku quantity}}}}",
+                                "{myOrders{items{checkout{requestId totals{total} lines{sku quantity}}}}}",
                                 Map.of(),
                                 noCookies,
                                 token()))
-                        .at("/data/myOrders/0/checkout/requestId")
+                        .at("/data/myOrders/items/0/checkout/requestId")
                         .asString())
                 .isEqualTo(id.toString());
         assertThat(post(mutation, Map.of("input", placement), noCookies, owner.getId() + "/cart-read")

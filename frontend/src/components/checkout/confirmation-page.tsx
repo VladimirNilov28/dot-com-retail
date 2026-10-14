@@ -117,7 +117,10 @@ export function ConfirmationPageView({ reference, guest }: { reference: string; 
         </div>
         <OrderSummary order={order} />
       </div>
-      {order.status !== "PENDING" ? <Link href="/catalog/all-products" className="store-cta">Continue shopping</Link> : null}
+      <div className="flex flex-wrap items-center gap-4">
+        {!guest ? <Link prefetch={false} href={`/account/orders/${order.publicId}`} className="store-link">View order details</Link> : null}
+        {order.status !== "PENDING" ? <Link href="/catalog/all-products" className="store-cta">Continue shopping</Link> : null}
+      </div>
     </> : null}
   </div>;
 }

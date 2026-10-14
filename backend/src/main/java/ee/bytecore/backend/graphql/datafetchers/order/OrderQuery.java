@@ -11,7 +11,10 @@ import ee.bytecore.backend.security.CurrentUserProvider;
 import ee.bytecore.backend.services.OrderService;
 
 import com.netflix.dgs.codegen.generated.types.Order;
+import com.netflix.dgs.codegen.generated.types.OrderFilter;
 import com.netflix.dgs.codegen.generated.types.OrderItem;
+import com.netflix.dgs.codegen.generated.types.OrderPage;
+import com.netflix.dgs.codegen.generated.types.StaffOrderFilter;
 import com.netflix.graphql.dgs.*;
 
 @DgsComponent
@@ -41,11 +44,81 @@ public class OrderQuery {
 
     @DgsQuery
     @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).ORDER_READ)")
-    public List<Order> myOrders() {
-        Long userId = currentUserProvider.getCurrentUserId();
-        return orderService.findMyOrders(userId).stream()
+    public OrderPage myOrders(
+            @InputArgument OrderFilter filter, @InputArgument Integer page, @InputArgument Integer size) {
+        var result = orderService.myOrders(
+                currentUserProvider.getCurrentUserId(),
+                filter == null
+                        ? null
+                        : new OrderService.OrderFilter(
+                                status(filter.getStatus()), filter.getFrom(), filter.getTo(), null),
+                page,
+                size);
+        return page(result);
+    }
+
+    @DgsQuery
+    @PreAuthorize(
+            "hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).ORDER_READ) && hasAnyRole('ORDER_MANAGER','ADMIN')")
+    public OrderPage staffOrders(
+            @InputArgument StaffOrderFilter filter, @InputArgument Integer page, @InputArgument Integer size) {
+        var result = orderService.staffOrders(
+                filter == null
+                        ? null
+                        : new OrderService.OrderFilter(
+                                status(filter.getStatus()), filter.getFrom(), filter.getTo(), filter.getQuery()),
+                page,
+                size);
+        return page(result);
+    }
+
+    private static OrderPage page(OrderService.OrderPage result) {
+        return OrderPage.newBuilder()
+                .items(result.items().stream().map(OrderMapper::toGraphQlType).toList())
+                .totalCount(Math.toIntExact(Math.min(Integer.MAX_VALUE, result.totalCount())))
+                .page(result.page())
+                .size(result.size())
+                .build();
+    }
+
+    private static ee.bytecore.backend.enums.OrderStatus status(
+            com.netflix.dgs.codegen.generated.types.OrderStatus status) {
+        return status == null ? null : ee.bytecore.backend.enums.OrderStatus.valueOf(status.name());
+    }
+
+    @DgsData(parentType = "Order", field = "statusHistory")
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).ORDER_READ)")
+    public List<com.netflix.dgs.codegen.generated.types.OrderStatusEvent> statusHistory(
+            DgsDataFetchingEnvironment env) {
+        var order = readable(env);
+        return orderService.statusHistory(order.getId()).stream()
                 .map(OrderMapper::toGraphQlType)
                 .toList();
+    }
+
+    @DgsData(parentType = "Order", field = "refundRequests")
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).ORDER_READ)")
+    public List<com.netflix.dgs.codegen.generated.types.OrderRefundRequest> refundRequests(
+            DgsDataFetchingEnvironment env) {
+        var order = readable(env);
+        return orderService.refundRequests(order.getId()).stream()
+                .map(OrderMapper::toGraphQlType)
+                .toList();
+    }
+
+    @DgsData(parentType = "Order", field = "refundEligibility")
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).ORDER_READ)")
+    public ee.bytecore.backend.services.OrderRecoveryValues.Eligibility refundEligibility(
+            DgsDataFetchingEnvironment env) {
+        return orderService.refundEligibility(readable(env));
+    }
+
+    private ee.bytecore.backend.entities.payment.Order readable(DgsDataFetchingEnvironment env) {
+        Order source = env.getSource();
+        var order = orderService
+                .findById(Long.valueOf(source.getId()))
+                .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException("Order not found"));
+        return orderService.requireReadable(order, currentUserProvider.getCurrentUserId(), isStaff());
     }
 
     @DgsData(parentType = "Order")

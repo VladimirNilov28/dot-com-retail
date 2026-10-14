@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 const links = [
   { href: "/account", label: "Overview" },
+  { href: "/account/orders", label: "Orders" },
   { href: "/account/profile", label: "Personal info" },
   { href: "/account/security", label: "Security" },
   { href: "/account/connections", label: "Connected accounts" },
@@ -17,7 +18,7 @@ export function AccountNav() {
     <nav aria-label="Account" className="account-nav">
       {links.map((link) => (
         <Link key={link.href} prefetch={false} href={link.href}
-          aria-current={pathname === link.href ? "page" : undefined}>{link.label}</Link>
+          aria-current={pathname === link.href || (link.href !== "/account" && pathname.startsWith(`${link.href}/`)) ? "page" : undefined}>{link.label}</Link>
       ))}
     </nav>
   );

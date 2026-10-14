@@ -123,6 +123,8 @@ type CheckoutOrder {
   totals: CheckoutTotals!
   createdAt: Instant!
   paymentInteraction: String!
+  tracking: OrderTracking
+  statusHistory: [OrderStatusEvent!]!
 }
 
 type CheckoutPaymentConfiguration {

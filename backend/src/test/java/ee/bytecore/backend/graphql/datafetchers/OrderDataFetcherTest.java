@@ -1,5 +1,8 @@
 package ee.bytecore.backend.graphql.datafetchers;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
@@ -269,14 +272,17 @@ class OrderDataFetcherTest {
     @Test
     @WithMockUser(username = "1")
     void shouldReturnMyOrdersTest() {
-        when(orderRepository.findAllByUserId(user.getId())).thenReturn(List.of(order));
+        when(orderRepository.search(eq(user.getId()), isNull(), isNull(), isNull(), isNull(), any()))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(order)));
 
         @Language("GraphQl")
         var query =
                 """
             query {
               myOrders {
-                status
+                items {
+                  status
+                }
               }
             }
         """;
@@ -284,7 +290,7 @@ class OrderDataFetcherTest {
         graphQlTester
                 .document(query)
                 .execute()
-                .path("myOrders[0].status")
+                .path("myOrders.items[0].status")
                 .entity(String.class)
                 .isEqualTo(order.getStatus().name());
     }
@@ -292,14 +298,17 @@ class OrderDataFetcherTest {
     @Test
     @WithMockUser(username = "1")
     void shouldReturnEmptyMyOrdersTest() {
-        when(orderRepository.findAllByUserId(user.getId())).thenReturn(List.of());
+        when(orderRepository.search(eq(user.getId()), isNull(), isNull(), isNull(), isNull(), any()))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of()));
 
         @Language("GraphQl")
         var query =
                 """
             query {
               myOrders {
-                status
+                items {
+                  status
+                }
               }
             }
         """;
@@ -307,7 +316,7 @@ class OrderDataFetcherTest {
         graphQlTester
                 .document(query)
                 .execute()
-                .path("myOrders")
+                .path("myOrders.items")
                 .entityList(Object.class)
                 .hasSize(0);
     }
@@ -408,7 +417,7 @@ class OrderDataFetcherTest {
         var mutation =
                 """
             mutation($id: ID!) {
-              updateOrderStatus(orderId: $id, input: { status: SHIPPING }) {
+              updateOrderStatus(orderId: $id, input: { status: PROCESSING }) {
                 status
               }
             }
@@ -420,7 +429,7 @@ class OrderDataFetcherTest {
                 .execute()
                 .path("updateOrderStatus.status")
                 .entity(String.class)
-                .isEqualTo(OrderStatus.SHIPPING.name());
+                .isEqualTo(OrderStatus.PROCESSING.name());
     }
 
     @Test
@@ -455,7 +464,7 @@ class OrderDataFetcherTest {
         // The publisher is multicast/non-replaying, so the verifier must subscribe
         // before the transition below runs, or it will miss the emitted value.
         var verifier = StepVerifier.create(flux)
-                .expectNext(OrderStatus.SHIPPING.name())
+                .expectNext(OrderStatus.PROCESSING.name())
                 .thenCancel()
                 .verifyLater();
 
@@ -463,7 +472,7 @@ class OrderDataFetcherTest {
         var mutation =
                 """
             mutation($id: ID!) {
-              updateOrderStatus(orderId: $id, input: { status: SHIPPING }) {
+              updateOrderStatus(orderId: $id, input: { status: PROCESSING }) {
                 status
               }
             }

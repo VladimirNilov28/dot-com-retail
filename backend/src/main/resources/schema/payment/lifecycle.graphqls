@@ -1,0 +1,42 @@
+type OrderTracking {
+  carrier: String!
+  trackingNumber: String!
+  trackingUrl: String
+  shippedAt: Instant
+}
+
+enum OrderStatusActor {
+  SYSTEM
+  CUSTOMER
+  GUEST
+  STAFF
+  PAYMENT
+}
+
+type OrderStatusEvent {
+  fromStatus: OrderStatus
+  toStatus: OrderStatus!
+  actor: OrderStatusActor!
+  note: String
+  occurredAt: Instant!
+}
+
+enum OrderRefundRequestStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+}
+
+type OrderRefundRequest {
+  id: UUID!
+  status: OrderRefundRequestStatus!
+  reason: String!
+  decisionNote: String
+  createdAt: Instant!
+  decidedAt: Instant
+}
+
+type OrderRefundEligibility {
+  allowed: Boolean!
+  reason: String
+}

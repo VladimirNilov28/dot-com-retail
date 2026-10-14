@@ -92,7 +92,7 @@ function shippingMethod(value: unknown): CheckoutShippingMethod {
 }
 
 function orderStatus(value: unknown): OrderStatus {
-  if (value === "PENDING" || value === "PAID" || value === "SHIPPING" ||
+  if (value === "PENDING" || value === "PAID" || value === "PROCESSING" || value === "SHIPPING" ||
       value === "COMPLETED" || value === "CANCELLED") return value;
   throw new TypeError("Unknown order status");
 }

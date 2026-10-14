@@ -68,12 +68,13 @@ scopes:
   - name: order:read
     description: >
       Query orders and subscribe to order status changes (order, myOrders,
-      orderStatusChanged).
+      orderStatusChanged); staffOrders additionally needs a staff role.
   - name: order:write
     description: Create an order / checkout (createOrder).
   - name: order:manage-status
     description: >
-      Transition an order's status (updateOrderStatus). Kept separate from
+      Staff order operations (updateOrderStatus, setOrderTracking,
+      cancelOrderAsStaff, approveRefund, rejectRefund). Kept separate from
       order:write because it is a privileged operational action distinct
       from customer-initiated checkout.
   - name: payment:read
@@ -207,6 +208,9 @@ clients:
       - cart:write
       - order:read
       - order:write
+      # Staff order operations from /admin/orders; consent intersects this with
+      # the user's role scopes, so only ORDER_MANAGER/ADMIN actually receive it.
+      - order:manage-status
     additional_scopes:
       - openid
       - offline_access

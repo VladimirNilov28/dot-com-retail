@@ -12,8 +12,9 @@ import ee.bytecore.backend.enums.OrderStatus;
  * allowed. Same-status, backwards, and arbitrary-skip transitions are denied
  * by omission (they simply aren't in the target set for a given status).
  * Terminal statuses (COMPLETED, CANCELLED) map to an empty set. Cancellation
- * is only reachable from PENDING/PAID. SHIPPING begins fulfillment processing, so it (and beyond) can never
- * transition to CANCELLED.
+ * is only reachable from PENDING/PAID. PROCESSING means fulfillment has begun, so it (and beyond) can never
+ * transition to CANCELLED; refunds after that point go through a staff-approved refund request.
+ * Lifecycle: PENDING -> PAID -> PROCESSING -> SHIPPING -> COMPLETED.
  */
 public final class OrderStatusTransitions {
 
@@ -21,7 +22,8 @@ public final class OrderStatusTransitions {
 
     static {
         ALLOWED.put(OrderStatus.PENDING, EnumSet.of(OrderStatus.PAID, OrderStatus.CANCELLED));
-        ALLOWED.put(OrderStatus.PAID, EnumSet.of(OrderStatus.SHIPPING, OrderStatus.CANCELLED));
+        ALLOWED.put(OrderStatus.PAID, EnumSet.of(OrderStatus.PROCESSING, OrderStatus.CANCELLED));
+        ALLOWED.put(OrderStatus.PROCESSING, EnumSet.of(OrderStatus.SHIPPING));
         ALLOWED.put(OrderStatus.SHIPPING, EnumSet.of(OrderStatus.COMPLETED));
         ALLOWED.put(OrderStatus.COMPLETED, EnumSet.noneOf(OrderStatus.class));
         ALLOWED.put(OrderStatus.CANCELLED, EnumSet.noneOf(OrderStatus.class));
@@ -31,5 +33,9 @@ public final class OrderStatusTransitions {
 
     public static boolean canTransition(OrderStatus from, OrderStatus to) {
         return ALLOWED.getOrDefault(from, Set.of()).contains(to);
+    }
+
+    public static Set<OrderStatus> allowedTargets(OrderStatus from) {
+        return Set.copyOf(ALLOWED.getOrDefault(from, Set.of()));
     }
 }

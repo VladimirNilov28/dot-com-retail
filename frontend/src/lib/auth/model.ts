@@ -103,7 +103,7 @@ function decodeChallenge(value: unknown): EmailChallenge {
 // Roles may legitimately receive only a subset of the customer cart/order scopes.
 function grantedScopesValid(scope: string): boolean {
   const granted = scope.split(" ");
-  const optional = new Set(["cart:read", "cart:write", "order:read", "order:write"]);
+  const optional = new Set(["cart:read", "cart:write", "order:read", "order:write", "order:manage-status"]);
   const required = ["offline_access", "openid", "user:read"];
   return new Set(granted).size === granted.length &&
     required.every((name) => granted.includes(name)) &&
@@ -161,7 +161,7 @@ export function safeReturnTo(value: unknown): string {
   if (path.startsWith("//") || path.split("/").some((part) => part === "." || part === "..")) {
     throw new AuthError("invalid_request", 400);
   }
-  if (url.hash || !/^(?:\/|\/catalog(?:\/[^/]+)?|\/products\/[^/]+|\/search|\/account(?:\/(?:security|connections|profile|sessions))?|\/cart|\/checkout|\/order-confirmation\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/.test(path) ||
+  if (url.hash || !/^(?:\/|\/catalog(?:\/[^/]+)?|\/products\/[^/]+|\/search|\/account(?:\/(?:security|connections|profile|sessions|orders))?|\/account\/orders\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|\/cart|\/checkout|\/order-confirmation\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/.test(path) ||
       Array.from(url.searchParams).some(([key, item]) => /[\\\u0000-\u001f\u007f]/.test(key + item)) ||
       Array.from(url.searchParams.keys()).some((key) =>
         ["access_token", "refresh_token", "id_token", "client_secret", "payment_intent_client_secret", "payment_intent", "password", "code", "csrf_token"].includes(key))) {

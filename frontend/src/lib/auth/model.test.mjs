@@ -6,6 +6,7 @@ describe("storefront authentication return contract", () => {
   test.each([
     "/", "/catalog", "/catalog/all-products", "/catalog/components", "/account",
     "/account/security", "/account/profile", "/account/connections", "/account/sessions",
+    "/account/orders", "/account/orders?status=PAID&page=2", "/account/orders/11111111-1111-4111-8111-111111111111",
     "/products/actual-product?variant=9007199254740993",
     "/search?q=cpu%20gpu", "/search?q=100%25", "/search?q=%2520",
     "/checkout", "/order-confirmation/11111111-1111-4111-8111-111111111111?guest=1",
@@ -26,7 +27,8 @@ describe("storefront authentication return contract", () => {
     });
     test("accepts customer checkout scopes without requiring scopes withheld by role policy (#74)", () => {
       for (const scope of ["openid user:read offline_access cart:read cart:write order:read order:write",
-        "openid user:read offline_access order:read"]) {
+        "openid user:read offline_access order:read",
+        "openid user:read offline_access order:read order:manage-status"]) {
         expect(() => grantTokens({ ...grant, scope })).not.toThrow();
       }
     });
@@ -36,7 +38,7 @@ describe("storefront authentication return contract", () => {
       }
       for (const scope of [undefined, "", "openid offline_access user:read user:write",
         "openid offline_access user:read user:read",
-        "openid offline_access user:read order:manage-status",
+        "openid offline_access user:read payment:manage-status",
         "openid offline_access user:read user:manage-roles",
         "openid offline_access user:read order:read order:read"]) {
         expect(() => grantTokens({ ...grant, scope })).toThrow(AuthError);
@@ -50,6 +52,7 @@ describe("storefront authentication return contract", () => {
     "/%2fattacker.invalid/", "/%252fattacker.invalid/", "/catalog/%2e%2e/api",
     "/products/../api", "/auth/callback", "/graphql", "/_next/static/thing",
     "/login", "/register", "/verify", "/account/admin", "/account/profile/x", "/account#token", "/account?access_token=credential",
+    "/account/orders/not-an-id", "/account/orders/11111111-1111-4111-8111-111111111111/x",
     "/order-confirmation/not-an-id", "/order-confirmation/11111111-1111-4111-8111-111111111111?payment_intent_client_secret=private",
     "/search?q=%0d%0aLocation%3A", "/account?password=credential", " /account",
   ])("rejects unsafe or internal route %s", (route) => {

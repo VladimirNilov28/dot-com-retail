@@ -281,14 +281,17 @@ reached only via `myWishlist`.
 ### Payment (`payment/`)
 
 Types: `Order`, `OrderItem`, `CheckoutOrder`, `OrderCancellationPayload`,
-`OrderPayment`, `OrderRefund`; enums `OrderStatus`, `OrderPaymentStatus`,
-`OrderRefundStatus`, `PaymentMethodType`. Payment processing belongs to the Go
+`OrderPayment`, `OrderRefund`, `OrderPage`, `OrderTracking`, `OrderStatusEvent`,
+`OrderRefundRequest`, `OrderRefundEligibility` (`lifecycle.graphqls`); enums
+`OrderStatus`, `OrderPaymentStatus`, `OrderRefundStatus`, `OrderStatusActor`,
+`OrderRefundRequestStatus`, `PaymentMethodType`. Payment processing belongs to the Go
 service, not client-assigned GraphQL payment records.
 
 | Query | Returns |
 |---|---|
 | `order(id: ID, publicId: UUID)` | `Order` |
-| `myOrders` | `[Order!]!` |
+| `myOrders(filter: OrderFilter, page: Int = 0, size: Int = 20)` | `OrderPage!` - own orders, newest first, size 1..50 |
+| `staffOrders(filter: StaffOrderFilter, page, size)` | `OrderPage!` - ORDER_MANAGER/ADMIN and order:read |
 
 | Mutation | Returns |
 |---|---|
@@ -297,7 +300,10 @@ service, not client-assigned GraphQL payment records.
 | `cancelOrder(input: CancelOrderInput!)` | `OrderCancellationPayload!` - active owner and order:write |
 | `cancelGuestOrder(input: CancelOrderInput!)` | `OrderCancellationPayload!` - protected unexpired guest order grant |
 | `cancelOrderAsStaff(input: CancelOrderInput!)` | `OrderCancellationPayload!` - staff role and order:manage-status |
-| `updateOrderStatus(orderId, input: UpdateOrderStatusInput!)` | `Order!` - confirmed-payment SHIPPING/COMPLETED only |
+| `updateOrderStatus(orderId, input: UpdateOrderStatusInput!)` | `Order!` - confirmed-payment PROCESSING/SHIPPING/COMPLETED along `Order.allowedStatusTransitions` |
+| `setOrderTracking(input: SetOrderTrackingInput!)` | `Order!` - staff role and order:manage-status; http(s) tracking URL only |
+| `requestRefund(input: RequestRefundInput!)` | `OrderRefundRequest!` - owner and order:write; idempotent while a request is open |
+| `approveRefund(input: DecideRefundInput!)` / `rejectRefund(...)` | `OrderRefundRequest!` - staff role and order:manage-status |
 
 `Order` and `CheckoutOrder` expose cancellation eligibility, committed
 cancellation metadata, payment outcome and asynchronous refund status.

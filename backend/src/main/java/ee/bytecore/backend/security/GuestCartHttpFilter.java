@@ -158,9 +158,17 @@ public class GuestCartHttpFilter extends OncePerRequestFilter {
                                         "checkoutOrder",
                                         "checkoutPaymentSession",
                                         "order",
-                                        "myOrders")
+                                        "myOrders",
+                                        "staffOrders")
                                 .contains(field)
-                        || Set.of("cancelOrder", "cancelOrderAsStaff", "updateOrderStatus")
+                        || Set.of(
+                                        "cancelOrder",
+                                        "cancelOrderAsStaff",
+                                        "updateOrderStatus",
+                                        "setOrderTracking",
+                                        "requestRefund",
+                                        "approveRefund",
+                                        "rejectRefund")
                                 .contains(field))) response.setHeader("Cache-Control", "private, no-store");
         chain.doFilter(replay, response);
     }

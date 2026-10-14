@@ -81,6 +81,18 @@ public class Order {
     @Column(name = "cancellation_source")
     private String cancellationSource;
 
+    @Column(name = "carrier", length = 80)
+    private String carrier;
+
+    @Column(name = "tracking_number", length = 64)
+    private String trackingNumber;
+
+    @Column(name = "tracking_url", length = 500)
+    private String trackingUrl;
+
+    @Column(name = "shipped_at")
+    private Instant shippedAt;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private Instant createdAt;

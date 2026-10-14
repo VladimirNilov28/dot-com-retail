@@ -39,6 +39,14 @@ public class OrderNotifications {
     }
 
     public void enqueue(Order order, String kind) {
+        enqueue(order, kind, "", null);
+    }
+
+    /**
+     * Writes one outbox row in the caller's transaction. {@code ref} distinguishes kinds that can
+     * legitimately repeat for an order (refund requests); once-per-order kinds use "".
+     */
+    public void enqueue(Order order, String kind, String ref, String detail) {
         var snapshot = order.getCheckoutSnapshot();
         if (snapshot == null) return;
         String description =
@@ -47,6 +55,13 @@ public class OrderNotifications {
                     case "PAID" -> "Your payment has been confirmed.";
                     case "PAYMENT_RETRY_REQUIRED" -> "Payment did not complete. Return to the same order in your browser to retry.";
                     case "CANCELLED" -> "Your order has been cancelled. Any pending payment/refund is handled separately.";
+                    case "PROCESSING" -> "We have started preparing your order. It can no longer be cancelled.";
+                    case "SHIPPED" -> "Your order has shipped.";
+                    case "COMPLETED" -> "Your order is complete. Thank you for shopping with ByteCore.";
+                    case "REFUND_REQUESTED" -> "We received your refund request. Our team will review it.";
+                    case "REFUND_REJECTED" -> "Your refund request was reviewed and not approved.";
+                    case "REFUNDED" -> "Your refund has been issued to the original payment method.";
+                    case "REFUND_FAILED" -> "Your refund could not be completed. Our team will follow up.";
                     default -> throw new IllegalArgumentException("Unsupported order notification");
                 };
         StringBuilder body = new StringBuilder(description)
@@ -56,7 +71,18 @@ public class OrderNotifications {
                 .append(order.getStatus())
                 .append("\nPayment state: ")
                 .append(order.getPaymentStatus())
-                .append("\n\n");
+                .append("\n");
+        if ("SHIPPED".equals(kind) && order.getTrackingNumber() != null) {
+            body.append("Carrier: ")
+                    .append(order.getCarrier())
+                    .append("\nTracking number: ")
+                    .append(order.getTrackingNumber());
+            if (order.getTrackingUrl() != null) body.append("\nTrack: ").append(order.getTrackingUrl());
+            body.append("\n");
+        }
+        if (detail != null && !detail.isBlank())
+            body.append("Note: ").append(detail).append("\n");
+        body.append("\n");
         for (var line : snapshot.lines()) {
             body.append(line.productName())
                     .append(" (")
@@ -81,12 +107,13 @@ public class OrderNotifications {
                 .append("This email does not grant access to the order.");
         jdbc.update(
                 """
-                INSERT INTO order_notifications(id,order_id,kind,recipient,subject,body)
-                VALUES (?,?,?,?,?,?) ON CONFLICT(order_id,kind) DO NOTHING
+                INSERT INTO order_notifications(id,order_id,kind,ref,recipient,subject,body)
+                VALUES (?,?,?,?,?,?,?) ON CONFLICT(order_id,kind,ref) DO NOTHING
                 """,
                 UUID.randomUUID(),
                 order.getId(),
                 kind,
+                ref == null ? "" : ref,
                 snapshot.details().contactEmail(),
                 "ByteCore order " + order.getPublicId() + " — " + kind.replace('_', ' '),
                 body.toString());

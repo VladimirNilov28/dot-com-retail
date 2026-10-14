@@ -10,8 +10,12 @@ import ee.bytecore.backend.security.CurrentUserProvider;
 import ee.bytecore.backend.services.OrderService;
 import ee.bytecore.backend.services.OrderStatusPublisher;
 
+import com.netflix.dgs.codegen.generated.types.DecideRefundInput;
 import com.netflix.dgs.codegen.generated.types.Order;
+import com.netflix.dgs.codegen.generated.types.OrderRefundRequest;
 import com.netflix.dgs.codegen.generated.types.PlaceOrderInput;
+import com.netflix.dgs.codegen.generated.types.RequestRefundInput;
+import com.netflix.dgs.codegen.generated.types.SetOrderTrackingInput;
 import com.netflix.dgs.codegen.generated.types.UpdateOrderStatusInput;
 import com.netflix.graphql.dgs.DgsComponent;
 import com.netflix.graphql.dgs.DgsMutation;
@@ -52,8 +56,43 @@ public class OrderMutation {
     public Order updateOrderStatus(@InputArgument String orderId, @InputArgument UpdateOrderStatusInput input) {
         long id = parseId(orderId, "order");
         OrderStatus status = OrderStatus.valueOf(input.getStatus().name());
-        return OrderMapper.toGraphQlType(
-                orderService.updateFulfillmentStatus(id, status, currentUserProvider.getCurrentUserId()));
+        return OrderMapper.toGraphQlType(orderService.updateFulfillmentStatus(
+                id, status, currentUserProvider.getCurrentUserId(), input.getNote()));
+    }
+
+    @DgsMutation
+    @PreAuthorize(
+            "hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).ORDER_MANAGE_STATUS) && hasAnyRole('ORDER_MANAGER','ADMIN')")
+    public Order setOrderTracking(@InputArgument SetOrderTrackingInput input) {
+        return OrderMapper.toGraphQlType(orderService.setTracking(
+                input.getPublicId(),
+                input.getCarrier(),
+                input.getTrackingNumber(),
+                input.getTrackingUrl(),
+                currentUserProvider.getCurrentUserId()));
+    }
+
+    @DgsMutation
+    @PreAuthorize("hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).ORDER_WRITE)")
+    public OrderRefundRequest requestRefund(@InputArgument RequestRefundInput input) {
+        return OrderMapper.toGraphQlType(orderService.requestRefund(
+                input.getPublicId(), input.getReason(), currentUserProvider.getCurrentUserId()));
+    }
+
+    @DgsMutation
+    @PreAuthorize(
+            "hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).ORDER_MANAGE_STATUS) && hasAnyRole('ORDER_MANAGER','ADMIN')")
+    public OrderRefundRequest approveRefund(@InputArgument DecideRefundInput input) {
+        return OrderMapper.toGraphQlType(orderService.approveRefund(
+                input.getRequestId(), input.getNote(), currentUserProvider.getCurrentUserId()));
+    }
+
+    @DgsMutation
+    @PreAuthorize(
+            "hasAuthority('SCOPE_' + T(ee.bytecore.backend.security.Scopes).ORDER_MANAGE_STATUS) && hasAnyRole('ORDER_MANAGER','ADMIN')")
+    public OrderRefundRequest rejectRefund(@InputArgument DecideRefundInput input) {
+        return OrderMapper.toGraphQlType(orderService.rejectRefund(
+                input.getRequestId(), input.getNote(), currentUserProvider.getCurrentUserId()));
     }
 
     @DgsSubscription
