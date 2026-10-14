@@ -1,5 +1,5 @@
 import { failure, type SafeFailure } from "./errors";
-import { cartGuestOperations, guestCartMerge, guestOperations, publicOperations, type Operation } from "./operations";
+import { cartGuestOperations, guestCartMerge, guestOperations, publicOperations, recommendedProducts, type Operation } from "./operations";
 import { object, parseJson, serializeJson } from "./scalars";
 import { requestHive, type HiveConfig } from "./server-transport";
 import { boundedText, type Result } from "./transport";
@@ -103,6 +103,7 @@ export async function handleGuestRequest(
   const addressOperation = addressOperations.find((candidate) => candidate.name === envelope.operationName);
   if (addressOperation) return dispatch(addressOperation as Operation<unknown, unknown>);
   const [categories, listing, suggestions] = publicOperations;
+  if (envelope.operationName === recommendedProducts.name) return dispatch(recommendedProducts);
   if (envelope.operationName === categories.name) return dispatch(categories);
   if (envelope.operationName === listing.name) return dispatch(listing);
   if (envelope.operationName === suggestions.name) return dispatch(suggestions);

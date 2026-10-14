@@ -152,4 +152,33 @@ class CatalogSearchDataFetcherTest {
                 .entity(String.class)
                 .isEqualTo("IPhone Case");
     }
+
+    @Test
+    @WithMockUser
+    void shouldReturnRecommendedProductsCappedAtEightTest() {
+        Product related = Product.create("Cooler", "cooler", null);
+        related.setId(7L);
+        when(catalogSearchRepository.relatedProductIds(List.of(1L, 2L), 8)).thenReturn(List.of(7L));
+        when(productRepository.findAllByIdInWithCategories(List.of(7L))).thenReturn(List.of(related));
+
+        graphQlTester
+                .document("{ recommendedProducts(productIds: [\"1\", \"2\", \"1\"], limit: 50) { id name slug } }")
+                .execute()
+                .path("recommendedProducts[0].id")
+                .entity(String.class)
+                .isEqualTo("7")
+                .path("recommendedProducts[0].slug")
+                .entity(String.class)
+                .isEqualTo("cooler");
+    }
+
+    @Test
+    @WithMockUser
+    void shouldRejectMalformedRecommendationIdsTest() {
+        graphQlTester
+                .document("{ recommendedProducts(productIds: [\"abc\"]) { id } }")
+                .execute()
+                .errors()
+                .satisfy(errors -> assertThat(errors).isNotEmpty());
+    }
 }

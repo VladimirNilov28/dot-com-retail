@@ -65,11 +65,18 @@ import {
   type IntegrationShippingOptionsQueryVariables,
   type OrderStatus,
   type ProductSort,
+  RecommendedProductsSource, type RecommendedProductsQuery, type RecommendedProductsQueryVariables,
 } from "./generated";
 import { boolean, decimal, float, integer, json, list, object, text, uuid } from "./scalars";
 import { variantId } from "@/lib/product/model";
 import { comparePrice } from "@/lib/catalog/model";
 import { accountRole } from "@/lib/auth/model";
+
+function productId(value: unknown): string {
+  const id = text(value);
+  if (!variantId(id)) throw new TypeError("Invalid product id");
+  return id;
+}
 
 export interface Operation<Data, Variables> {
   readonly name: string;
@@ -276,7 +283,7 @@ function cartDecoder(value: unknown) {
           attributes: json(variant.attributes), isActive: boolean(variant.isActive),
           availability: availability as "AVAILABLE" | "OUT_OF_STOCK" | null, purchasableLimit,
           product: {
-            name: text(product.name), slug: text(product.slug),
+            id: productId(product.id), name: text(product.name), slug: text(product.slug),
             images: list(product.images, (image) => productImage(image)),
           },
         },
@@ -594,7 +601,27 @@ export const variantAvailability: Operation<VariantAvailabilityQuery, VariantAva
   },
 };
 
-export const publicOperations = [catalogCategories, catalogListing, catalogSuggestions, homeDiscovery, homeCategoryProducts, productDetail] as const;
+export const recommendationLimit = 8;
+
+export const recommendedProducts: Operation<RecommendedProductsQuery, RecommendedProductsQueryVariables> = {
+  name: "RecommendedProducts", source: RecommendedProductsSource, kind: "query", access: "public",
+  variables(value) {
+    const input = variables(value, ["productIds", "limit"]);
+    const productIds = [...new Set(list(input.productIds, productId))];
+    if (productIds.length < 1 || productIds.length > 20) throw new TypeError("Invalid recommendation input");
+    const limit = integer(input.limit);
+    if (limit < 1 || limit > recommendationLimit) throw new TypeError("Invalid recommendation limit");
+    return { productIds, limit };
+  },
+  decode(value) {
+    const items = list(object(value).recommendedProducts, catalogProduct);
+    if (items.length > recommendationLimit) throw new TypeError("Too many recommendations");
+    return { recommendedProducts: items };
+  },
+};
+
+export const publicOperations = [catalogCategories, catalogListing, catalogSuggestions, homeDiscovery, homeCategoryProducts, productDetail,
+  recommendedProducts] as const;
 
 export const storefrontMe: Operation<StorefrontMeQuery, StorefrontMeQueryVariables> = {
   name: "StorefrontMe",

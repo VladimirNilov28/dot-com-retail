@@ -476,6 +476,7 @@ type Query @join__type(graph: RETAIL) {
   product(id: ID, slug: String): Product
   productSearchSuggestions(limit: Int, query: String!): [ProductSuggestion!]!
   products: [Product!]!
+  recommendedProducts(limit: Int, productIds: [ID!]!): [Product!]!
   searchProducts(input: ProductSearchInput!): ProductSearchResult!
   user(id: ID!): User!
   warehouse(id: ID!): Warehouse

@@ -31,8 +31,14 @@ public class GuestCartHttpFilter extends OncePerRequestFilter {
     public static final String PUBLIC_CATALOG_CACHEABLE_ATTRIBUTE =
             GuestCartHttpFilter.class.getName() + ".publicCatalogCacheable";
 
-    private static final Set<String> PUBLIC_CATALOG_FIELDS =
-            Set.of("product", "products", "category", "categories", "searchProducts", "productSearchSuggestions");
+    private static final Set<String> PUBLIC_CATALOG_FIELDS = Set.of(
+            "product",
+            "products",
+            "category",
+            "categories",
+            "searchProducts",
+            "productSearchSuggestions",
+            "recommendedProducts");
     private static final Set<String> GUEST_FIELDS = Set.of(
             "guestCart",
             "startGuestCart",

@@ -91,4 +91,13 @@ type ProductSuggestion {
 extend type Query {
   searchProducts(input: ProductSearchInput!): ProductSearchResult!
   productSearchSuggestions(query: String!, limit: Int): [ProductSuggestion!]!
+  """
+  Deterministic "related products" for the given products (e.g. the current
+  product page or the cart contents) — not personalised. Returns products with
+  at least one active, in-stock variant that share a category or brand with the
+  given products, excluding the given products themselves. Ordered by shared
+  category first, then shared brand, then average rating (unrated last), then
+  product id. At most 20 input ids are considered; limit defaults to 4, max 8.
+  """
+  recommendedProducts(productIds: [ID!]!, limit: Int): [Product!]!
 }

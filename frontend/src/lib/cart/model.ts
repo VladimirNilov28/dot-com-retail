@@ -5,6 +5,7 @@ import type { ProductImageData } from "@/components/product-image";
 export type CartLine = {
   id: string;
   variantId: string;
+  productId: string;
   sku: string;
   name: string;
   slug: string;
@@ -30,7 +31,7 @@ type RawCart = {
     productVariant: {
       id: string; sku: string; price: Decimal; attributes: JsonValue; isActive: boolean;
       availability: "AVAILABLE" | "OUT_OF_STOCK" | null; purchasableLimit: number | null;
-      product: { name: string; slug: string; images: ProductImageData[] };
+      product: { id: string; name: string; slug: string; images: ProductImageData[] };
     };
   }[];
 };
@@ -59,7 +60,7 @@ export function toCartView(raw: RawCart): CartView {
       quantity: item.quantity, availability: variant.availability, limit: variant.purchasableLimit,
     };
     return {
-      id: item.id, variantId: variant.id, sku: variant.sku, name: variant.product.name, slug: variant.product.slug,
+      id: item.id, variantId: variant.id, sku: variant.sku, productId: variant.product.id, name: variant.product.name, slug: variant.product.slug,
       options: optionText(variant.attributes), image: variant.product.images[0] ?? null,
       unitPrice: variant.price, lineTotal: item.subtotal, ...base,
       issue: lineIssue({ ...base, active: variant.isActive }),

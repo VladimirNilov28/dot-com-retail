@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { catalogCategories, catalogListing, catalogSuggestions, shippingOptions, homeDiscovery, homeCategoryProducts } from "./operations";
+import { catalogCategories, catalogListing, catalogSuggestions, shippingOptions, homeDiscovery, homeCategoryProducts, recommendedProducts } from "./operations";
 import { execute } from "./transport";
 import { requestHive } from "./server-transport";
 import { handleGuestRequest } from "./proxy";
@@ -167,4 +167,12 @@ test("a stale schema (HTTP 400 query validation) is distinct from a response-dec
   const decoded = await execute(catalogListing, variables, { endpoint: config.endpoint, fetch: async () => response(missingImages) });
   expect(decoded.status).toBe("failure");
   expect(decoded.error.kind).toBe("protocol");
+});
+
+test("recommended products deduplicates ids and bounds the limit", () => {
+  expect(recommendedProducts.variables({ productIds: ["3", "3", "4"], limit: 4 })).toEqual({ productIds: ["3", "4"], limit: 4 });
+  expect(() => recommendedProducts.variables({ productIds: [], limit: 4 })).toThrow();
+  expect(() => recommendedProducts.variables({ productIds: ["x"], limit: 4 })).toThrow();
+  expect(() => recommendedProducts.variables({ productIds: ["1"], limit: 9 })).toThrow();
+  expect(recommendedProducts.decode({ recommendedProducts: [] })).toEqual({ recommendedProducts: [] });
 });
