@@ -276,14 +276,24 @@ smoke_check() {
 # Without a configured webhook secret, the account's CLI signing secret is fetched
 # and the stripe-listener container forwards events (local runs; no public URL).
 STRIPE_FILE="${PROD_STRIPE_FILE:-$ROOT/.env.stripe}"
+# The Git-ignored dev configuration supplies sandbox Stripe keys and the Google
+# client when .env.prod leaves them blank (PROD_DEV_ENV_FILE= disables this).
+DEV_ENV_FILE="${PROD_DEV_ENV_FILE-$ROOT/.env}"
+import_unset() { # file keys...: export each key that is blank in the shell and env file
+  local file="$1" key v
+  shift
+  [ -n "$file" ] && [ -f "$file" ] || return 0
+  for key in "$@"; do
+    v="$(sed -n "s/^$key=//p" "$file" | head -n 1 | sed "s/^['\"]//; s/['\"]\$//")"
+    [ -z "$v" ] || [ -n "$(value_of "$key")" ] || export "$key=$v"
+  done
+}
 load_stripe() {
-  local key v
-  if [ -f "$STRIPE_FILE" ]; then
-    for key in STRIPE_SECRET_KEY STRIPE_PUBLISHABLE_KEY STRIPE_WEBHOOK_SECRET; do
-      v="$(sed -n "s/^$key=//p" "$STRIPE_FILE" | head -n 1 | sed "s/^['\"]//; s/['\"]\$//")"
-      [ -z "$v" ] || [ -n "$(value_of "$key")" ] || export "$key=$v"
-    done
-  fi
+  local v
+  import_unset "$STRIPE_FILE" STRIPE_SECRET_KEY STRIPE_PUBLISHABLE_KEY STRIPE_WEBHOOK_SECRET
+  # Not the dev webhook secret: the stripe-listener container is started only when
+  # the secret is fetched below.
+  import_unset "$DEV_ENV_FILE" STRIPE_SECRET_KEY STRIPE_PUBLISHABLE_KEY GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET
   v="$(value_of STRIPE_SECRET_KEY)"
   [[ "$v" == sk_test_* || "$v" == rk_test_* ]] || return 0 # absent or invalid: validate() reports it
   [ -z "$(value_of STRIPE_WEBHOOK_SECRET)" ] || return 0

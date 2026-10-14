@@ -59,8 +59,22 @@ Then:
    `.env.prod`, and enroll TOTP.
 5. Add products and images through the admin UI.
 
+**Reusing your dev sandbox credentials.** When `.env.prod` leaves `STRIPE_SECRET_KEY`,
+`STRIPE_PUBLISHABLE_KEY`, `GOOGLE_CLIENT_ID` or `GOOGLE_CLIENT_SECRET` blank, `make prod`
+takes them from the Git-ignored `.env.stripe`, and otherwise from the Git-ignored dev `.env`.
+
+- They are exported to the containers at startup, not copied into tracked files.
+- Live Stripe keys are still rejected.
+- `PROD_DEV_ENV_FILE=` turns off the dev `.env` import.
+- These are secrets even in sandbox mode, so they never go into a committed
+  `*.example` file.
+- For Google, add `https://bytecore.localhost/self-service/methods/oidc/callback/google` to
+  the OAuth client's authorized redirect URIs. If Google rejects `.localhost`, see
+  [Running on a real host](#running-on-a-real-host).
+
 **Optional card payments (Stripe test mode).** Copy `.env.stripe.example` to `.env.stripe`
-(Git-ignored) and paste your `sk_test_`/`pk_test_` keys. Then run `make prod` again:
+(Git-ignored) and paste your `sk_test_`/`pk_test_` keys, or rely on the dev `.env` import.
+Then run `make prod` again:
 
 - The webhook signing secret is fetched with the Stripe CLI image and is not written to disk.
 - A `stripe-listener` container (Compose profile `stripe`) forwards the `payment_intent.*`

@@ -147,8 +147,8 @@ isolated from dev and review, with its own project, volumes, `.env.prod` and sec
 It needs no keys, domain or real data. The first `make prod` creates `.env.prod` with
 local defaults. Trust `infrastructure/prod/secrets/tls/ca.crt` in the browser, then open
 `https://bytecore.localhost`. Emails are captured by Mailpit at `http://127.0.0.1:18025`.
-Card payments are optional: put Stripe test keys into the Git-ignored `.env.stripe`, and
-the webhook listener starts automatically.
+Card payments and Google sign-in are optional. Blank values in `.env.prod` are taken from the
+Git-ignored `.env.stripe` or your dev `.env`, and the Stripe webhook listener starts automatically.
 For a showcase, run `make seed-prod` once afterwards. It loads the demo catalog, stock,
 customers and orders into the fresh stack, and refuses if data already exists.
 
