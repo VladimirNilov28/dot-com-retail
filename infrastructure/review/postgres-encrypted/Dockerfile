@@ -4,7 +4,8 @@
 FROM postgres:17
 RUN apt-get update \
  && apt-get install -y --no-install-recommends gocryptfs fuse3 \
- && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/* \
+ && echo user_allow_other >> /etc/fuse.conf
 COPY --chmod=755 encrypted-storage-entrypoint.sh /usr/local/bin/encrypted-storage-entrypoint.sh
 ENTRYPOINT ["encrypted-storage-entrypoint.sh", "docker-entrypoint.sh"]
 CMD ["postgres"]
