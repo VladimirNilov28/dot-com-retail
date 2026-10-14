@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Opt-in self-contained server bundle for the review container (frontend/Dockerfile).
+  ...(process.env.NEXT_OUTPUT === "standalone" ? { output: "standalone" as const } : {}),
   allowedDevOrigins: ["127.0.0.1"],
   reactCompiler: true,
   logging: {

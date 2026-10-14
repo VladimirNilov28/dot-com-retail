@@ -47,6 +47,7 @@ replay_pid*
 .env
 .env.*
 !.env.example
+!.env.review.example
 
 # =====================================================
 # Secrets
@@ -213,6 +214,8 @@ site/
 
 docs/generated/
 infrastructure/volumes/*
+# Review-stack TLS material from scripts/gen-review-certs.sh (keys never committed)
+infrastructure/review/certs/
 infrastructure/jenkins/venv/
 __pycache__/
 *.pyc
