@@ -51,7 +51,8 @@ public class GuestCartHttpFilter extends OncePerRequestFilter {
             "guestCheckoutPreview",
             "createGuestOrder",
             "guestOrder",
-            "cancelGuestOrder");
+            "cancelGuestOrder",
+            "submitContactMessage");
 
     private record OperationSelection(OperationDefinition.Operation operation, Set<String> roots) {}
 

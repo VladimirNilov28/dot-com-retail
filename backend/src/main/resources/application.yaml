@@ -81,6 +81,12 @@ checkout:
   supported-countries: [EE]
   guest-order-ttl: PT720H
 
+# Contact form: support inbox (Mailpit catches it locally) and outbox poll interval.
+support:
+  mail-to: ${SUPPORT_MAIL_TO:vladimirnilov.it@gmail.com}
+contact:
+  mail-poll-ms: 5000
+
 payment:
   service-url: ${PAYMENT_SERVICE_URL:http://localhost:8081}
   internal-token: ${PAYMENT_INTERNAL_TOKEN:}

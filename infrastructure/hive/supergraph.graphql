@@ -241,6 +241,17 @@ type Inventory @join__type(graph: RETAIL) {
   warehouse: Warehouse!
 }
 
+type ContactFieldError @join__type(graph: RETAIL) {
+  field: String!
+  message: String!
+}
+
+type ContactMessageResult @join__type(graph: RETAIL) {
+  accepted: Boolean!
+  fieldErrors: [ContactFieldError!]!
+  reference: String
+}
+
 type Mutation @join__type(graph: RETAIL) {
   addCartItem(input: AddCartItemInput!): CartItem!
   addGuestCartItem(input: AddCartItemInput!): GuestCart!
@@ -288,6 +299,7 @@ type Mutation @join__type(graph: RETAIL) {
   """Moves the image to position 0, keeping the others' relative order."""
   setPrimaryProductImage(imageId: ID!): [ProductImage!]!
   startGuestCart: StartGuestCartResult!
+  submitContactMessage(input: ContactMessageInput!): ContactMessageResult!
   updateCartItem(cartItemId: ID!, input: UpdateCartItemInput!): CartItem!
   updateCategory(categoryId: ID!, input: UpdateCategoryInput!): Category!
   updateGuestCartItem(cartItemId: ID!, input: UpdateCartItemInput!): GuestCart!
@@ -565,6 +577,15 @@ enum CheckoutShippingMethod @join__type(graph: RETAIL) {
   EXPRESS @join__enumValue(graph: RETAIL)
   PICKUP @join__enumValue(graph: RETAIL)
   STANDARD @join__enumValue(graph: RETAIL)
+}
+
+enum ContactSubject @join__type(graph: RETAIL) {
+  ACCOUNT @join__enumValue(graph: RETAIL)
+  FEEDBACK @join__enumValue(graph: RETAIL)
+  ORDER @join__enumValue(graph: RETAIL)
+  OTHER @join__enumValue(graph: RETAIL)
+  PAYMENT @join__enumValue(graph: RETAIL)
+  PRODUCT @join__enumValue(graph: RETAIL)
 }
 
 enum ErrorDetail @join__type(graph: RETAIL) {
@@ -930,6 +951,14 @@ input CheckoutInput @join__type(graph: RETAIL) {
   shippingAddress: CheckoutAddressInput
   shippingAddressId: ID
   shippingMethod: CheckoutShippingMethod!
+}
+
+input ContactMessageInput @join__type(graph: RETAIL) {
+  email: String!
+  message: String!
+  name: String!
+  subject: ContactSubject!
+  website: String
 }
 
 input CreateAddressInput @join__type(graph: RETAIL) {

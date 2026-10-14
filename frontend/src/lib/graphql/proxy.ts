@@ -5,6 +5,7 @@ import { requestHive, type HiveConfig } from "./server-transport";
 import { boundedText, type Result } from "./transport";
 import { checkoutOperations } from "./checkout-operations";
 import { addressOperations } from "./address-operations";
+import { submitContactMessage } from "./contact-operations";
 
 function jsonResponse<Data>(result: Result<Data>, cookies: string[] = [], status = 200) {
   const data = result.status === "failure" ? null : result.data;
@@ -100,6 +101,7 @@ export async function handleGuestRequest(
   if (cartOperation) return dispatch(cartOperation as Operation<unknown, unknown>);
   const checkoutOperation = checkoutOperations.find((candidate) => candidate.name === envelope.operationName);
   if (checkoutOperation) return dispatch(checkoutOperation as Operation<unknown, unknown>);
+  if (envelope.operationName === submitContactMessage.name) return dispatch(submitContactMessage);
   const addressOperation = addressOperations.find((candidate) => candidate.name === envelope.operationName);
   if (addressOperation) return dispatch(addressOperation as Operation<unknown, unknown>);
   const [categories, listing, suggestions] = publicOperations;

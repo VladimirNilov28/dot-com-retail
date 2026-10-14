@@ -208,6 +208,17 @@ type Inventory {
   warehouse: Warehouse!
 }
 
+type ContactFieldError {
+  field: String!
+  message: String!
+}
+
+type ContactMessageResult {
+  accepted: Boolean!
+  fieldErrors: [ContactFieldError!]!
+  reference: String
+}
+
 type Mutation {
   addCartItem(input: AddCartItemInput!): CartItem!
   addGuestCartItem(input: AddCartItemInput!): GuestCart!
@@ -255,6 +266,7 @@ type Mutation {
   "Moves the image to position 0, keeping the others' relative order."
   setPrimaryProductImage(imageId: ID!): [ProductImage!]!
   startGuestCart: StartGuestCartResult!
+  submitContactMessage(input: ContactMessageInput!): ContactMessageResult!
   updateCartItem(cartItemId: ID!, input: UpdateCartItemInput!): CartItem!
   updateCategory(categoryId: ID!, input: UpdateCategoryInput!): Category!
   updateGuestCartItem(cartItemId: ID!, input: UpdateCartItemInput!): GuestCart!
@@ -524,6 +536,15 @@ enum CheckoutShippingMethod {
   EXPRESS
   PICKUP
   STANDARD
+}
+
+enum ContactSubject {
+  ACCOUNT
+  FEEDBACK
+  ORDER
+  OTHER
+  PAYMENT
+  PRODUCT
 }
 
 enum ErrorDetail {
@@ -889,6 +910,14 @@ input CheckoutInput {
   shippingAddress: CheckoutAddressInput
   shippingAddressId: ID
   shippingMethod: CheckoutShippingMethod!
+}
+
+input ContactMessageInput {
+  email: String!
+  message: String!
+  name: String!
+  subject: ContactSubject!
+  website: String
 }
 
 input CreateAddressInput {

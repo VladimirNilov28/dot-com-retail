@@ -321,3 +321,11 @@ query RecommendedProducts($productIds: [ID!]!, $limit: Int) {
     variants { id price isActive }
   }
 }
+
+mutation SubmitContactMessage($input: ContactMessageInput!) {
+  submitContactMessage(input: $input) {
+    accepted
+    reference
+    fieldErrors { field message }
+  }
+}

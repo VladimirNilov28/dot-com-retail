@@ -1,0 +1,40 @@
+"""
+Public contact form. Submissions are stored and delivered to support by email
+through a retryable outbox; the sender receives an acknowledgement that does
+not repeat the message. Validation problems are returned as fieldErrors
+(accepted = false) rather than GraphQL errors so the form can show them inline.
+"""
+enum ContactSubject {
+  ORDER
+  PAYMENT
+  PRODUCT
+  ACCOUNT
+  FEEDBACK
+  OTHER
+}
+
+input ContactMessageInput {
+  name: String!
+  email: String!
+  subject: ContactSubject!
+  "10 to 4000 characters."
+  message: String!
+  "Honeypot: must be empty. Bots that fill it receive a normal-looking response."
+  website: String
+}
+
+type ContactFieldError {
+  field: String!
+  message: String!
+}
+
+type ContactMessageResult {
+  accepted: Boolean!
+  "Reference quoted in both emails; null when not accepted."
+  reference: String
+  fieldErrors: [ContactFieldError!]!
+}
+
+extend type Mutation {
+  submitContactMessage(input: ContactMessageInput!): ContactMessageResult!
+}
