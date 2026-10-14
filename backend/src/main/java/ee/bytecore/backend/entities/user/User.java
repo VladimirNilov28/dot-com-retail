@@ -5,8 +5,12 @@ import java.time.LocalDate;
 import java.util.UUID;
 
 import ee.bytecore.backend.enums.UserRole;
+import ee.bytecore.backend.security.crypto.EncryptedLocalDateConverter;
+import ee.bytecore.backend.security.crypto.EncryptedStringConverter;
+import ee.bytecore.backend.security.crypto.FieldEncryption;
 
 import jakarta.persistence.*;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
@@ -34,9 +38,17 @@ public class User {
     @Column(name = "username", nullable = false, unique = true)
     private String username;
 
-    @Column(name = "email", nullable = false, unique = true)
+    /** AES-GCM ciphertext at rest; looked up and kept unique through {@link #emailIndex}. */
+    @Convert(converter = EncryptedStringConverter.class)
+    @Column(name = "email", nullable = false)
     private String email;
 
+    /** Keyed blind index of the normalized email; maintained on every write. */
+    @Setter(AccessLevel.NONE)
+    @Column(name = "email_index", unique = true)
+    private String emailIndex;
+
+    @Convert(converter = EncryptedLocalDateConverter.class)
     @Column(name = "date_of_birth", nullable = false)
     private LocalDate dateOfBirth;
 
@@ -56,6 +68,12 @@ public class User {
     @UpdateTimestamp
     @Column(nullable = false)
     private Instant updatedAt;
+
+    @PrePersist
+    @PreUpdate
+    void indexEmail() {
+        emailIndex = FieldEncryption.userEmailIndex(email);
+    }
 
     public static User create(String username, String email, LocalDate dateOfBirth) {
         User user = new User();

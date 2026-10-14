@@ -6,6 +6,6 @@ type AdminUserPage {
 }
 
 extend type Query {
-  "Active users matching a username/email substring and optional role (size 1-100). ADMIN only."
+  "Active users whose username contains the query, whose email equals it (case-insensitive; emails are encrypted at rest, so no substring match) or whose id equals it, with optional role (size 1-100). ADMIN only."
   adminUsers(query: String, role: Role, page: Int = 0, size: Int = 25): AdminUserPage!
 }

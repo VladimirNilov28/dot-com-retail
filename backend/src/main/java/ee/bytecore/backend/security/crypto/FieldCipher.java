@@ -7,6 +7,7 @@ import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
+
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
@@ -29,11 +30,16 @@ public final class FieldCipher {
     private final String activeKeyId;
 
     private final byte[] indexKey;
+    private final byte[] userEmailIndexKey;
 
-    private FieldCipher(Map<String, SecretKey> keys, String activeKeyId, byte[] indexKey) {
+    /** Version prefix of {@link #userEmailIndex}; bump together with the derivation label. */
+    public static final String USER_EMAIL_INDEX_VERSION = "v1";
+
+    private FieldCipher(Map<String, SecretKey> keys, String activeKeyId, byte[] indexKey, byte[] userEmailIndexKey) {
         this.keys = keys;
         this.activeKeyId = activeKeyId;
         this.indexKey = indexKey;
+        this.userEmailIndexKey = userEmailIndexKey;
     }
 
     /**
@@ -53,7 +59,10 @@ public final class FieldCipher {
             if (!id.matches("[A-Za-z0-9_-]{1,16}")) throw new IllegalStateException("Invalid data key id");
             byte[] material;
             try {
-                String encoded = trimmed.substring(separator + 1).replace('+', '-').replace('/', '_').replace("=", "");
+                String encoded = trimmed.substring(separator + 1)
+                        .replace('+', '-')
+                        .replace('/', '_')
+                        .replace("=", "");
                 material = Base64.getUrlDecoder().decode(encoded);
             } catch (IllegalArgumentException e) {
                 throw new IllegalStateException("Data key " + id + " is not valid base64");
@@ -63,17 +72,50 @@ public final class FieldCipher {
                 throw new IllegalStateException("Duplicate data key id " + id);
             }
         }
-        String active = activeKeyId == null || activeKeyId.isBlank() ? parsed.keySet().iterator().next() : activeKeyId;
+        String active = activeKeyId == null || activeKeyId.isBlank()
+                ? parsed.keySet().iterator().next()
+                : activeKeyId;
         if (!parsed.containsKey(active)) throw new IllegalStateException("Active data key is not in the key ring");
-        byte[] indexKey;
+        SecretKey first = parsed.values().iterator().next();
+        return new FieldCipher(
+                Map.copyOf(parsed),
+                active,
+                deriveKey(first, "bytecore-blind-index-v1"),
+                deriveKey(first, "bytecore-user-email-index-" + USER_EMAIL_INDEX_VERSION));
+    }
+
+    private static byte[] deriveKey(SecretKey root, String label) {
         try {
             javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
-            mac.init(parsed.values().iterator().next());
-            indexKey = mac.doFinal("bytecore-blind-index-v1".getBytes(StandardCharsets.UTF_8));
+            mac.init(root);
+            return mac.doFinal(label.getBytes(StandardCharsets.UTF_8));
         } catch (GeneralSecurityException e) {
             throw new IllegalStateException("Blind index key derivation failed", e);
         }
-        return new FieldCipher(Map.copyOf(parsed), active, indexKey);
+    }
+
+    private static String hmacHex(byte[] key, String value) {
+        try {
+            javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(key, "HmacSHA256"));
+            return java.util.HexFormat.of().formatHex(mac.doFinal(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException("Blind index failed", e);
+        }
+    }
+
+    /** Canonical form used for case-insensitive email equality: trimmed and lower-cased. */
+    public static String normalizeEmail(String email) {
+        return email == null ? null : email.trim().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    /**
+     * Versioned keyed blind index of an account email ({@code v1:<hex HMAC-SHA256>}) with a key dedicated to
+     * this purpose. Equal for emails differing only in case or surrounding whitespace; reveals equality only.
+     */
+    public String userEmailIndex(String email) {
+        if (email == null) return null;
+        return USER_EMAIL_INDEX_VERSION + ":" + hmacHex(userEmailIndexKey, normalizeEmail(email));
     }
 
     /**
@@ -82,13 +124,7 @@ public final class FieldCipher {
      */
     public String blindIndex(String value) {
         if (value == null) return null;
-        try {
-            javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
-            mac.init(new SecretKeySpec(indexKey, "HmacSHA256"));
-            return java.util.HexFormat.of().formatHex(mac.doFinal(value.getBytes(StandardCharsets.UTF_8)));
-        } catch (GeneralSecurityException e) {
-            throw new IllegalStateException("Blind index failed", e);
-        }
+        return hmacHex(indexKey, value);
     }
 
     public String activeKeyId() {
@@ -108,7 +144,10 @@ public final class FieldCipher {
             cipher.init(Cipher.ENCRYPT_MODE, keys.get(activeKeyId), new GCMParameterSpec(TAG_BITS, iv));
             cipher.updateAAD(activeKeyId.getBytes(StandardCharsets.UTF_8));
             byte[] sealed = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
-            byte[] out = ByteBuffer.allocate(iv.length + sealed.length).put(iv).put(sealed).array();
+            byte[] out = ByteBuffer.allocate(iv.length + sealed.length)
+                    .put(iv)
+                    .put(sealed)
+                    .array();
             return PREFIX + activeKeyId + ":" + Base64.getEncoder().encodeToString(out);
         } catch (GeneralSecurityException e) {
             throw new IllegalStateException("Field encryption failed", e);

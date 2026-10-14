@@ -10,7 +10,7 @@ import { changeUserRole } from "@/lib/admin/manage-actions";
 
 export const metadata: Metadata = {
   title: "Admin · Users and roles",
-  description: "Search active user accounts by username or email, filter by role, and assign staff roles. You cannot remove your own admin role or the last administrator.",
+  description: "Search active user accounts by username, exact email or id, filter by role, and assign staff roles. You cannot remove your own admin role or the last administrator.",
   robots: { index: false, follow: false },
 };
 export const dynamic = "force-dynamic";
@@ -48,7 +48,7 @@ export default async function AdminUsers({ searchParams }: { searchParams: Promi
         description="A new role takes effect in the user's access token after its next refresh (within minutes) or their next sign-in; the API always re-checks the current token." />
       <AdminStatus params={params} />
       <form method="get" action="/admin/users" className="admin-toolbar" role="search">
-        <label className="auth-field admin-search"><span className="text-sm">Username or email contains</span>
+        <label className="auth-field admin-search"><span className="text-sm">Username, exact email or id</span>
           <input className="auth-input" type="search" name="q" defaultValue={query} maxLength={100} /></label>
         <label className="auth-field"><span className="text-sm">Role</span>
           <select className="auth-input" name="role" defaultValue={role}><option value="">Any role</option>

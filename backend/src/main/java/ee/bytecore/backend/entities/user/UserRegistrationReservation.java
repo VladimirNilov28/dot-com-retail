@@ -4,10 +4,18 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
 
+import ee.bytecore.backend.security.crypto.EncryptedLocalDateConverter;
+import ee.bytecore.backend.security.crypto.EncryptedStringConverter;
+import ee.bytecore.backend.security.crypto.FieldEncryption;
+
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -27,9 +35,16 @@ public class UserRegistrationReservation {
     @Column(nullable = false, unique = true)
     private String username;
 
-    @Column(nullable = false, unique = true)
+    /** AES-GCM ciphertext at rest; looked up and kept unique through {@link #emailIndex}. */
+    @Convert(converter = EncryptedStringConverter.class)
+    @Column(nullable = false)
     private String email;
 
+    @Setter(AccessLevel.NONE)
+    @Column(name = "email_index", unique = true)
+    private String emailIndex;
+
+    @Convert(converter = EncryptedLocalDateConverter.class)
     @Column(name = "date_of_birth", nullable = false)
     private LocalDate dateOfBirth;
 
@@ -41,6 +56,12 @@ public class UserRegistrationReservation {
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
+
+    @PrePersist
+    @PreUpdate
+    void indexEmail() {
+        emailIndex = FieldEncryption.userEmailIndex(email);
+    }
 
     public static UserRegistrationReservation create(
             UUID flowId, String username, String email, LocalDate dateOfBirth, Instant expiresAt) {

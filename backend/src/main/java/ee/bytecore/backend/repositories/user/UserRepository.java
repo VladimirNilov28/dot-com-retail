@@ -27,7 +27,22 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     boolean existsByUsername(String username);
 
-    boolean existsByEmail(String email);
+    /**
+     * Case-insensitive email existence check. Emails are encrypted at rest, so this matches the keyed
+     * blind index; rows not yet indexed by the backfill fall back to their legacy plaintext.
+     */
+    default boolean existsByEmail(String email) {
+        if (email == null) return false;
+        return existsByEmailIndex(
+                ee.bytecore.backend.security.crypto.FieldEncryption.userEmailIndex(email),
+                ee.bytecore.backend.security.crypto.FieldCipher.normalizeEmail(email));
+    }
+
+    @Query(
+            value = "select exists(select 1 from users where email_index = :emailIndex"
+                    + " or (email_index is null and lower(trim(email)) = :normalized))",
+            nativeQuery = true)
+    boolean existsByEmailIndex(@Param("emailIndex") String emailIndex, @Param("normalized") String normalized);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select u from User u where u.id = :id")
@@ -43,11 +58,17 @@ public interface UserRepository extends JpaRepository<User, Long> {
             + " and u.deleted = false and u.deletionIdentityId is null order by u.id")
     List<User> findActiveAdminsForUpdate();
 
-    /** Searches active users; a null role means any role. */
-    default Page<User> searchActive(String pattern, ee.bytecore.backend.enums.UserRole role, Pageable pageable) {
+    /**
+     * Searches active users by username substring, exact email (through the blind index; encrypted emails
+     * cannot be substring-matched) or exact id. A null role means any role.
+     */
+    default Page<User> searchActive(
+            String pattern, String emailIndex, Long id, ee.bytecore.backend.enums.UserRole role, Pageable pageable) {
         // An untyped "(:role is null or ...)" parameter cannot be typed by PostgreSQL, so filter by a role set.
         return searchActiveInRoles(
                 pattern,
+                emailIndex == null ? "" : emailIndex,
+                id == null ? -1L : id,
                 role == null
                         ? java.util.EnumSet.allOf(ee.bytecore.backend.enums.UserRole.class)
                         : java.util.EnumSet.of(role),
@@ -57,12 +78,14 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query(
             value = "select u from User u where u.deleted = false and u.deletionIdentityId is null"
                     + " and u.role in :roles"
-                    + " and (lower(u.username) like :pattern escape '\\' or lower(u.email) like :pattern escape '\\')",
+                    + " and (lower(u.username) like :pattern escape '\\' or u.emailIndex = :emailIndex or u.id = :id)",
             countQuery = "select count(u) from User u where u.deleted = false and u.deletionIdentityId is null"
                     + " and u.role in :roles"
-                    + " and (lower(u.username) like :pattern escape '\\' or lower(u.email) like :pattern escape '\\')")
+                    + " and (lower(u.username) like :pattern escape '\\' or u.emailIndex = :emailIndex or u.id = :id)")
     Page<User> searchActiveInRoles(
             @Param("pattern") String pattern,
+            @Param("emailIndex") String emailIndex,
+            @Param("id") Long id,
             @Param("roles") java.util.Collection<ee.bytecore.backend.enums.UserRole> roles,
             Pageable pageable);
 
